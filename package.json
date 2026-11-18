@@ -1,0 +1,44 @@
+{
+  "name": "merostay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MeroStay: Nepal-focused accommodation booking marketplace",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors blue,green --kill-others-on-fail \"npm run dev -w @merostay/api\" \"npm run dev -w @merostay/web\"",
+    "start": "concurrently --names api,web --prefix-colors blue,green --kill-others \"npm run start -w @merostay/api\" \"npm run start -w @merostay/web\"",
+    "dev:api": "npm run dev -w @merostay/api",
+    "dev:web": "npm run dev -w @merostay/web",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p e2e/tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @merostay/api",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:install": "playwright install chromium",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "npm run db:generate -w @merostay/api",
+    "db:check": "npm run db:check -w @merostay/api"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.19.2",
+    "concurrently": "10.0.7",
+    "prettier": "3.10.1",
+    "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true,
+    "fsevents@2.3.3": true
+  }
+}

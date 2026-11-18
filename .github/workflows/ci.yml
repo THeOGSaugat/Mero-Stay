@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs for the same branch/PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # CI uses its OWN disposable PostgreSQL, not Neon, so CI needs no database
+      # secrets. It exists only for the duration of this job. Local development
+      # uses Neon (see docs/architecture/decisions/0003-switch-database-to-neon.md).
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: merostay_ci
+          POSTGRES_PASSWORD: merostay_ci_password
+          POSTGRES_DB: merostay_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U merostay_ci -d merostay_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Throwaway credentials for the CI-only container above. Not a secret.
+      # Both variables point to the same CI database (there is no pooler in CI).
+      DATABASE_URL: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
+      DATABASE_URL_UNPOOLED: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
+      API_URL: http://localhost:4000
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Integration tests (PostgreSQL)
+        run: npm run test:integration
+
+      - name: Production build
+        run: npm run build

@@ -5,7 +5,7 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 ## 1. Secrets management
 
 - All secrets come from environment variables, validated at startup (`apps/api/src/config/env.ts`).
-- Commit `.env.example` with **placeholder** values only, e.g. `DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/merostay"`.
+- Commit `.env.example` with **placeholder** values only, e.g. `DATABASE_URL="postgresql://USER:PASSWORD@EP-POOLER.REGION.aws.neon.tech/DBNAME?sslmode=require"`.
 - Never log `process.env`, request headers containing cookies/authorization, or payment payloads in full.
 - Production secrets live in the hosting provider's secret store, never in the repo.
 - A leaked secret is **rotated**, not just deleted from Git.
