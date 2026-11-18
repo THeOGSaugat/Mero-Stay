@@ -30,8 +30,11 @@ node_modules/
 .yarn/
 .npm/
 
-# ---------- Generated code (rebuilt by `npm run db:generate`) ----------
+# ---------- Generated code ----------
+# Prisma client (rebuilt by `npm run db:generate`)
 **/src/generated/
+# Next.js type declarations (rebuilt by `next dev` / `next build` / `next typegen`)
+next-env.d.ts
 
 # ---------- Build outputs ----------
 .next/
