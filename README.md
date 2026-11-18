@@ -22,17 +22,16 @@ Next.js · React · TypeScript · Tailwind CSS · Node.js · Express · PostgreS
 
 ## Getting started
 
-Requires Node.js 24+ (26 recommended) and Docker Desktop.
+Requires Node.js 24+ (26 recommended) and a free [Neon](https://neon.tech) PostgreSQL project.
 
 ```bash
 npm install
-cp .env.example .env
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-# set the same local DB password in .env and apps/api/.env
+# paste your Neon pooled + direct connection strings into apps/api/.env
 
-npm run db:up          # start PostgreSQL
 npm run db:generate    # generate the Prisma client
+npm run db:check       # verify the Neon connection
 npm run dev            # API → http://localhost:4000, web → http://localhost:3000
 ```
 

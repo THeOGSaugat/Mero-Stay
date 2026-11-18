@@ -6,7 +6,7 @@ the owner before the next phase begins**. Scope may be adjusted at review time.
 | # | Phase | Main deliverables | Status |
 |---|---|---|---|
 | 0 | Repository setup & documentation | Git checks, `.gitignore`, CLAUDE.md, docs structure | ✅ Done |
-| 1 | Project foundation & dev environment | npm workspaces, Next.js + Tailwind app, Express + TS API, Docker PostgreSQL, Prisma (no models), ESLint/Prettier, Vitest + Playwright, health checks end to end, GitHub Actions CI | ✅ Done (awaiting review) |
+| 1 | Project foundation & dev environment | npm workspaces, Next.js + Tailwind app, Express + TS API, Neon PostgreSQL (switched from Docker, ADR 0003), Prisma (no models), ESLint/Prettier, Vitest + Playwright, health checks end to end, GitHub Actions CI | ✅ Done (awaiting review) |
 | 2 | Data model | Prisma schema for users, partners, properties, rooms, rates/inventory, bookings (incl. payment method + commission snapshot), payments; migrations; seed data; separate test database; repository tests | ⏳ Awaiting approval |
 | 3 | Authentication & roles | Customer + partner registration, login/logout, password hashing, sessions/tokens, role & ownership guards, auth pages; introduce `packages/shared` for Zod contracts | Planned |
 | 4 | Property submission | Partner creates/edits property drafts, photos upload, per-property cancellation policy, verification documents, submit for review | Planned |

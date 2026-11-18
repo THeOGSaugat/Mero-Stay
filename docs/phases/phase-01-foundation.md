@@ -4,6 +4,11 @@
 - **Branch:** `phase/01-foundation`
 - **Date completed:** 2026-11-18
 
+> **Addendum (2026-11-18): database switched to Neon.** After this report was first written, the
+> local Docker PostgreSQL was replaced by Neon ([ADR 0003](../architecture/decisions/0003-switch-database-to-neon.md)).
+> References below to Docker, `db:up` and `localhost:5432` describe the original verification and
+> are kept as history; current setup is in [local-setup.md](../development/local-setup.md).
+
 ## Scope (as approved)
 
 Monorepo foundation only: Next.js + Tailwind web app, Express + TypeScript API, Docker
@@ -83,6 +88,6 @@ See [ADR 0002](../architecture/decisions/0002-phase-1-tooling-and-runtime-choice
 ## How to review
 
 1. Follow [local-setup.md](../development/local-setup.md) from a fresh clone.
-2. `npm run db:up && npm run db:check`, then `npm run dev` and open http://localhost:3000.
+2. Put your Neon connection strings in `apps/api/.env`, run `npm run db:check`, then `npm run dev` and open http://localhost:3000.
 3. Run the checks: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration && npm run test:e2e`.
 4. Check the GitHub Actions run for branch `phase/01-foundation`.

@@ -136,12 +136,12 @@ Any hit must be inspected by a human. Placeholder values in `.env.example` are f
 | Frontend | Next.js 16 (App Router, Cache Components, Turbopack) + React 19 + TypeScript |
 | Styling | Tailwind CSS 4 (theme tokens in `apps/web/src/app/globals.css`) |
 | Backend API | Node.js 26 + Express 5 + TypeScript (ESM, `NodeNext`) |
-| Database | PostgreSQL 17 |
+| Database | PostgreSQL on **Neon** (hosted; pooled URL for the API, direct URL for the Prisma CLI) |
 | ORM | Prisma 7 with `@prisma/adapter-pg`; URL configured in `apps/api/prisma.config.ts` |
 | Validation | Zod 4 (API now; shared with web via `packages/shared` from the auth phase) |
 | Unit / integration tests | Vitest 5 (+ Supertest for HTTP) |
 | End-to-end tests | Playwright (desktop + mobile Chromium) |
-| Local infrastructure | Docker Compose (PostgreSQL) |
+| Local infrastructure | None. No Docker; the database is Neon. CI uses a temporary PostgreSQL service container |
 | Package management | npm workspaces |
 | TypeScript | 5.9 (typescript-eslint does not support 6.1+/7 yet) |
 
@@ -162,7 +162,6 @@ mero-stay/
 ├── e2e/                     # Playwright tests
 ├── .github/workflows/       # CI
 ├── docs/                    # Project documentation
-├── docker-compose.yml       # Local PostgreSQL
 ├── CLAUDE.md
 └── README.md
 ```
@@ -297,10 +296,8 @@ Full guide: `docs/development/local-setup.md`.
 
 ```bash
 npm install                  # install all workspaces
-npm run db:up                # start PostgreSQL (Docker) and wait until healthy
-npm run db:down              # stop PostgreSQL (data kept)
 npm run db:generate          # regenerate Prisma client
-npm run db:check             # verify Prisma ↔ PostgreSQL connectivity
+npm run db:check             # verify Prisma ↔ Neon connectivity (pooled + direct)
 npm run dev                  # API :4000 + web :3000 with reload
 npm run build                # production builds
 npm start                    # run production builds

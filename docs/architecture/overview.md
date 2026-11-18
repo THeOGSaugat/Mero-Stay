@@ -5,6 +5,10 @@
 > (see [ADR 0002](decisions/0002-phase-1-tooling-and-runtime-choices.md)).
 > Setup instructions: [local-setup.md](../development/local-setup.md).
 >
+> **Database provider:** PostgreSQL hosted on [Neon](https://neon.tech)
+> ([ADR 0003](decisions/0003-switch-database-to-neon.md)). The API connects through Neon's pooled
+> endpoint; the Prisma CLI uses the direct endpoint.
+>
 > **How web talks to the API today:** Next.js Server Components call the API over HTTP using the
 > server-only `API_URL` (read at request time). Browsers never call the API directly yet, so no
 > CORS is needed.
