@@ -64,9 +64,13 @@ give local property owners, including small homestays, an easy way to reach trav
 - Pending property approvals, property and user management, all bookings, payment overview, basic platform stats.
 
 ### 3.13 Payment integration
-- Customers pay through **eSewa** or **Khalti** (initial providers).
-- Payment is verified server-to-server before a booking is confirmed.
-- Unpaid bookings expire after a time limit and release their inventory.
+- Customers pay online through **eSewa** or **Khalti** (initial providers), **or choose to pay at the property** (§6.1).
+- Online payment is verified server-to-server before a booking is confirmed.
+- Unpaid online bookings expire after a time limit and release their inventory.
+- MeroStay earns a commission on every booking (§6.1).
+
+### 3.14 Reviews and ratings
+- Customers with a completed stay can rate (1–5) and review it; partners can reply; admins moderate (§6.2).
 
 ## 4. Non-functional requirements
 
@@ -83,13 +87,61 @@ give local property owners, including small homestays, an easy way to reach trav
 - Bus tickets
 - Flight tickets
 - Native mobile applications
-- Reviews and ratings *(may be pulled into MVP if the owner decides; ratings shown in listings depend on it)*
 
-## 6. Open questions for the owner
+*(Reviews and ratings were moved into the MVP; see §6.2.)*
 
-1. Commission model: does MeroStay take a percentage per booking, and should the partner dashboard show it?
-2. Pay-at-property: should customers be able to book without paying online?
-3. Cancellation/refund policy: per-property policies, or a platform-wide default?
-4. Partner verification: which documents (e.g. PAN/VAT registration) must partners upload?
-5. Reviews/ratings: in MVP or later?
-6. Email/SMS notifications: which provider (e.g. Sparrow SMS, Aakash SMS for Nepal)?
+## 6. Business decisions
+
+Recorded 2026-11-18. **Nothing here is implemented yet.** Each decision is built in the phase
+listed, and the details marked *to confirm* are raised with the owner at the start of that phase.
+
+### 6.1 Decided by the owner
+
+| # | Question | Decision | Affects |
+|---|---|---|---|
+| 1 | Does MeroStay take a commission on each booking? | **Yes**, a commission on every booking | Data model (Phase 2), bookings (9), payments (10), partner + admin dashboards (11) |
+| 2 | Can customers pay at the property? | **Yes.** Customers can pay **online or at the property** | Data model, booking flow, payments |
+| 3 | Cancellation policy: per property or platform-wide? | **Each property sets its own** cancellation policy | Property submission (4), bookings (9) |
+
+*To confirm in the relevant phase (not decided, do not assume):*
+- Commission rate: one platform-wide percentage, or adjustable per property by admins?
+- How commission is collected on **pay-at-property** bookings (e.g. monthly invoice to the partner).
+- Whether pay-at-property is optional per property (a partner may want to accept online only).
+- Cancellation policy format: free-text, or structured presets (e.g. "free cancellation until
+  N days before check-in, then X% charge") so refunds can be calculated automatically.
+  Recommendation: structured presets.
+
+### 6.2 Delegated to the tech lead: recommendations (owner may override)
+
+The owner asked the tech lead to choose for items 4–6. These are **recommendations
+adopted as the working plan**, not final policy; the owner can change them at any time.
+
+**4. Partner verification documents**
+
+| Document | Hotels / guesthouses | Homestays | Why |
+|---|---|---|---|
+| Owner or authorised representative's ID (citizenship certificate or passport) | Required | Required | Identity of the person responsible |
+| Business registration certificate (company/firm registration) | Required | Homestay registration with the local government (municipality/ward) instead | Proves the business legally exists |
+| PAN certificate (VAT certificate if VAT-registered) | Required | Required if they have one | Needed for commission invoicing and tax records |
+| Tourism operating licence (Department of Tourism or local authority) | Required where applicable | Optional | Confirms the property may operate as accommodation |
+| Proof of right to operate the property (ownership document or lease agreement) | Requested by admin when needed | Requested by admin when needed | Reduces fraudulent listings without slowing honest partners |
+| Bank account details (account name, bank, cheque copy or bank letter) | Required for online payouts | Required for online payouts | Paying partners for online bookings |
+
+Implementation notes: uploads are private (admin-only), size/type-checked, and never shown
+publicly. *Legal requirements should be confirmed with a Nepali legal/tax advisor before launch.*
+
+**5. Reviews and ratings: include in the MVP, limited to verified stays**
+- Only customers with a **completed** booking can review that stay (prevents fake reviews).
+- 1–5 star rating plus optional text; one review per booking.
+- Partners can post one public reply; admins can hide abusive content.
+- Listings show the average rating and review count (requirement 3.4 already expects this).
+- Built after bookings exist (added to the roadmap as its own phase).
+
+**6. Notification services**
+- **SMS: Sparrow SMS** (Nepali provider, delivers to NTC and Ncell numbers; widely used for OTPs
+  and alerts). Aakash SMS as a fallback option.
+- **Email: Amazon SES** (low cost at scale, reliable deliverability; a nearby Asia region keeps latency low).
+- Both sit behind a `NotificationService` interface so providers can be swapped without
+  touching business logic. In development, messages are logged or captured locally, never
+  sent to real phones or inboxes.
+- Credentials are stored only as environment secrets.

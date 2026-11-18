@@ -33,6 +33,16 @@ with hotels, guesthouses and homestays across Nepal.
 11. Hotel partner dashboard
 12. Admin dashboard
 13. Payment integration
+14. Reviews and ratings (verified stays only)
+
+### Business decisions (details: `docs/product/requirements.md` §6)
+
+- **Decided by the owner:** MeroStay takes a **commission on every booking**; customers can pay
+  **online or at the property**; **each property sets its own cancellation policy**.
+- **Delegated to the tech lead (owner may override):** partner verification documents, reviews in
+  the MVP (verified stays only), Sparrow SMS + Amazon SES for notifications.
+- Open details (commission rate, how pay-at-property commission is collected, policy format) are
+  raised with the owner at the start of the phase that needs them. **Never invent business policy.**
 
 ### Future (NOT in MVP — do not build until explicitly approved)
 
@@ -82,6 +92,19 @@ The phase roadmap lives in [`docs/development/roadmap.md`](docs/development/road
 - Never force-push to `main`. Never rewrite published history without permission.
 - Never commit: `.env*` (except `.env.example`), keys, credentials, `node_modules`, build output, coverage, uploads, DB dumps.
 
+### 2.2.1 GitHub Contribution and Commit Strategy
+
+- Aim for **2–4 meaningful commits per phase**, each an independently reviewable logical unit
+  (e.g. "API foundation", "web app", "CI + docs").
+- Each commit must be **self-consistent and tested**: its code, `package.json` and lockfile build
+  and pass checks on their own. Never commit broken or untested work.
+- **No artificial commits**: no empty, duplicate, trivial or split-for-count commits.
+- Conventional Commit messages with a body explaining *what* and *why*.
+- Review `git diff --cached` and run the secret checklist (§2.3) before **every** commit.
+- Push the phase branch, confirm the push succeeded (local and remote hashes match) and check
+  the CI result. Report commit hashes and messages in the phase report.
+- Never overwrite or rewrite existing history; check `git status`, branch and remote first.
+
 ### 2.3 Pre-commit secret checklist
 
 Before every commit:
@@ -110,18 +133,23 @@ Any hit must be inspected by a human. Placeholder values in `.env.example` are f
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js (App Router) + React + TypeScript |
-| Styling | Tailwind CSS |
-| Backend API | Node.js + Express + TypeScript |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Validation | Zod (shared between web and API) |
-| Unit / integration tests | Vitest (+ Supertest for HTTP) |
-| End-to-end tests | Playwright |
+| Frontend | Next.js 16 (App Router, Cache Components, Turbopack) + React 19 + TypeScript |
+| Styling | Tailwind CSS 4 (theme tokens in `apps/web/src/app/globals.css`) |
+| Backend API | Node.js 26 + Express 5 + TypeScript (ESM, `NodeNext`) |
+| Database | PostgreSQL 17 |
+| ORM | Prisma 7 with `@prisma/adapter-pg`; URL configured in `apps/api/prisma.config.ts` |
+| Validation | Zod 4 (API now; shared with web via `packages/shared` from the auth phase) |
+| Unit / integration tests | Vitest 5 (+ Supertest for HTTP) |
+| End-to-end tests | Playwright (desktop + mobile Chromium) |
 | Local infrastructure | Docker Compose (PostgreSQL) |
 | Package management | npm workspaces |
+| TypeScript | 5.9 (typescript-eslint does not support 6.1+/7 yet) |
 
-### 3.2 Repository layout (target — created in Phase 1)
+Version choices and reasons: `docs/architecture/decisions/0002-phase-1-tooling-and-runtime-choices.md`.
+Next.js 16 differs from older versions: read `apps/web/AGENTS.md` and the docs in
+`node_modules/next/dist/docs/` before writing web code.
+
+### 3.2 Repository layout
 
 ```
 mero-stay/
@@ -130,8 +158,9 @@ mero-stay/
 │   └── api/                 # Express REST API — owns ALL business logic + DB access
 │       └── prisma/          # schema.prisma, migrations, seed
 ├── packages/
-│   └── shared/              # Zod schemas, shared TS types, constants (roles, enums)
+│   └── shared/              # (from the auth phase) Zod schemas, shared types, enums
 ├── e2e/                     # Playwright tests
+├── .github/workflows/       # CI
 ├── docs/                    # Project documentation
 ├── docker-compose.yml       # Local PostgreSQL
 ├── CLAUDE.md
@@ -262,22 +291,33 @@ When an important technical decision is made, add an ADR (`docs/architecture/dec
 
 ---
 
-## 8. Commands (filled in as phases add them)
+## 8. Commands
+
+Full guide: `docs/development/local-setup.md`.
 
 ```bash
-# Phase 1 will define, e.g.:
-# npm install
-# npm run dev          # web + api
-# npm run lint
-# npm run typecheck
-# npm test             # Vitest
-# npm run test:e2e     # Playwright
-# docker compose up -d # local PostgreSQL
+npm install                  # install all workspaces
+npm run db:up                # start PostgreSQL (Docker) and wait until healthy
+npm run db:down              # stop PostgreSQL (data kept)
+npm run db:generate          # regenerate Prisma client
+npm run db:check             # verify Prisma ↔ PostgreSQL connectivity
+npm run dev                  # API :4000 + web :3000 with reload
+npm run build                # production builds
+npm start                    # run production builds
+npm run format | format:check
+npm run lint
+npm run typecheck            # api + web (runs next typegen) + e2e
+npm test                     # unit tests (no DB needed)
+npm run test:integration     # integration tests (needs DB)
+npm run test:e2e             # build + Playwright (needs DB)
 ```
+
+Before committing: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration`.
 
 ---
 
 ## 9. Current status
 
-- **Phase 0 — Repository setup & documentation:** complete, awaiting owner review.
-- **Next:** Phase 1 — Monorepo scaffolding & tooling (awaiting approval).
+- **Phase 0, Repository setup & documentation:** complete.
+- **Phase 1, Project foundation & dev environment:** complete on branch `phase/01-foundation`, awaiting owner review.
+- **Next:** Phase 2, Data model (awaiting approval).
