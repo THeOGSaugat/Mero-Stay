@@ -1,0 +1,17 @@
+// MeroStay Prisma schema.
+//
+// Phase 1: connection setup only. Business models (users, properties, rooms,
+// bookings, payments, ...) are added in the data-model phase.
+// Connection URL is configured in `prisma.config.ts` (Prisma 7+).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  // Emit `.js` import specifiers so `tsc` output runs on Node's native ESM loader.
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
