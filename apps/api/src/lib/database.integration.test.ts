@@ -8,14 +8,19 @@ import { checkDatabaseConnection, createPrismaClient } from "./prisma.js";
 
 /**
  * Integration tests: these talk to a REAL PostgreSQL instance.
- * Locally: `npm run db:up` first. In CI a PostgreSQL service container is used.
+ * - Locally: your Neon database, via the direct DATABASE_URL_UNPOOLED in apps/api/.env.
+ * - In CI: a temporary PostgreSQL service container (no Neon secrets in CI).
  * They only run read-only queries, so they never modify data.
+ *
+ * These tests do NOT skip silently: with no database configured they fail loudly,
+ * because a skipped integration suite would look like a pass.
  */
 loadEnvFileIfPresent();
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL is not set. Copy apps/api/.env.example to apps/api/.env and run `npm run db:up`.",
+    "No database configured. Copy apps/api/.env.example to apps/api/.env and set " +
+      "DATABASE_URL_UNPOOLED (your Neon direct connection).",
   );
 }
 

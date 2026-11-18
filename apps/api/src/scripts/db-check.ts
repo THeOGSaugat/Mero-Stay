@@ -2,31 +2,58 @@
 import { loadEnvFileIfPresent, parseEnv } from "../config/env.js";
 import { createPrismaClient } from "../lib/prisma.js";
 
-/**
- * `npm run db:check`: verifies that Prisma can connect to PostgreSQL.
- * Prints host/database only. The connection string (which contains the
- * password) is never printed.
- */
-async function main(): Promise<void> {
-  loadEnvFileIfPresent();
-  const env = parseEnv(process.env);
-  const url = new URL(env.DATABASE_URL);
-  const target = `${url.hostname}:${url.port || "5432"}${url.pathname}`;
+/** Host and database only. Connection strings contain passwords and are never printed. */
+function describeTarget(connectionString: string): string {
+  const url = new URL(connectionString);
+  return `${url.hostname}${url.pathname}`;
+}
 
-  const prisma = createPrismaClient(env.DATABASE_URL);
+async function checkConnection(label: string, connectionString: string): Promise<boolean> {
+  const target = describeTarget(connectionString);
+  const prisma = createPrismaClient(connectionString);
   const started = performance.now();
   try {
     const rows = await prisma.$queryRaw<{ version: string }[]>`SELECT version()`;
     const elapsed = Math.round(performance.now() - started);
-    console.log(`✔ Prisma connected to PostgreSQL at ${target} in ${elapsed} ms`);
+    console.log(`✔ ${label}: Prisma connected to ${target} in ${elapsed} ms`);
     console.log(`  ${rows[0]?.version ?? "unknown version"}`);
+    return true;
   } catch (err) {
-    console.error(`✖ Prisma could not connect to PostgreSQL at ${target}`);
+    console.error(`✖ ${label}: Prisma could not connect to ${target}`);
     console.error(`  ${err instanceof Error ? err.message : String(err)}`);
-    console.error("  Is the database running? Try: npm run db:up");
-    process.exitCode = 1;
+    return false;
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/**
+ * `npm run db:check`: verifies Prisma can reach Neon over BOTH connections:
+ * - DATABASE_URL           (pooled)  used by the running API
+ * - DATABASE_URL_UNPOOLED  (direct)  used by the Prisma CLI and migrations
+ */
+async function main(): Promise<void> {
+  loadEnvFileIfPresent();
+  const env = parseEnv(process.env);
+  const directUrl = process.env.DATABASE_URL_UNPOOLED;
+
+  const results = [await checkConnection("Pooled (API runtime)", env.DATABASE_URL)];
+
+  if (directUrl) {
+    results.push(await checkConnection("Direct (Prisma CLI)", directUrl));
+  } else {
+    console.error(
+      "✖ DATABASE_URL_UNPOOLED is not set (needed by the Prisma CLI). See .env.example.",
+    );
+    results.push(false);
+  }
+
+  if (results.includes(false)) {
+    console.error(
+      "  Check the connection strings in apps/api/.env (sslmode=require is mandatory).",
+    );
+    console.error("  Neon may need a few seconds to wake an idle database; retry once.");
+    process.exitCode = 1;
   }
 }
 

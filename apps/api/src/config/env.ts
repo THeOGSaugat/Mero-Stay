@@ -6,14 +6,32 @@ import { z } from "zod";
  * Environment variables the API needs. Validated once at startup so that a
  * misconfigured deployment fails fast instead of failing on the first request.
  */
-const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
-  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  DATABASE_URL: z
-    .string({ error: "is required" })
-    .regex(/^postgres(ql)?:\/\//, { error: "must be a postgresql:// connection string" }),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+      .default("info"),
+    /** Pooled Neon connection used by the running API. */
+    DATABASE_URL: z
+      .string({ error: "is required" })
+      .regex(/^postgres(ql)?:\/\//, { error: "must be a postgresql:// connection string" }),
+  })
+  .superRefine((env, ctx) => {
+    // Neon only accepts TLS connections. In production, refuse to start without it
+    // so credentials are never sent over an unencrypted link.
+    if (
+      env.NODE_ENV === "production" &&
+      !/[?&]sslmode=(require|verify-ca|verify-full)\b/.test(env.DATABASE_URL)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["DATABASE_URL"],
+        message: "must include sslmode=require in production",
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

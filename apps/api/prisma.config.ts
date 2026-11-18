@@ -9,14 +9,18 @@ if (existsSync(envFile)) {
   process.loadEnvFile(envFile);
 }
 
-const databaseUrl = process.env.DATABASE_URL;
+// The Prisma CLI (migrate, db pull, ...) needs a DIRECT connection to Neon.
+// It does not work through Neon's pooler (PgBouncer). The running API uses the
+// pooled DATABASE_URL instead (see src/lib/prisma.ts).
+const directUrl = process.env.DATABASE_URL_UNPOOLED;
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
-  // `prisma generate` does not need a database, so the URL is optional here.
-  // Commands that do (migrate, db pull) will fail clearly if it is missing.
-  ...(databaseUrl ? { datasource: { url: databaseUrl } } : {}),
+  // `prisma generate` does not need a database, so the URL is optional here
+  // (a fresh clone can generate before .env exists). Commands that do need a
+  // database fail clearly if it is missing.
+  ...(directUrl ? { datasource: { url: directUrl } } : {}),
 });

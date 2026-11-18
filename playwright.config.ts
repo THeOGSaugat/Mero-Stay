@@ -6,7 +6,7 @@ const isCI = Boolean(process.env.CI);
 
 /**
  * End-to-end tests run against PRODUCTION builds of the API and web app.
- * `npm run test:e2e` builds first. PostgreSQL must be running (`npm run db:up`).
+ * `npm run test:e2e` builds first. A reachable database is required (Neon via apps/api/.env).
  */
 export default defineConfig({
   testDir: "./e2e",

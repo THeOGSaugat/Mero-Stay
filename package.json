@@ -25,9 +25,6 @@
     "test:e2e:install": "playwright install chromium",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:up": "docker compose up -d --wait postgres",
-    "db:down": "docker compose down",
-    "db:logs": "docker compose logs -f postgres",
     "db:generate": "npm run db:generate -w @merostay/api",
     "db:check": "npm run db:check -w @merostay/api"
   },
