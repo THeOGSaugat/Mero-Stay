@@ -1,4 +1,5 @@
 /* eslint-disable no-console -- CLI script: prints results for a developer. */
+import { resolveDirectUrl } from "../config/database-url.js";
 import { loadEnvFileIfPresent, parseEnv } from "../config/env.js";
 import { createPrismaClient } from "../lib/prisma.js";
 
@@ -35,7 +36,7 @@ async function checkConnection(label: string, connectionString: string): Promise
 async function main(): Promise<void> {
   loadEnvFileIfPresent();
   const env = parseEnv(process.env);
-  const directUrl = process.env.DATABASE_URL_UNPOOLED;
+  const directUrl = resolveDirectUrl(process.env);
 
   const results = [await checkConnection("Pooled (API runtime)", env.DATABASE_URL)];
 

@@ -28,7 +28,7 @@ Requires Node.js 24+ (26 recommended) and a free [Neon](https://neon.tech) Postg
 npm install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-# paste your Neon pooled + direct connection strings into apps/api/.env
+# paste your Neon connection string into apps/api/.env (DATABASE_URL)
 
 npm run db:generate    # generate the Prisma client
 npm run db:check       # verify the Neon connection

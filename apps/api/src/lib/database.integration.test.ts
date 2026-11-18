@@ -2,6 +2,7 @@ import { pino } from "pino";
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
+import { resolveDirectUrl } from "../config/database-url.js";
 import { loadEnvFileIfPresent } from "../config/env.js";
 import type { ReadinessResponse } from "../modules/health/health.routes.js";
 import { checkDatabaseConnection, createPrismaClient } from "./prisma.js";
@@ -16,7 +17,7 @@ import { checkDatabaseConnection, createPrismaClient } from "./prisma.js";
  * because a skipped integration suite would look like a pass.
  */
 loadEnvFileIfPresent();
-const databaseUrl = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+const databaseUrl = resolveDirectUrl(process.env);
 if (!databaseUrl) {
   throw new Error(
     "No database configured. Copy apps/api/.env.example to apps/api/.env and set " +

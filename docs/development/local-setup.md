@@ -50,15 +50,13 @@ mero-stay/
 npm install
 
 # 2. Create a Neon project at https://neon.tech (any region; choose PostgreSQL 17).
-#    In the Neon console press "Connect" and copy TWO connection strings:
-#      - the POOLED one   (host contains "-pooler")  -> DATABASE_URL
-#      - the DIRECT one   (pooling switched off)     -> DATABASE_URL_UNPOOLED
-#    Both must end with ?sslmode=require
+#    In the Neon console press "Connect" and copy the connection string (pooled).
+#    It must end with ?sslmode=require
 
 # 3. Create your local environment files and paste the strings in
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-#    edit apps/api/.env: set DATABASE_URL and DATABASE_URL_UNPOOLED
+#    edit apps/api/.env: paste the string as DATABASE_URL (the only value to change)
 
 # 4. Generate the Prisma client and verify the Neon connection
 npm run db:generate
@@ -78,7 +76,7 @@ npm run test:e2e:install
 | File | Variable | Purpose |
 |---|---|---|
 | `apps/api/.env` | `DATABASE_URL` | Neon **pooled** connection string used by the running API (**required**; must include `sslmode=require` in production) |
-| `apps/api/.env` | `DATABASE_URL_UNPOOLED` | Neon **direct** connection string used by the Prisma CLI, migrations and integration tests |
+| `apps/api/.env` | `DATABASE_URL_UNPOOLED` | *Optional.* Direct connection used by the Prisma CLI. Normally leave unset: it is derived from `DATABASE_URL` by removing `-pooler` from the host |
 | `apps/api/.env` | `PORT` | API port (default `4000`) |
 | `apps/api/.env` | `NODE_ENV` | `development` / `test` / `production` |
 | `apps/api/.env` | `LOG_LEVEL` | `fatal` … `trace`, or `silent` (default `info`) |
@@ -130,11 +128,10 @@ Playwright HTML report: `npx playwright show-report`.
 |---|---|
 | Port 3000 or 4000 in use | Find the process: `lsof -nP -iTCP:3000 -sTCP:LISTEN`, then stop it |
 | `Invalid environment configuration: DATABASE_URL: is required` | Create `apps/api/.env` from its example |
-| `db:check`: `password authentication failed` | Wrong password in `DATABASE_URL` / `DATABASE_URL_UNPOOLED`. Copy the strings again from the Neon console (reset the role password there if needed) |
-| `db:check`: `DATABASE_URL_UNPOOLED is not set` | Add the direct connection string to `apps/api/.env` |
+| `db:check`: `password authentication failed` | Wrong password in `DATABASE_URL`. Copy the string again from the Neon console (reset the role password there if needed) |
 | `db:check`: timeout / `ECONNREFUSED` | Neon pauses idle databases; retry once. Check your internet connection and that the strings end with `?sslmode=require` |
 | API exits: `DATABASE_URL: must include sslmode=require in production` | Add `?sslmode=require` to the connection string |
-| `prisma` CLI commands fail through the pooler | They must use the **direct** URL (`DATABASE_URL_UNPOOLED`), which `prisma.config.ts` does already |
+| `prisma` CLI commands fail through the pooler | They must use the direct URL, which `prisma.config.ts` derives from `DATABASE_URL` for you |
 | `Cannot find module '../generated/prisma/client.js'` | Run `npm run db:generate` |
 | `LayoutProps` / route type errors in the web app | Run `npm run typecheck` (it runs `next typegen` first) |
 | Status panel shows **API Unavailable** | API isn't running or `API_URL` in `apps/web/.env.local` is wrong |

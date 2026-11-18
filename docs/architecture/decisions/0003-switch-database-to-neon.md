@@ -17,11 +17,13 @@ Docker Desktop. No business tables or data exist yet, so nothing needed migratin
 ## Decision
 
 1. **Use Neon (hosted PostgreSQL) for local development and production.** No local Docker.
-2. **Two connection strings**, both with `sslmode=require`:
+2. **Two connection strings**, both with `sslmode=require`, but developers paste only one:
    - `DATABASE_URL`: **pooled** (host contains `-pooler`). Used by the running API.
-   - `DATABASE_URL_UNPOOLED`: **direct**. Used by the Prisma CLI (`prisma.config.ts`),
-     future migrations and integration tests. The Prisma CLI does not work through
-     Neon's pooler.
+     This is the only value to paste.
+   - Direct URL: used by the Prisma CLI (`prisma.config.ts`), future migrations and
+     integration tests; the CLI does not work through Neon's pooler. It is **derived** from
+     `DATABASE_URL` by removing `-pooler` from the host (`src/config/database-url.ts`).
+     `DATABASE_URL_UNPOOLED` remains as an optional override.
 3. **Keep the standard `pg` driver adapter** (`@prisma/adapter-pg`). `@prisma/adapter-neon` is
    for serverless/edge runtimes without TCP; this is a long-running Node server.
    Revisit if the API moves to a serverless/edge platform.
