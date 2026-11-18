@@ -19,7 +19,9 @@ jobs:
     timeout-minutes: 20
 
     services:
-      # Disposable database that exists only for the duration of this job.
+      # CI uses its OWN disposable PostgreSQL, not Neon, so CI needs no database
+      # secrets. It exists only for the duration of this job. Local development
+      # uses Neon (see docs/architecture/decisions/0003-switch-database-to-neon.md).
       postgres:
         image: postgres:17-alpine
         env:
@@ -36,7 +38,9 @@ jobs:
 
     env:
       # Throwaway credentials for the CI-only container above. Not a secret.
+      # Both variables point to the same CI database (there is no pooler in CI).
       DATABASE_URL: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
+      DATABASE_URL_UNPOOLED: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
       API_URL: http://localhost:4000
       NEXT_TELEMETRY_DISABLED: "1"
 
