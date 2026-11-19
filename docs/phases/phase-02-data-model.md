@@ -50,8 +50,9 @@ See [ADR 0004](../architecture/decisions/0004-multi-vertical-data-model.md). Hig
 | Migration on dev Neon (PostgreSQL 18) | `migrate deploy` applied; status "up to date"; drift check 0 |
 | `npm run lint` / `typecheck` / `format:check` | Pass |
 | `npm test` | API 67/67 (incl. 31 money/status + 4 guard tests), web 16/16 |
-| `npm run test:integration` | 34/34 on a throwaway PostgreSQL 17 (same image as CI) |
+| `npm run test:integration` | 34/34 on a throwaway PostgreSQL 17 (same image as CI) **and 34/34 on the Neon `test` branch** (about 2.5 min: network round-trips for the schema reset, migration and seed) |
 | `npm run build` | Pass |
+| Neon separation check | Test branch holds the test data (8 users, 3 trips, 6 items); the dev branch still has 0 users/trips |
 | Guard with real settings | Dev pooled and direct URLs as `TEST_DATABASE_URL` both refused; missing URL fails loudly |
 
 Commission maths verified:
@@ -68,7 +69,8 @@ Commission maths verified:
 | `5140263` | docs: define multi-vertical trip model and data architecture |
 | `07347d5` | feat(db): add generic listing/trip/booking-item schema with per-item commission |
 | `05d1e31` | test(db): add test database, schema, constraint, commission and seed tests |
-| (this commit) | docs: document test database setup and add Phase 2 report |
+| `9c2c8b7` | docs: document test database setup and add Phase 2 report |
+| (next) | fix(db): give the sample seed enough transaction time on hosted databases |
 
 ## Security checklist
 
@@ -79,8 +81,10 @@ Commission maths verified:
 
 ## Known limitations / follow-ups
 
-1. **Neon `test` branch not created yet.** Integration tests were run on a throwaway PostgreSQL 17
-   (as CI does). Create the branch and `apps/api/.env.test` to run them against Neon.
+1. **Neon test run found a real issue, now fixed:** the first run on the Neon `test` branch failed
+   because the sample seed's single transaction (about 60 sequential queries) exceeded Prisma's
+   default 5 s transaction limit over a hosted database. The seed now allows 120 s. It passed
+   locally only because a local database has almost no latency.
 2. Cross-row rules are enforced in application code, not the database: item `provider_id` equals
    the listing's provider; trip totals equal item sums; reviews only for completed items;
    bookable/active listing types. Covered by tests; services in later phases must use the

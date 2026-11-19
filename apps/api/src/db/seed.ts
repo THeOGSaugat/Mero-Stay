@@ -17,6 +17,8 @@ import {
 
 export const SEED_MARKER_EMAIL = "seed-admin@merostay.test";
 
+const SEED_TRANSACTION_OPTIONS = { maxWait: 15_000, timeout: 120_000 } as const;
+
 export interface SeedSummary {
   users: number;
   providers: number;
@@ -560,5 +562,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       trips: await tx.trip.count(),
       bookingItems: await tx.bookingItem.count(),
     };
-  });
+    // The seed runs ~60 queries one after another inside ONE transaction (all or nothing).
+    // Prisma's default 5 s limit is enough on a local database but not over a hosted one
+    // such as Neon (found when the tests first ran on a Neon branch), so allow more time.
+  }, SEED_TRANSACTION_OPTIONS);
 }
