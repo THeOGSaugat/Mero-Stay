@@ -4,7 +4,7 @@ Each phase is developed, tested, documented, committed and pushed, then **review
 the owner before the next phase begins**. Scope may be adjusted at review time.
 
 MeroStay is a multi-vertical travel marketplace (see [requirements](../product/requirements.md)).
-Phases from 4 onward cover **all MVP verticals** (hotels, buses, guides, tours, activities) on the
+Phases from 3 onward cover **all MVP verticals** (hotels, buses, guides, tours, activities) on the
 generic data model, not hotels only.
 
 | # | Phase | Main deliverables | Status |
@@ -12,14 +12,14 @@ generic data model, not hotels only.
 | 0 | Repository setup & documentation | Git checks, `.gitignore`, CLAUDE.md, docs structure | ✅ Done |
 | 1 | Project foundation & dev environment | npm workspaces, Next.js + Tailwind, Express + TS API, Neon PostgreSQL (ADR 0003), Prisma, ESLint/Prettier, Vitest + Playwright, health checks, CI | ✅ Done (v0.1.0) |
 | 2 | Multi-vertical data model | Generic provider / listing / trip / booking-item schema with detail tables, inventory, per-item commission, payment and cancellation; shapes for payments, payouts, invoices, reviews, notifications; DB integrity constraints; sample seed; separate test database; schema tests (ADR 0004) | ✅ Done (merged) |
-| 3 | Authentication & roles | Customer + partner registration/login (email or phone), password hashing, sessions, role & ownership guards; introduce `packages/shared` for Zod contracts | Planned |
-| 4 | Provider onboarding & verification | Partner chooses provider type, profile, verification documents (private uploads), payout account | Planned |
-| 5 | Admin verification & approvals | Admin queues for providers and listings, approve/reject with reason, user/provider lists | Planned |
-| 6 | Listings & inventory management | Partners manage listings per vertical (hotel + rooms, bus services, guide services, tours, activities), cancellation policies, per-date inventory and prices | Planned |
-| 7 | Search & discovery | Stays by destination/dates, buses by route/date, guides/tours by region/date; filters, sorting, pagination | Planned |
-| 8 | Listing detail pages | SSR detail pages per vertical, availability for chosen dates | Planned |
-| 9 | Trip builder & booking | Multi-item trip (cart), transactional inventory holds, price/commission/policy snapshots, per-item payment choice, cancellation with refunds per policy, item state machine, expiry | Planned |
-| 10 | Payments | eSewa + Khalti (sandbox), server verification, idempotent callbacks, per-item allocation, refunds | Planned |
+| 3 | Search & booking API | Vertical-agnostic `/api/v1` search (listing types, listings, details + availability) and trip API (create, add/update/remove items with inventory holds, quote dry-run, confirm); money as minor-unit strings; DB-constraint error mapping; temporary unauthenticated access, off in production (ADR 0005, [api.md](../architecture/api.md)) | ✅ Done (awaiting review) |
+| 4 | Authentication & roles | Customer + partner registration/login (email or phone), password hashing, sessions, role & ownership guards; replace the temporary `userId` on trip endpoints; hide commission/payout from customers; introduce `packages/shared` | Planned |
+| 5 | Provider onboarding & verification | Partner chooses provider type, profile, verification documents (private uploads), payout account | Planned |
+| 6 | Admin verification & approvals | Admin queues for providers and listings, approve/reject with reason, user/provider lists | Planned |
+| 7 | Listings & inventory management | Partners manage listings per vertical, cancellation policies, per-date inventory and prices | Planned |
+| 8 | Customer web: search & trip builder | Search pages per vertical, listing detail pages, multi-item trip builder UI on the Phase 3 API | Planned |
+| 9 | Payments | eSewa + Khalti (sandbox), server verification, idempotent callbacks, per-item allocation; scheduled hold-expiry job | Planned |
+| 10 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refunds per item | Planned |
 | 11 | Commission & payouts | Commission invoices for pay-at-property items, payouts for online-paid items, admin finance views | Planned |
 | 12 | Dashboards | Customer, partner and admin dashboards with real data | Planned |
 | 13 | Reviews & ratings | Verified (completed-item) reviews, ratings on listings, partner replies, moderation | Planned |

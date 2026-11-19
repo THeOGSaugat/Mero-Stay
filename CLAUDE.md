@@ -190,6 +190,10 @@ mero-stay/
   `modules/admin`), not by technical layer and **not by vertical**. Pure rules live in `src/domain/`.
 - **REST, versioned:** all endpoints under `/api/v1/...`. JSON in, JSON out.
 - **Consistent error shape:** `{ "error": { "code": "BOOKING_UNAVAILABLE", "message": "...", "details"?: ... } }`.
+- **Money in API responses is a digit string in minor units** (`"totalMinor": "957110"`) with `currency` and
+  `currencyExponent`, produced by explicit serializers (ADR 0005). Never a JSON number; never a global BigInt patch.
+- **Database constraint violations are mapped centrally** (`lib/database-errors.ts`) to 409/422; raw PostgreSQL text never reaches clients.
+- **Trip writes** run in one transaction holding a row lock on the trip; inventory is reserved by atomic increments that the overbooking CHECK guards.
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -297,6 +301,7 @@ mero-stay/
 | `docs/product/requirements.md` | Users, MVP features, user stories |
 | `docs/architecture/overview.md` | System architecture |
 | `docs/architecture/data-model.md` | Entity reference, money formulas, how to add a vertical |
+| `docs/architecture/api.md` | `/api/v1` endpoints, money-as-string convention, error codes |
 | `docs/architecture/decisions/` | Architecture Decision Records (ADRs) |
 | `docs/development/roadmap.md` | Phase-by-phase plan |
 | `docs/development/git-workflow.md` | Branching, commits, pushing |
@@ -338,5 +343,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 
 - **Phase 0, Repository setup & documentation:** complete.
 - **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
-- **Phase 2, Multi-vertical data model:** complete and merged to `main` (64-bit money columns).
-- **Next:** Phase 3, Authentication & roles (awaiting approval).
+- **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
+- **Phase 3, Search & booking API:** complete on branch `phase/03-search-booking-api`, awaiting owner review.
+- **Next:** Phase 4, Authentication & roles (awaiting approval).
