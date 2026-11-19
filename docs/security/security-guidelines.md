@@ -62,7 +62,17 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Prefer well-maintained, widely used packages; justify every new dependency.
 - Commit `package-lock.json` for reproducible installs.
 
-## 9. Privacy
+## 9. Sensitive data in the database
+
+- `provider_payout_accounts.account_number`, `providers.pan_number` and verification documents are
+  sensitive. Only admins and the owning partner may read them; never include them in logs, list
+  endpoints or analytics exports.
+- Before launch, decide on application-level encryption for bank account numbers (tracked in the
+  Phase 2 report as a follow-up). Neon encrypts data at rest.
+- Verification document files live in private object storage (`storage_key`), never in the database
+  and never on a public URL.
+
+## 10. Privacy
 
 - Collect only necessary personal data.
 - Do not log full phone numbers, emails, ID documents or payment details at info level.
