@@ -9,6 +9,7 @@
 | [architecture/decisions/](architecture/decisions/) | Architecture Decision Records (ADRs) |
 | [development/local-setup.md](development/local-setup.md) | **Install, configure, run, test, troubleshoot** |
 | [development/roadmap.md](development/roadmap.md) | Phase-by-phase development plan |
+| [development/operational-gaps.md](development/operational-gaps.md) | **Known operational gaps before launch** |
 | [development/git-workflow.md](development/git-workflow.md) | Branching, commits, pre-push checks |
 | [security/security-guidelines.md](security/security-guidelines.md) | Security practices |
 | [design/](design/README.md) | Design references from the project owner |

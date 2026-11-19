@@ -83,6 +83,9 @@ What the integration tests prove (on Neon):
 
 ## Known limitations / follow-ups
 
+The launch-blocking ones are tracked in [operational-gaps.md](../development/operational-gaps.md).
+
+
 1. **No authentication yet**: when the flag is on, anyone with a trip id can read or change it
    (the flag is off by default). Phase 4 replaces `userId` with the session and hides commission/payout
    fields from customers ([api.md](../architecture/api.md#how-authentication-will-slot-in)).

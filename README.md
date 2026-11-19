@@ -48,6 +48,7 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
   API logs a warning at startup whenever it is on.
 - Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
 - Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
+- Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).
 
 ## License
 
