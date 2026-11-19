@@ -87,8 +87,8 @@ function itemData(charges: ItemCharges, overrides: Record<string, unknown> = {})
 
 const hotelStay = calculateItemCharges({
   lines: [
-    { units: 1, unitPriceMinor: 350_000 },
-    { units: 1, unitPriceMinor: 420_000 },
+    { units: 1, unitPriceMinor: 350_000n },
+    { units: 1, unitPriceMinor: 420_000n },
   ],
   serviceChargeRateBps: 1000,
   taxRateBps: 1300,
@@ -98,16 +98,16 @@ const hotelStay = calculateItemCharges({
 describe("booking item money constraints", () => {
   it("accepts an item whose amounts come from calculateItemCharges", async () => {
     const item = await prisma.bookingItem.create({ data: itemData(hotelStay) });
-    expect(item.commissionMinor).toBe(115_500);
-    expect(item.totalMinor).toBe(957_110);
+    expect(item.commissionMinor).toBe(115_500n);
+    expect(item.totalMinor).toBe(957_110n);
   });
 
   it.each([
     [
       "commission off by one paisa",
       {
-        commissionMinor: hotelStay.commissionMinor + 1,
-        providerPayoutMinor: hotelStay.providerPayoutMinor - 1,
+        commissionMinor: hotelStay.commissionMinor + 1n,
+        providerPayoutMinor: hotelStay.providerPayoutMinor - 1n,
       },
       "booking_items_commission_chk",
     ],
@@ -122,17 +122,17 @@ describe("booking item money constraints", () => {
     [
       "total that does not add up",
       {
-        totalMinor: hotelStay.totalMinor + 100,
-        providerPayoutMinor: hotelStay.providerPayoutMinor + 100,
+        totalMinor: hotelStay.totalMinor + 100n,
+        providerPayoutMinor: hotelStay.providerPayoutMinor + 100n,
       },
       "booking_items_total_chk",
     ],
     [
       "wrong VAT",
       {
-        taxMinor: hotelStay.taxMinor - 1,
-        totalMinor: hotelStay.totalMinor - 1,
-        providerPayoutMinor: hotelStay.providerPayoutMinor - 1,
+        taxMinor: hotelStay.taxMinor - 1n,
+        totalMinor: hotelStay.totalMinor - 1n,
+        providerPayoutMinor: hotelStay.providerPayoutMinor - 1n,
       },
       "booking_items_tax_chk",
     ],
@@ -143,7 +143,7 @@ describe("booking item money constraints", () => {
     ],
     [
       "refund larger than the total",
-      { refundedMinor: hotelStay.totalMinor + 1 },
+      { refundedMinor: hotelStay.totalMinor + 1n },
       "booking_items_refund_chk",
     ],
     ["check-out before check-in", { endDate: day("2026-12-19") }, "booking_items_dates_chk"],
@@ -233,30 +233,88 @@ describe("other integrity rules", () => {
   });
 });
 
+describe("64-bit money columns", () => {
+  it("every *_minor column is BIGINT (no 32-bit INTEGER money left)", async () => {
+    const rows = await prisma.$queryRaw<
+      { table_name: string; column_name: string; data_type: string }[]
+    >`
+      SELECT table_name, column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND column_name LIKE '%\_minor'
+      ORDER BY table_name, column_name`;
+    expect(rows.length).toBe(20);
+    expect(rows.filter((row) => row.data_type !== "bigint")).toEqual([]);
+  });
+
+  it("stores and returns a Rs 100 crore item exactly (above the old 2.1 crore limit)", async () => {
+    const charges = calculateItemCharges({
+      lines: [{ units: 2, unitPriceMinor: 50_000_000_000n }],
+      commissionRateBps: 1500,
+    });
+    const item = await prisma.bookingItem.create({ data: itemData(charges) });
+    expect(item.subtotalMinor).toBe(100_000_000_000n);
+    expect(item.commissionMinor).toBe(15_000_000_000n);
+    expect(item.providerPayoutMinor).toBe(85_000_000_000n);
+  });
+
+  it("stays exact above 2^53 and the database CHECK agrees with TypeScript there", async () => {
+    // 99,999,999,999,999,999 paisa is above 2^53 (9.007 × 10^15), where JS numbers are inexact.
+    const charges = calculateItemCharges({
+      lines: [{ units: 1, unitPriceMinor: 99_999_999_999_999_999n }],
+      commissionRateBps: 1500,
+    });
+    expect(charges.commissionMinor).toBe(15_000_000_000_000_000n);
+    const item = await prisma.bookingItem.create({ data: itemData(charges) });
+    expect(item.subtotalMinor).toBe(99_999_999_999_999_999n);
+    expect(item.commissionMinor).toBe(15_000_000_000_000_000n);
+    expect(item.providerPayoutMinor).toBe(84_999_999_999_999_999n);
+  });
+
+  it("still rejects a wrong commission at that size", async () => {
+    const charges = calculateItemCharges({
+      lines: [{ units: 1, unitPriceMinor: 99_999_999_999_999_999n }],
+      commissionRateBps: 1500,
+    });
+    await expect(
+      prisma.bookingItem.create({
+        data: itemData(charges, {
+          commissionMinor: charges.commissionMinor + 1n,
+          providerPayoutMinor: charges.providerPayoutMinor - 1n,
+        }),
+      }),
+    ).rejects.toThrow(/booking_items_commission_chk/);
+  });
+});
+
 describe("TypeScript and SQL rounding agree", () => {
-  it("applyRate matches PostgreSQL ROUND() for 2,000 amounts × rates, including exact halves", async () => {
-    const amounts: number[] = [];
+  it("applyRate matches PostgreSQL ROUND() for 2,000 amounts × rates across the whole 64-bit range, including exact halves", async () => {
+    const amounts: bigint[] = [];
     const rates: number[] = [];
     // Exact half cases: amount × rate ends in 5000 (e.g. 10 × 1500 = 15,000 → 1.5).
     for (let i = 1; i <= 500; i++) {
-      amounts.push(i * 10);
+      amounts.push(BigInt(i) * 10n);
       rates.push(1500);
     }
-    // Pseudo-random amounts up to Rs 2 crore and all sorts of rates (deterministic seed).
-    let state = 42;
-    const next = () => (state = (state * 1_103_515_245 + 12_345) % 2_147_483_648);
+    // Deterministic pseudo-random amounts of every magnitude, from a few paisa up to 2^63 − 1.
+    const mask63 = (1n << 63n) - 1n;
+    let state = 42n;
+    const next = () =>
+      (state = (state * 6_364_136_223_846_793_005n + 1_442_695_040_888_963_407n) % (1n << 64n));
     for (let i = 0; i < 1500; i++) {
-      amounts.push(next() % 2_000_000_000);
-      rates.push(next() % 10_001);
+      amounts.push(((next() >> 1n) & mask63) >> BigInt(i % 60));
+      rates.push(Number((next() >> 20n) % 10_001n));
     }
+    amounts.push(mask63, mask63);
+    rates.push(1500, 10_000);
 
     const rows = await prisma.$queryRaw<{ v: bigint }[]>`
       SELECT ROUND(t.a::numeric * t.r / 10000)::bigint AS v
-      FROM unnest(${amounts}::int[], ${rates}::int[]) WITH ORDINALITY AS t(a, r, i)
+      FROM unnest(${amounts.map(String)}::text[], ${rates}::int[]) WITH ORDINALITY AS t(a, r, i)
       ORDER BY t.i`;
 
-    const fromSql = rows.map((row) => Number(row.v));
+    const fromSql = rows.map((row) => row.v);
     const fromTs = amounts.map((amount, i) => applyRate(amount, rates[i] ?? 0));
     expect(fromSql).toEqual(fromTs);
+    expect(amounts.some((amount) => amount > 2n ** 53n)).toBe(true); // really exercised the big range
   });
 });

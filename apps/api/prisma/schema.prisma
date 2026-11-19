@@ -279,7 +279,7 @@ model Listing {
   status                      ListingStatus @default(DRAFT)
   currency                    String        @default("NPR") @db.Char(3)
   /// Price per billable unit (see listing_types.unit_label), in minor units.
-  basePriceMinor              Int           @map("base_price_minor")
+  basePriceMinor              BigInt        @map("base_price_minor")
   serviceChargeRateBps        Int           @default(0) @map("service_charge_rate_bps")
   taxRateBps                  Int           @default(0) @map("tax_rate_bps")
   /// Overrides provider/platform commission (NULL = inherit).
@@ -459,7 +459,7 @@ model InventorySlot {
   /// Incremented atomically by the booking service; CHECK keeps it ≤ capacity_total (no overbooking).
   capacityBooked     Int                 @default(0) @map("capacity_booked")
   /// Optional per-date price (e.g. festival season). NULL = listing base price.
-  priceOverrideMinor Int?                @map("price_override_minor")
+  priceOverrideMinor BigInt?             @map("price_override_minor")
   status             InventorySlotStatus @default(OPEN)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -519,11 +519,11 @@ model Trip {
   status               TripStatus @default(DRAFT)
   /// MVP: one currency per trip.
   currency             String     @default("NPR") @db.Char(3)
-  subtotalMinor        Int        @default(0) @map("subtotal_minor")
-  serviceChargeMinor   Int        @default(0) @map("service_charge_minor")
-  taxMinor             Int        @default(0) @map("tax_minor")
-  totalMinor           Int        @default(0) @map("total_minor")
-  commissionTotalMinor Int        @default(0) @map("commission_total_minor")
+  subtotalMinor        BigInt     @default(0) @map("subtotal_minor")
+  serviceChargeMinor   BigInt     @default(0) @map("service_charge_minor")
+  taxMinor             BigInt     @default(0) @map("tax_minor")
+  totalMinor           BigInt     @default(0) @map("total_minor")
+  commissionTotalMinor BigInt     @default(0) @map("commission_total_minor")
   contactName          String?    @map("contact_name")
   contactPhone         String?    @map("contact_phone")
   contactEmail         String?    @map("contact_email")
@@ -602,23 +602,23 @@ model BookingItem {
   quantity                   Int
   currency                   String            @default("NPR") @db.Char(3)
   /// Sum of booking_item_slots.amount_minor (per-date unit prices live there).
-  subtotalMinor              Int               @map("subtotal_minor")
+  subtotalMinor              BigInt            @map("subtotal_minor")
   serviceChargeRateBps       Int               @default(0) @map("service_charge_rate_bps")
-  serviceChargeMinor         Int               @default(0) @map("service_charge_minor")
+  serviceChargeMinor         BigInt            @default(0) @map("service_charge_minor")
   taxRateBps                 Int               @default(0) @map("tax_rate_bps")
-  taxMinor                   Int               @default(0) @map("tax_minor")
+  taxMinor                   BigInt            @default(0) @map("tax_minor")
   /// What the customer pays for this item = subtotal + service charge + tax.
-  totalMinor                 Int               @map("total_minor")
+  totalMinor                 BigInt            @map("total_minor")
   /// Copied from listing → provider → platform default (1500) at booking time.
   commissionRateBps          Int               @map("commission_rate_bps")
   /// round_half_up(subtotal × rate / 10000). Taxes/fees excluded.
-  commissionMinor            Int               @map("commission_minor")
+  commissionMinor            BigInt            @map("commission_minor")
   commissionStatus           CommissionStatus  @default(PENDING) @map("commission_status")
   /// total − commission. For pay-at-property the provider collects `total` and owes `commission`.
-  providerPayoutMinor        Int               @map("provider_payout_minor")
+  providerPayoutMinor        BigInt            @map("provider_payout_minor")
   payoutStatus               PayoutStatus      @default(PENDING) @map("payout_status")
   paymentStatus              PaymentStatus     @default(UNPAID) @map("payment_status")
-  refundedMinor              Int               @default(0) @map("refunded_minor")
+  refundedMinor              BigInt            @default(0) @map("refunded_minor")
   cancellationPolicyId       String?           @map("cancellation_policy_id") @db.Uuid
   /// Frozen copy of the policy at booking time, so later edits never change this booking.
   cancellationPolicySnapshot Json?             @map("cancellation_policy_snapshot")
@@ -662,9 +662,9 @@ model BookingItemSlot {
   inventorySlotId String?  @map("inventory_slot_id") @db.Uuid
   serviceDate     DateTime @map("service_date") @db.Date
   units           Int
-  unitPriceMinor  Int      @map("unit_price_minor")
+  unitPriceMinor  BigInt   @map("unit_price_minor")
   /// units × unit_price_minor (CHECK).
-  amountMinor     Int      @map("amount_minor")
+  amountMinor     BigInt   @map("amount_minor")
 
   bookingItem   BookingItem    @relation(fields: [bookingItemId], references: [id])
   inventorySlot InventorySlot? @relation(fields: [inventorySlotId], references: [id])
@@ -703,7 +703,7 @@ model Payment {
   gateway              String
   status               PaymentTransactionStatus @default(INITIATED)
   currency             String                   @default("NPR") @db.Char(3)
-  amountMinor          Int                      @map("amount_minor")
+  amountMinor          BigInt                   @map("amount_minor")
   gatewayTransactionId String?                  @map("gateway_transaction_id")
   /// Raw verification response (no secrets) for reconciliation.
   gatewayResponse      Json?                    @map("gateway_response")
@@ -724,7 +724,7 @@ model PaymentAllocation {
   id            String @id @default(uuid()) @db.Uuid
   paymentId     String @map("payment_id") @db.Uuid
   bookingItemId String @map("booking_item_id") @db.Uuid
-  amountMinor   Int    @map("amount_minor")
+  amountMinor   BigInt @map("amount_minor")
 
   payment     Payment     @relation(fields: [paymentId], references: [id])
   bookingItem BookingItem @relation(fields: [bookingItemId], references: [id])
@@ -749,7 +749,7 @@ model Payout {
   providerId  String            @map("provider_id") @db.Uuid
   status      PayoutBatchStatus @default(PENDING)
   currency    String            @default("NPR") @db.Char(3)
-  amountMinor Int               @map("amount_minor")
+  amountMinor BigInt            @map("amount_minor")
   periodStart DateTime          @map("period_start") @db.Date
   periodEnd   DateTime          @map("period_end") @db.Date
   reference   String?
@@ -779,7 +779,7 @@ model ProviderInvoice {
   providerId  String        @map("provider_id") @db.Uuid
   status      InvoiceStatus @default(DRAFT)
   currency    String        @default("NPR") @db.Char(3)
-  amountMinor Int           @map("amount_minor")
+  amountMinor BigInt        @map("amount_minor")
   issuedAt    DateTime?     @map("issued_at") @db.Timestamptz(3)
   dueOn       DateTime?     @map("due_on") @db.Date
   paidAt      DateTime?     @map("paid_at") @db.Timestamptz(3)

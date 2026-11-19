@@ -34,9 +34,22 @@ export function databaseIdentity(url: string): string {
   return `${host}:${parsed.port || "5432"}${parsed.pathname}`;
 }
 
-export function resolveTestDatabase(): TestDatabase {
-  const testFile = readEnvFile(".env.test");
+/** Contents of the env files the resolver consults. Injectable so unit tests do not depend on the developer's machine. */
+export interface EnvFileSources {
+  /** apps/api/.env.test */
+  testFile: Record<string, string | undefined>;
+  /** apps/api/.env (the dev database; used only for the safety check) */
+  devFile: Record<string, string | undefined>;
+}
+
+export function resolveTestDatabase(
+  files: EnvFileSources = { testFile: readEnvFile(".env.test"), devFile: readEnvFile(".env") },
+): TestDatabase {
+  const { testFile, devFile } = files;
   // `||` (not `??`): an empty value such as `TEST_DATABASE_URL_UNPOOLED=` counts as unset.
+  // The pooled and direct URLs must come from the SAME source (environment OR .env.test),
+  // so they can never be mixed from two different places.
+  const fromEnvironment = Boolean(process.env.TEST_DATABASE_URL);
   const pooledUrl = process.env.TEST_DATABASE_URL || testFile.TEST_DATABASE_URL;
   if (!pooledUrl) {
     throw new Error(
@@ -46,11 +59,17 @@ export function resolveTestDatabase(): TestDatabase {
     );
   }
   const directUrl =
-    process.env.TEST_DATABASE_URL_UNPOOLED ||
-    testFile.TEST_DATABASE_URL_UNPOOLED ||
-    deriveDirectUrl(pooledUrl);
+    (fromEnvironment
+      ? process.env.TEST_DATABASE_URL_UNPOOLED
+      : testFile.TEST_DATABASE_URL_UNPOOLED) || deriveDirectUrl(pooledUrl);
 
-  const devFile = readEnvFile(".env");
+  // Belt and braces: the reset (direct URL) and the tests (pooled URL) must hit one database.
+  if (databaseIdentity(pooledUrl) !== databaseIdentity(directUrl)) {
+    throw new Error(
+      "Refusing to run: TEST_DATABASE_URL and TEST_DATABASE_URL_UNPOOLED point at different databases.",
+    );
+  }
+
   const devUrls = [
     process.env.DATABASE_URL,
     process.env.DATABASE_URL_UNPOOLED,

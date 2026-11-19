@@ -51,20 +51,20 @@ describe("sample seed", () => {
     const [bus, room] = trip.items;
     // Bus: 2 seats × Rs 1,800 = Rs 3,600; commission 15% = Rs 540.
     expect(bus).toMatchObject({
-      subtotalMinor: 360_000,
-      totalMinor: 360_000,
-      commissionMinor: 54_000,
+      subtotalMinor: 360_000n,
+      totalMinor: 360_000n,
+      commissionMinor: 54_000n,
     });
     // Homestay: Rs 3,500 + Rs 4,200 (weekend) = 7,700; +10% SC = 770; +13% VAT on 8,470 = 1,101.10.
     expect(room).toMatchObject({
-      subtotalMinor: 770_000,
-      serviceChargeMinor: 77_000,
-      taxMinor: 110_110,
-      totalMinor: 957_110,
-      commissionMinor: 115_500, // 15% of the subtotal only
+      subtotalMinor: 770_000n,
+      serviceChargeMinor: 77_000n,
+      taxMinor: 110_110n,
+      totalMinor: 957_110n,
+      commissionMinor: 115_500n, // 15% of the subtotal only
     });
-    expect(trip.commissionTotalMinor).toBe(54_000 + 115_500);
-    expect(trip.totalMinor).toBe(360_000 + 957_110);
+    expect(trip.commissionTotalMinor).toBe(54_000n + 115_500n);
+    expect(trip.totalMinor).toBe(360_000n + 957_110n);
   });
 
   it("every sample trip's stored totals equal the sum of its items", async () => {

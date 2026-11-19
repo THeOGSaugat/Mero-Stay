@@ -1,14 +1,17 @@
 /**
  * Money rules for booking items and trips (ADR 0004, requirements §6).
  *
- * - Amounts are integers in minor units (paisa for NPR). Never floats.
- * - Rates are integer basis points: 1500 = 15%.
+ * - Amounts are integers in minor units (paisa for NPR), held as `bigint` to match the
+ *   64-bit BIGINT database columns (Prisma returns `bigint` for them). Never floats, and
+ *   never `number`: JS numbers lose precision above 2^53, and `bigint` keeps every
+ *   multiplication exact at any size the database can store.
+ * - Rates are integer basis points (plain `number`): 1500 = 15%.
  * - x% of an amount rounds half-up to the nearest minor unit.
  * - Commission = rate × item SUBTOTAL (service charge and taxes excluded),
  *   deducted from the provider's share. The customer pays the item total.
  *
  * The database enforces the same formulas with CHECK constraints
- * (see the Phase 2 migration), so a wrong calculation cannot be stored.
+ * (see the Phase 2 migrations), so a wrong calculation cannot be stored.
  */
 
 export const BPS_DENOMINATOR = 10_000;
@@ -16,9 +19,15 @@ export const BPS_DENOMINATOR = 10_000;
 /** Platform default commission: 15%. Overridable per provider and per listing. */
 export const DEFAULT_COMMISSION_RATE_BPS = 1500;
 
-function assertMinorAmount(name: string, value: number): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative integer (minor units), got ${value}`);
+/** Largest value a BIGINT column can hold (2^63 − 1), about Rs 9.2 × 10^16. */
+export const MAX_MINOR_AMOUNT = 9_223_372_036_854_775_807n;
+
+function assertMinorAmount(name: string, value: bigint): void {
+  if (typeof value !== "bigint") {
+    throw new TypeError(`${name} must be a bigint (minor units), got ${typeof value}`);
+  }
+  if (value < 0n || value > MAX_MINOR_AMOUNT) {
+    throw new RangeError(`${name} must be between 0 and ${MAX_MINOR_AMOUNT}, got ${value}`);
   }
 }
 
@@ -31,11 +40,12 @@ function assertRateBps(name: string, value: number): void {
 }
 
 /** `rateBps` of `amountMinor`, rounded half-up to a whole minor unit. */
-export function applyRate(amountMinor: number, rateBps: number): number {
+export function applyRate(amountMinor: bigint, rateBps: number): bigint {
   assertMinorAmount("amountMinor", amountMinor);
   assertRateBps("rateBps", rateBps);
-  // Integer-only arithmetic: (a × r + 5000) / 10000, floored = half-up rounding for a ≥ 0.
-  return Math.floor((amountMinor * rateBps + BPS_DENOMINATOR / 2) / BPS_DENOMINATOR);
+  const denominator = BigInt(BPS_DENOMINATOR);
+  // (a × r + 5000) / 10000 with truncating bigint division = half-up rounding for a ≥ 0.
+  return (amountMinor * BigInt(rateBps) + denominator / 2n) / denominator;
 }
 
 /** Commission rate for a booking: listing override → provider override → platform default. */
@@ -57,11 +67,11 @@ export interface PriceLineInput {
   /** Billable units on this date: rooms for a night, seats on a departure, guide-days, persons. */
   units: number;
   /** Price per unit for this date, in minor units. */
-  unitPriceMinor: number;
+  unitPriceMinor: bigint;
 }
 
 export interface PriceLine extends PriceLineInput {
-  amountMinor: number;
+  amountMinor: bigint;
 }
 
 export interface ItemChargesInput {
@@ -73,16 +83,17 @@ export interface ItemChargesInput {
 
 export interface ItemCharges {
   lines: PriceLine[];
+  /** Total billable units (a count, not money). */
   quantity: number;
-  subtotalMinor: number;
+  subtotalMinor: bigint;
   serviceChargeRateBps: number;
-  serviceChargeMinor: number;
+  serviceChargeMinor: bigint;
   taxRateBps: number;
-  taxMinor: number;
-  totalMinor: number;
+  taxMinor: bigint;
+  totalMinor: bigint;
   commissionRateBps: number;
-  commissionMinor: number;
-  providerPayoutMinor: number;
+  commissionMinor: bigint;
+  providerPayoutMinor: bigint;
 }
 
 /**
@@ -101,7 +112,9 @@ export function calculateItemCharges(input: ItemChargesInput): ItemCharges {
       throw new RangeError(`units must be a positive integer, got ${line.units}`);
     }
     assertMinorAmount("unitPriceMinor", line.unitPriceMinor);
-    return { ...line, amountMinor: line.units * line.unitPriceMinor };
+    const amountMinor = BigInt(line.units) * line.unitPriceMinor;
+    assertMinorAmount("line amount", amountMinor);
+    return { ...line, amountMinor };
   });
 
   const serviceChargeRateBps = input.serviceChargeRateBps ?? 0;
@@ -109,10 +122,12 @@ export function calculateItemCharges(input: ItemChargesInput): ItemCharges {
   const { commissionRateBps } = input;
 
   const quantity = lines.reduce((sum, line) => sum + line.units, 0);
-  const subtotalMinor = lines.reduce((sum, line) => sum + line.amountMinor, 0);
+  const subtotalMinor = lines.reduce((sum, line) => sum + line.amountMinor, 0n);
+  assertMinorAmount("subtotalMinor", subtotalMinor);
   const serviceChargeMinor = applyRate(subtotalMinor, serviceChargeRateBps);
   const taxMinor = applyRate(subtotalMinor + serviceChargeMinor, taxRateBps);
   const totalMinor = subtotalMinor + serviceChargeMinor + taxMinor;
+  assertMinorAmount("totalMinor", totalMinor);
   const commissionMinor = applyRate(subtotalMinor, commissionRateBps);
 
   return {
@@ -132,11 +147,11 @@ export function calculateItemCharges(input: ItemChargesInput): ItemCharges {
 
 export interface TripTotals {
   currency: string;
-  subtotalMinor: number;
-  serviceChargeMinor: number;
-  taxMinor: number;
-  totalMinor: number;
-  commissionTotalMinor: number;
+  subtotalMinor: bigint;
+  serviceChargeMinor: bigint;
+  taxMinor: bigint;
+  totalMinor: bigint;
+  commissionTotalMinor: bigint;
 }
 
 /**
@@ -152,11 +167,11 @@ export function summarizeTrip(
 ): TripTotals {
   const totals: TripTotals = {
     currency,
-    subtotalMinor: 0,
-    serviceChargeMinor: 0,
-    taxMinor: 0,
-    totalMinor: 0,
-    commissionTotalMinor: 0,
+    subtotalMinor: 0n,
+    serviceChargeMinor: 0n,
+    taxMinor: 0n,
+    totalMinor: 0n,
+    commissionTotalMinor: 0n,
   };
   for (const item of items) {
     if (item.currency !== currency) {
@@ -170,5 +185,6 @@ export function summarizeTrip(
     totals.totalMinor += item.totalMinor;
     totals.commissionTotalMinor += item.commissionMinor;
   }
+  assertMinorAmount("trip totalMinor", totals.totalMinor);
   return totals;
 }
