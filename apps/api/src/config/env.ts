@@ -17,6 +17,11 @@ const envSchema = z
     DATABASE_URL: z
       .string({ error: "is required" })
       .regex(/^postgres(ql)?:\/\//, { error: "must be a postgresql:// connection string" }),
+    /**
+     * TEMPORARY until authentication exists (ADR 0005): "true" enables the trip endpoints, which
+     * take a userId in the body. Unset = enabled outside production, disabled in production.
+     */
+    ALLOW_UNAUTHENTICATED_TRIPS_API: z.enum(["true", "false"]).optional(),
   })
   .superRefine((env, ctx) => {
     // Neon only accepts TLS connections. In production, refuse to start without it
@@ -64,4 +69,14 @@ export function loadEnvFileIfPresent(): void {
   if (existsSync(envFile)) {
     process.loadEnvFile(envFile);
   }
+}
+
+/** Whether the temporary, unauthenticated trip endpoints are served (see ALLOW_UNAUTHENTICATED_TRIPS_API). */
+export function unauthenticatedTripsEnabled(
+  env: Pick<Env, "NODE_ENV" | "ALLOW_UNAUTHENTICATED_TRIPS_API">,
+): boolean {
+  if (env.ALLOW_UNAUTHENTICATED_TRIPS_API !== undefined) {
+    return env.ALLOW_UNAUTHENTICATED_TRIPS_API === "true";
+  }
+  return env.NODE_ENV !== "production";
 }

@@ -8,6 +8,8 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { notFoundHandler } from "./middleware/not-found.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
 import { createListingsRouter } from "./modules/listings/listings.routes.js";
+import { createTripsRouter } from "./modules/trips/trips.routes.js";
+import { createTripsService } from "./modules/trips/trips.service.js";
 
 export interface AppDependencies {
   logger: Logger;
@@ -17,6 +19,11 @@ export interface AppDependencies {
   healthCheckTimeoutMs?: number;
   /** Database client for the /api/v1 endpoints. Without it only the health endpoints exist. */
   prisma?: PrismaClient;
+  /**
+   * Trip endpoints have no authentication yet and take a temporary userId (ADR 0005).
+   * Default: enabled. server.ts disables them in production unless explicitly allowed.
+   */
+  unauthenticatedTripsEnabled?: boolean;
   /** Clock, injectable for tests (hold expiry, "today" in Nepal). */
   now?: () => Date;
 }
@@ -60,6 +67,12 @@ export function createApp(deps: AppDependencies): Express {
     const now = deps.now ?? (() => new Date());
     const v1 = Router();
     v1.use(createListingsRouter({ prisma: deps.prisma, now }));
+    v1.use(
+      createTripsRouter({
+        service: createTripsService({ prisma: deps.prisma, now }),
+        unauthenticatedAccessEnabled: deps.unauthenticatedTripsEnabled ?? true,
+      }),
+    );
     app.use("/api/v1", v1);
   }
 

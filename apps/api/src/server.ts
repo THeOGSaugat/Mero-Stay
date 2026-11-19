@@ -1,5 +1,10 @@
 import { createApp } from "./app.js";
-import { loadEnvFileIfPresent, parseEnv, type Env } from "./config/env.js";
+import {
+  loadEnvFileIfPresent,
+  parseEnv,
+  unauthenticatedTripsEnabled,
+  type Env,
+} from "./config/env.js";
 import { createLogger } from "./lib/logger.js";
 import { checkDatabaseConnection, createPrismaClient } from "./lib/prisma.js";
 
@@ -24,6 +29,8 @@ const prisma = createPrismaClient(env.DATABASE_URL);
 const app = createApp({
   logger,
   checkDatabase: () => checkDatabaseConnection(prisma),
+  prisma,
+  unauthenticatedTripsEnabled: unauthenticatedTripsEnabled(env),
 });
 
 const server = app.listen(env.PORT, (error) => {
