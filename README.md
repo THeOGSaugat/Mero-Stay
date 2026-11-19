@@ -39,6 +39,17 @@ Tests: `npm test` · `npm run test:integration` · `npm run test:e2e`
 
 Full guide, including troubleshooting: [docs/development/local-setup.md](docs/development/local-setup.md)
 
+## Deployment notes
+
+- **`ALLOW_UNAUTHENTICATED_TRIPS_API` must stay `false` (or unset) on every public deployment.**
+  Until authentication arrives (Phase 4), the trip endpoints take a `userId` in the request body and
+  check no ownership. The default is **off** in every environment: `/api/v1/trips…` returns
+  `403 TRIPS_API_DISABLED`. Set it to `true` only on your own machine to try the trip API; the
+  API logs a warning at startup whenever it is on.
+- Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
+- Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
+- Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).
+
 ## License
 
 Proprietary. All rights reserved.
