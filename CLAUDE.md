@@ -206,8 +206,9 @@ mero-stay/
 
 ### 3.5 Domain rules (non-negotiable)
 
-- **Money is stored as integers in minor units** (paisa for NPR) **with an ISO currency code** — never
-  floats. Rates are integer basis points. Use `src/domain/money.ts`; format only at display time.
+- **Money is stored as 64-bit integers (`BIGINT`) in minor units** (paisa for NPR) **with an ISO currency code** — never
+  floats. In TypeScript amounts are **`bigint`**, never `number` (numbers lose precision above 2^53). Rates are integer
+  basis points. Use `src/domain/money.ts`; format only at display time. `bigint` does not serialise to JSON: convert at the API boundary.
 - **Database CHECK constraints re-verify every money formula** (commission, VAT, totals, payout);
   never bypass or drop them.
 - **All timestamps stored in UTC**; converted to `Asia/Kathmandu` for display.
@@ -337,5 +338,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 
 - **Phase 0, Repository setup & documentation:** complete.
 - **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
-- **Phase 2, Multi-vertical data model:** complete on branch `phase/02-data-model`, awaiting owner review.
+- **Phase 2, Multi-vertical data model:** complete and merged to `main` (64-bit money columns).
 - **Next:** Phase 3, Authentication & roles (awaiting approval).

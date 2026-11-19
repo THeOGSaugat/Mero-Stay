@@ -9,7 +9,7 @@ migrations in `apps/api/prisma/migrations/`. Design rationale: [ADR 0004](decisi
 |---|---|
 | Names | Prisma models `PascalCase` singular; tables and columns `snake_case` (tables plural) |
 | IDs | UUID primary keys (lookup tables use a text `code`) |
-| Money | `*_minor` integer columns in minor units (paisa for NPR) + `currency CHAR(3)` |
+| Money | `*_minor` **BIGINT (64-bit)** columns in minor units (paisa for NPR) + `currency CHAR(3)`. Max 9.2 × 10^18 paisa. In TypeScript they are `bigint` (use `src/domain/money.ts`; never `number`). `bigint` does not serialise to JSON, so convert at the API boundary |
 | Rates | `*_rate_bps` integers in basis points: 1500 = 15%, 10000 = 100% |
 | Rounding | x% of an amount = round half-up to the nearest minor unit (`src/domain/money.ts`) |
 | Time | `timestamptz` (UTC) for moments; `DATE` for service dates; local times as `"HH:MM"` text |

@@ -99,7 +99,7 @@ User (customer) ──< Trip ──< BookingItem >── Listing
 
 ## Cross-cutting concerns
 
-- **Money:** integers in minor units (paisa) plus an ISO currency code; rates in basis points; computed only on the server and re-checked by database CHECK constraints.
+- **Money:** 64-bit integers (`BIGINT`, `bigint` in TypeScript) in minor units (paisa) plus an ISO currency code; rates in basis points; computed only on the server and re-checked by database CHECK constraints.
 - **Time:** UTC in storage, `Asia/Kathmandu` for display; stay dates as `DATE`.
 - **Concurrency:** booking creation increments `inventory_slots.capacity_booked` in a transaction; a CHECK constraint makes overbooking impossible.
 - **Errors:** uniform `{ error: { code, message, details? } }` shape.

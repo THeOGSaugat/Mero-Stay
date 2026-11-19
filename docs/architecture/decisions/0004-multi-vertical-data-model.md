@@ -48,8 +48,11 @@ verticals (activities, permits, transport, packages) and real partner integratio
 9. **Aggregator MVP, integration-ready.** `providers.integration_type` (MANUAL in the MVP),
    `providers.external_ref`, `listings.external_id` + `last_synced_at`,
    `booking_items.external_booking_ref`.
-10. **Money and currency.** Integer minor units + ISO 4217 `currency` on listings, items, trips,
-    payments, payouts and invoices (`NPR` default). MVP: one currency per trip.
+10. **Money and currency.** Integer minor units stored as **`BIGINT` (64-bit)** + ISO 4217
+    `currency` on listings, items, trips, payments, payouts and invoices (`NPR` default). MVP: one
+    currency per trip. Application code holds amounts as `bigint` (Prisma returns `bigint` for
+    these columns) so every calculation stays exact; rates (basis points), quantities and sizes
+    stay 32-bit integers.
 11. **Database-enforced integrity.** CHECK constraints re-verify every money formula, rate range,
     currency format, date order and capacity. The TypeScript functions in `src/domain/money.ts`
     use the same rounding, verified against PostgreSQL in tests.
@@ -70,6 +73,16 @@ verticals (activities, permits, transport, packages) and real partner integratio
 - **Trip-level payment status only:** cannot represent a prepaid bus with a pay-at-property
   homestay in the same trip.
 
+## Amendment (2026-11-19): money columns widened to 64-bit
+
+The first migration used 32-bit `INTEGER` money columns (cap about Rs 2.1 crore per field). Before
+this branch was merged, all 20 `*_minor` columns were widened to `BIGINT` by a **new** migration,
+`20261119120000_widen_money_columns_to_bigint`, rather than by editing the first migration: the
+first one was already applied to the dev database, and editing an applied migration breaks
+Prisma's checksum. `INTEGER → BIGINT` never loses data, and the CHECK constraints are kept.
+`src/domain/money.ts` was converted to `bigint` in the same change. This amendment supersedes
+the 32-bit wording in decision 10 above; the rest of the decision is unchanged.
+
 ## Consequences
 
 - Booking, payment and finance services operate on generic items; vertical-specific behaviour
@@ -77,7 +90,11 @@ verticals (activities, permits, transport, packages) and real partner integratio
 - Application code must keep `booking_items.provider_id` equal to the listing's provider, trip
   totals equal to the item sums, and reviews limited to completed items. These cross-row rules are
   enforced in services and covered by tests (not by triggers).
-- Amounts are 32-bit integers: up to about Rs 2.1 crore per field, which is ample for one item or trip.
+- Amounts are 64-bit: up to 9,223,372,036,854,775,807 paisa (about Rs 9.2 × 10^16) per field, so
+  there is no practical cap. `bigint` does not serialise to JSON: the API boundary (later phases)
+  must convert amounts explicitly (e.g. to strings) and parse them back with a Zod schema.
+- Money maths must use `bigint` (`src/domain/money.ts`). JavaScript numbers silently lose
+  precision above 2^53 (about Rs 9 × 10^13); tests prove they give wrong paisa at larger sizes.
 - Adding a status value to a lifecycle enum (e.g. a new payment state) still needs a small enum
   migration; that is a deliberate review point, not a core-table change.
 - See [data-model.md](../data-model.md) for the entity reference and the "adding a vertical" guide.

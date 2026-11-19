@@ -107,7 +107,7 @@ them later (integration type, external IDs, sync timestamps).
 - **Responsive:** mobile-first; usable from 360px width.
 - **Performance:** fast on Nepali mobile networks; public pages server-rendered and SEO-friendly.
 - **Security:** see [security guidelines](../security/security-guidelines.md).
-- **Reliability:** no double bookings; money stored as integers in minor units with a currency
+- **Reliability:** no double bookings; money stored as 64-bit integers in minor units with a currency
   code; consistency enforced by database constraints.
 - **Accessibility:** WCAG 2.1 AA as the target.
 - **Localization-ready:** English first; Nepali later.

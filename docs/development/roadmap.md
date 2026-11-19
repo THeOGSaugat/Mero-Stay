@@ -11,7 +11,7 @@ generic data model, not hotels only.
 |---|---|---|---|
 | 0 | Repository setup & documentation | Git checks, `.gitignore`, CLAUDE.md, docs structure | ✅ Done |
 | 1 | Project foundation & dev environment | npm workspaces, Next.js + Tailwind, Express + TS API, Neon PostgreSQL (ADR 0003), Prisma, ESLint/Prettier, Vitest + Playwright, health checks, CI | ✅ Done (v0.1.0) |
-| 2 | Multi-vertical data model | Generic provider / listing / trip / booking-item schema with detail tables, inventory, per-item commission, payment and cancellation; shapes for payments, payouts, invoices, reviews, notifications; DB integrity constraints; sample seed; separate test database; schema tests (ADR 0004) | ✅ Done (awaiting review) |
+| 2 | Multi-vertical data model | Generic provider / listing / trip / booking-item schema with detail tables, inventory, per-item commission, payment and cancellation; shapes for payments, payouts, invoices, reviews, notifications; DB integrity constraints; sample seed; separate test database; schema tests (ADR 0004) | ✅ Done (merged) |
 | 3 | Authentication & roles | Customer + partner registration/login (email or phone), password hashing, sessions, role & ownership guards; introduce `packages/shared` for Zod contracts | Planned |
 | 4 | Provider onboarding & verification | Partner chooses provider type, profile, verification documents (private uploads), payout account | Planned |
 | 5 | Admin verification & approvals | Admin queues for providers and listings, approve/reject with reason, user/provider lists | Planned |
