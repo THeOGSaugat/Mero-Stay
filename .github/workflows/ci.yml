@@ -38,9 +38,9 @@ jobs:
 
     env:
       # Throwaway credentials for the CI-only container above. Not a secret.
-      # Both variables point to the same CI database (there is no pooler in CI).
-      DATABASE_URL: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
-      DATABASE_URL_UNPOOLED: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
+      # Integration tests use ONLY TEST_DATABASE_URL; they wipe it and apply all
+      # migrations on every run (apps/api/src/testing/global-setup.ts).
+      TEST_DATABASE_URL: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_ci
       API_URL: http://localhost:4000
       NEXT_TELEMETRY_DISABLED: "1"
 
@@ -72,7 +72,7 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      - name: Integration tests (PostgreSQL)
+      - name: Integration tests (migrations, constraints, seed on PostgreSQL)
         run: npm run test:integration
 
       - name: Production build

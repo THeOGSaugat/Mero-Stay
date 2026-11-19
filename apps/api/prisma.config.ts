@@ -5,8 +5,10 @@ import { resolveDirectUrl } from "./src/config/database-url.js";
 
 // Load apps/api/.env for Prisma CLI commands when it exists (local development).
 // In CI/production the variables come from the real environment instead.
+// MEROSTAY_SKIP_ENV_FILE=1 is set by the test runner so that commands aimed at the
+// TEST database can never fall back to the developer's dev database in .env.
 const envFile = fileURLToPath(new URL("./.env", import.meta.url));
-if (existsSync(envFile)) {
+if (process.env.MEROSTAY_SKIP_ENV_FILE !== "1" && existsSync(envFile)) {
   process.loadEnvFile(envFile);
 }
 
@@ -20,6 +22,8 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // `npm run db:seed`: sample data for local development (refuses to run twice).
+    seed: "tsx src/scripts/seed.ts",
   },
   // `prisma generate` does not need a database, so the URL is optional here
   // (a fresh clone can generate before .env exists). Commands that do need a

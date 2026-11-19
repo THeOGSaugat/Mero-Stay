@@ -45,41 +45,63 @@
 
 ## API module layout
 
-Existing after Phase 1: `app.ts`, `server.ts`, `config/`, `lib/`, `middleware/` (error + 404),
-`modules/health/`. Everything else below is planned.
+Existing: `app.ts`, `server.ts`, `config/`, `lib/`, `middleware/` (error + 404), `modules/health/`,
+`domain/` (pure rules: money/commission, booking-item status transitions), `db/` (sample seed),
+`testing/` (test-database harness). Everything else below is planned.
 
 ```
 apps/api/src/
 ├── app.ts              # express app (middleware, routes)
 ├── server.ts           # starts the HTTP server
-├── config/env.ts       # Zod-validated environment
+├── config/             # Zod-validated environment, database URL helpers
+├── domain/             # pure business rules shared by services (no I/O)
 ├── lib/                # prisma client, logger, errors
 ├── middleware/         # auth, role guard, error handler, rate limit
-└── modules/
+└── modules/            # one per domain, NOT per vertical
     ├── health/
     ├── auth/
-    ├── users/
-    ├── properties/
-    ├── rooms/
-    ├── availability/
+    ├── providers/      # onboarding + verification for every provider type
+    ├── listings/       # all listing types; per-vertical validation plugs in here
+    ├── inventory/
     ├── search/
-    ├── bookings/
+    ├── trips/          # trip + booking items
     ├── payments/
+    ├── finance/        # commission invoices, payouts
+    ├── reviews/
+    ├── notifications/
     └── admin/
 ```
 
 Each module contains `*.routes.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts` and `*.test.ts`.
 
-## Core domain entities (planned; finalised in the data-model phase)
+## Core data model: Listing → Trip → BookingItem
 
-`User` (role) · `PartnerProfile` · `Property` · `PropertyPhoto` · `Amenity` · `Location`
-`RoomType` · `RoomRate` / `DailyInventory` · `Booking` · `BookingItem` · `Payment` · `AuditLog`
+MeroStay is multi-vertical, so the core tables are **vertical-agnostic**
+([ADR 0004](decisions/0004-multi-vertical-data-model.md); full reference in [data-model.md](data-model.md)):
+
+```
+Provider (hotel, bus operator, guide, ...) ──< Listing (typed by ListingType) ──< InventorySlot (per date)
+                                                  │ 1:1 optional *_details table (hotel room, bus route, ...)
+User (customer) ──< Trip ──< BookingItem >── Listing
+                              ├──< BookingItemSlot >── InventorySlot   (per-date units and prices)
+                              ├── commission, payment status, cancellation policy snapshot, payout
+                              └──< PaymentAllocation >── Payment
+```
+
+- A **Listing** is anything sellable. Its `listing_type` (a lookup row, not a column per vertical)
+  says what kind; vertical-specific fields live in an optional **detail table** or the
+  `attributes` JSON.
+- A **Trip** is one customer order; its **BookingItems** can be different types from different
+  providers. Money, payment status, cancellation and commission are tracked **per item**; trip
+  totals are stored sums.
+- Adding a vertical **adds** a listing-type row and optionally a detail table. `listings`,
+  `trips` and `booking_items` never change. That's why the model is future-proof.
 
 ## Cross-cutting concerns
 
-- **Money:** integer paisa; computed only on the server.
+- **Money:** 64-bit integers (`BIGINT`, `bigint` in TypeScript) in minor units (paisa) plus an ISO currency code; rates in basis points; computed only on the server and re-checked by database CHECK constraints.
 - **Time:** UTC in storage, `Asia/Kathmandu` for display; stay dates as `DATE`.
-- **Concurrency:** booking creation locks inventory rows in a transaction.
+- **Concurrency:** booking creation increments `inventory_slots.capacity_booked` in a transaction; a CHECK constraint makes overbooking impossible.
 - **Errors:** uniform `{ error: { code, message, details? } }` shape.
 - **Observability:** structured logs with request IDs; no secrets/PII in logs.
 

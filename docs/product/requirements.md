@@ -1,147 +1,182 @@
-# Product Requirements: MeroStay MVP
+# Product Requirements: MeroStay
 
 ## 1. Vision
 
-Make it simple and trustworthy to find and book hotels and homestays anywhere in Nepal, and
-give local property owners, including small homestays, an easy way to reach travellers.
+MeroStay is a **multi-vertical Nepal travel marketplace**. A traveller plans a journey and books
+everything it needs in **one trip**: stays, bus seats, guides, tours and activities, from
+several independent providers, with one checkout.
+
+It also gives local providers (hotels, homestays, bus operators, guides and tour operators,
+including very small ones) an easy way to reach travellers.
+
+### 1.1 The trip concept
+
+A **trip** is one order. It contains **booking items** of different types from different providers:
+
+| Example journey | Booking items in one trip |
+|---|---|
+| Inaruwa → Shree Antu | Bus seats (bus operator) + 2 nights in a homestay (hotel provider) |
+| Annapurna Base Camp trek | Flight or bus to Pokhara + licensed guide for 7 days + trek/tour or activities + teahouse rooms |
+
+Each item keeps its own price, payment status, cancellation policy, commission and provider
+payout. The trip stores totals that are the sum of its items.
+
+### 1.2 How MeroStay earns: 15% commission per item
+
+- MeroStay takes **15%** of each booking item's **subtotal** (price × quantity), excluding taxes
+  and service charges.
+- Commission is calculated **per item** (rounded half-up to the nearest paisa) and the
+  **trip-level total commission is the sum** of the item commissions, stored on the trip.
+- The customer pays the **listed price** (plus any VAT/service charge). Commission is
+  **deducted from the provider's share**, not added on top for the customer.
+- The 15% is the platform default. The rate is copied onto each item at booking time, so
+  per-provider or per-listing rates can override it without changing past bookings.
+- **Pay-at-property** items still owe commission: the provider collects the money and MeroStay
+  **invoices** the commission. For online-paid items the commission is **deducted from the payout**.
+
+### 1.3 Business model for the MVP: aggregator
+
+Providers list and manage **their own inventory** on MeroStay. There are **no direct
+integrations** with airline, bus or hotel systems in the MVP; the data model leaves room for
+them later (integration type, external IDs, sync timestamps).
 
 ## 2. User roles
 
 | Role | Goals |
 |---|---|
-| **Customer** | Find a suitable stay quickly, see real prices and availability, book and pay with familiar Nepali payment methods, manage bookings |
-| **Hotel partner** | Get listed, manage rooms, prices and availability, receive and manage bookings |
-| **Admin** | Keep listing quality high, approve or reject properties, resolve booking and payment issues |
+| **Customer** (traveller) | Plan a journey, see real prices and availability, book several items in one trip, pay online or at the property, manage trips |
+| **Partner** (provider) | Hotels, homestays, bus operators, guides, tour/activity operators: get verified, list inventory, manage prices/availability, receive bookings and payouts |
+| **Admin** | Verify providers, approve listings, oversee trips, payments, commission invoices and payouts |
 
-## 3. MVP features and user stories
+## 3. MVP scope
 
-### 3.1 Customer registration and login
-- As a customer, I can register with name, email, phone and password.
-- As a customer, I can log in and log out securely.
-- As a customer, I can reset a forgotten password. *(scope confirmed during auth phase)*
+### 3.1 Verticals
 
-### 3.2 Hotel partner registration
-- As a partner, I can register a partner account with business/contact details.
-- As a partner, my account is linked to the properties I submit.
+| Vertical | Listing type(s) | MVP status |
+|---|---|---|
+| Hotels / homestays / teahouses | `hotel` (the property) + `hotel_room` (bookable) | **Built** |
+| Buses | `bus_ticket` (a scheduled service; one inventory row per travel date) | **Built** |
+| Guides | `guide_service` (per day) | **Built** |
+| Tours / treks | `tour` (per person; one inventory row per departure date) | **Built** |
+| Activities | `activity` (per person; generic attributes) | Built if trivial (included in the generic model) |
+| Flights | `flight_ticket` | **Modelled, not built**: tables exist; not bookable, no integration |
 
-### 3.3 Property submission and approval
-- As a partner, I can create a property (hotel, guesthouse, homestay, resort) with name, type, description,
-  location (province/district/city/address), amenities, policies (check-in/out times, cancellation) and photos.
-- As a partner, I can save a draft and submit it for review.
-- As an admin, I can review pending properties and approve or reject them with a reason.
-- Only approved properties appear publicly.
+### 3.2 Features and user stories
 
-### 3.4 Hotel and homestay listings
-- As a customer, I can browse approved properties with photo, name, location, type, starting price and rating.
+**Accounts**
+- Customers register and log in (email or phone).
+- Partners register, choose a provider type, and submit verification documents (§6.2 item 4).
 
-### 3.5 Room management
-- As a partner, I can add, edit and deactivate room types (name, capacity, bed type, amenities, photos, number of units).
+**Provider onboarding and listings**
+- Partners create listings of their type: hotel properties with room types, bus services, guide
+  services, tours and activities. Listings go `DRAFT → PENDING_REVIEW → APPROVED/REJECTED`.
+- Admins verify providers and approve listings. Only approved listings are public.
 
-### 3.6 Pricing and availability
-- As a partner, I can set a base nightly price per room type.
-- As a partner, I can override price and available units for specific dates and block dates.
-- The system never sells more units than are available for any night.
+**Availability and pricing**
+- Each bookable listing has one inventory row per service date (night, departure, guide-day)
+  with capacity and an optional date-specific price.
+- The system never sells more units than are available (enforced by the database).
 
-### 3.7 Search and filters
-- As a customer, I can search by destination, check-in/check-out dates and number of guests.
-- As a customer, I can filter by price range, property type, amenities and rating, and sort by price or relevance.
+**Search and discovery**
+- Search stays by destination and dates; buses by origin, destination and date; guides and
+  tours by region and date. Combined journey suggestions (e.g. bus + stay at the destination)
+  come later.
 
-### 3.8 Property details
-- As a customer, I can view photos, description, amenities, policies, location, available rooms and prices for my dates.
+**Trip booking**
+- A customer adds items of different types to one trip and checks out once.
+- Per item: dates, quantity, travellers, price snapshot, cancellation policy snapshot,
+  payment choice (online or at property).
+- Unpaid online items expire and release their inventory.
 
-### 3.9 Booking management
-- As a customer, I can book one or more rooms for my dates and receive a confirmation.
-- As a customer, I can view and cancel bookings according to the property's policy.
-- As a partner, I can view incoming bookings and update their status (e.g. checked-in, completed, no-show).
+**Payments**
+- Online payment via **eSewa** or **Khalti**, verified server-to-server. One payment can cover
+  several items and is allocated per item. Pay-at-property is chosen per item.
 
-### 3.10 Customer dashboard
-- Upcoming and past bookings, booking details, profile management.
+**Commission and payouts**
+- Commission per item (§1.2). Payouts to providers for online-paid items (net of commission);
+  commission invoices for pay-at-property items.
 
-### 3.11 Hotel partner dashboard
-- My properties and their approval status, rooms, pricing and availability calendar, bookings, basic earnings summary.
+**Dashboards**
+- Customer: trips and their items. Partner: listings, availability, bookings, earnings,
+  commission owed. Admin: verifications, approvals, trips, payments, invoices, payouts.
 
-### 3.12 Admin dashboard
-- Pending property approvals, property and user management, all bookings, payment overview, basic platform stats.
-
-### 3.13 Payment integration
-- Customers pay online through **eSewa** or **Khalti** (initial providers), **or choose to pay at the property** (§6.1).
-- Online payment is verified server-to-server before a booking is confirmed.
-- Unpaid online bookings expire after a time limit and release their inventory.
-- MeroStay earns a commission on every booking (§6.1).
-
-### 3.14 Reviews and ratings
-- Customers with a completed stay can rate (1–5) and review it; partners can reply; admins moderate (§6.2).
+**Reviews** (§6.2 item 5) and **notifications** (§6.2 item 6).
 
 ## 4. Non-functional requirements
 
 - **Responsive:** mobile-first; usable from 360px width.
 - **Performance:** fast on Nepali mobile networks; public pages server-rendered and SEO-friendly.
 - **Security:** see [security guidelines](../security/security-guidelines.md).
-- **Reliability:** no double bookings; consistent money handling (integer paisa).
+- **Reliability:** no double bookings; money stored as 64-bit integers in minor units with a currency
+  code; consistency enforced by database constraints.
 - **Accessibility:** WCAG 2.1 AA as the target.
 - **Localization-ready:** English first; Nepali later.
+- **Extensible:** new verticals must not require changes to core tables (see
+  [ADR 0004](../architecture/decisions/0004-multi-vertical-data-model.md)).
 
-## 5. Out of scope for MVP (future)
+## 5. Out of scope for the MVP (future)
 
-- Tour guides
-- Bus tickets
-- Flight tickets
+- Flight booking and airline integrations (flights are modelled only)
+- Direct API integrations with bus operators, hotels or channel managers
+- Bus seat maps and seat selection (seat numbers can be stored per item; no seat-map UI)
+- Packages sold as one product (a trip already combines items)
+- Multi-currency trips and currency conversion
 - Native mobile applications
-
-*(Reviews and ratings were moved into the MVP; see §6.2.)*
 
 ## 6. Business decisions
 
-Recorded 2026-11-18. **Nothing here is implemented yet.** Each decision is built in the phase
-listed, and the details marked *to confirm* are raised with the owner at the start of that phase.
+Recorded 2026-11-18, updated 2026-11-19 for the multi-vertical model. The data model (Phase 2)
+stores these decisions; the flows that use them are built in later phases.
 
 ### 6.1 Decided by the owner
 
-| # | Question | Decision | Affects |
-|---|---|---|---|
-| 1 | Does MeroStay take a commission on each booking? | **Yes**, a commission on every booking | Data model (Phase 2), bookings (9), payments (10), partner + admin dashboards (11) |
-| 2 | Can customers pay at the property? | **Yes.** Customers can pay **online or at the property** | Data model, booking flow, payments |
-| 3 | Cancellation policy: per property or platform-wide? | **Each property sets its own** cancellation policy | Property submission (4), bookings (9) |
+| # | Question | Decision |
+|---|---|---|
+| 1 | Does MeroStay take a commission? | **Yes: 15% of each booking item's subtotal**, calculated per item, trip total stored. Configurable default; per-provider/per-listing overrides allowed |
+| 2 | Can customers pay at the property? | **Yes.** Each item is paid **online or at the property** (payment status is per item) |
+| 3 | Cancellation policy | **Per item.** Providers/listings define policies; the policy is **snapshotted onto each booking item** so later edits never change existing bookings |
 
-*To confirm in the relevant phase (not decided, do not assume):*
-- Commission rate: one platform-wide percentage, or adjustable per property by admins?
-- How commission is collected on **pay-at-property** bookings (e.g. monthly invoice to the partner).
-- Whether pay-at-property is optional per property (a partner may want to accept online only).
-- Cancellation policy format: free-text, or structured presets (e.g. "free cancellation until
-  N days before check-in, then X% charge") so refunds can be calculated automatically.
-  Recommendation: structured presets.
+Phase 2 design decisions confirmed by the owner (2026-11-19):
 
-### 6.2 Delegated to the tech lead: recommendations (owner may override)
+| Topic | Decision |
+|---|---|
+| Commission base | Item subtotal only; VAT and service charge excluded |
+| Who pays commission | Deducted from the provider's share; the customer pays the listed price |
+| Calculation | Per item, rate stored in basis points (1500 = 15%), rounded half-up to the paisa; trip total = sum of item commissions |
+| Type-specific data | Hybrid: detail tables for verticals that search must query, plus a JSON `attributes` field |
+| Currency | ISO currency code on listings, items and trips (`NPR` default); amounts in minor units; one currency per trip in the MVP |
+| Users | Minimal `User` model now; credentials and sessions in the auth phase |
+| MVP scope | Hotels, buses, guides/tours (activities if trivial); flights modelled, not built |
+| Test database | A separate Neon branch, wiped and rebuilt on every integration test run |
 
-The owner asked the tech lead to choose for items 4–6. These are **recommendations
-adopted as the working plan**, not final policy; the owner can change them at any time.
+*Still to confirm in the phase that needs them (do not assume):*
+- Commission invoice cadence for pay-at-property items (e.g. monthly) and payment terms.
+- Payout schedule for online-paid items (e.g. weekly, after the service date).
+- Whether each provider may disable pay-at-property for their listings.
+- Cancellation policy presets to offer partners (the seed contains *sample* templates only).
+- VAT/service-charge handling per vertical (hotels: 10% service charge then 13% VAT is
+  implemented as the default formula) — confirm with a Nepali tax advisor before launch.
 
-**4. Partner verification documents**
+### 6.2 Delegated to the tech lead: recommendations (owner approved)
 
-| Document | Hotels / guesthouses | Homestays | Why |
-|---|---|---|---|
-| Owner or authorised representative's ID (citizenship certificate or passport) | Required | Required | Identity of the person responsible |
-| Business registration certificate (company/firm registration) | Required | Homestay registration with the local government (municipality/ward) instead | Proves the business legally exists |
-| PAN certificate (VAT certificate if VAT-registered) | Required | Required if they have one | Needed for commission invoicing and tax records |
-| Tourism operating licence (Department of Tourism or local authority) | Required where applicable | Optional | Confirms the property may operate as accommodation |
-| Proof of right to operate the property (ownership document or lease agreement) | Requested by admin when needed | Requested by admin when needed | Reduces fraudulent listings without slowing honest partners |
-| Bank account details (account name, bank, cheque copy or bank letter) | Required for online payouts | Required for online payouts | Paying partners for online bookings |
+**4. Partner verification documents** (stored in `provider_documents`, private, admin-only)
 
-Implementation notes: uploads are private (admin-only), size/type-checked, and never shown
-publicly. *Legal requirements should be confirmed with a Nepali legal/tax advisor before launch.*
+| Document | Hotels / guesthouses | Homestays | Bus operators | Guides | Tour / activity operators |
+|---|---|---|---|---|---|
+| Owner or authorised representative's ID (citizenship or passport) | Required | Required | Required | Required | Required |
+| Business registration (company/firm) | Required | Local-government homestay registration instead | Required | If operating as a business | Required |
+| PAN certificate (VAT certificate if registered) | Required | If they have one | Required | If they have one | Required |
+| Tourism / operating licence | Where applicable | Optional | Route permit (`VEHICLE_ROUTE_PERMIT`) | Guide licence (`GUIDE_LICENSE`) | Where applicable |
+| Proof of right to operate (ownership or lease) | On request | On request | n/a | n/a | n/a |
+| Bank account details | For online payouts | For online payouts | For online payouts | For online payouts | For online payouts |
 
-**5. Reviews and ratings: include in the MVP, limited to verified stays**
-- Only customers with a **completed** booking can review that stay (prevents fake reviews).
-- 1–5 star rating plus optional text; one review per booking.
-- Partners can post one public reply; admins can hide abusive content.
-- Listings show the average rating and review count (requirement 3.4 already expects this).
-- Built after bookings exist (added to the roadmap as its own phase).
+*Legal requirements should be confirmed with a Nepali legal/tax advisor before launch.*
+
+**5. Reviews and ratings: in the MVP, verified only**
+- Only a customer with a **completed** booking item can review it; one review per booking item.
+- 1–5 stars plus optional text; providers can reply once; admins can hide reviews.
 
 **6. Notification services**
-- **SMS: Sparrow SMS** (Nepali provider, delivers to NTC and Ncell numbers; widely used for OTPs
-  and alerts). Aakash SMS as a fallback option.
-- **Email: Amazon SES** (low cost at scale, reliable deliverability; a nearby Asia region keeps latency low).
-- Both sit behind a `NotificationService` interface so providers can be swapped without
-  touching business logic. In development, messages are logged or captured locally, never
-  sent to real phones or inboxes.
-- Credentials are stored only as environment secrets.
+- **SMS: Sparrow SMS** (Aakash SMS as fallback). **Email: Amazon SES.**
+- Behind a `NotificationService` interface; every message is recorded in `notifications`.
+  In development, messages are never sent to real phones or inboxes.

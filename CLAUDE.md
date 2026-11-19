@@ -7,48 +7,54 @@ Read it fully before making changes. When this file and a request conflict, stop
 
 ## 1. Product summary
 
-**MeroStay** is a Nepal-focused accommodation booking marketplace connecting travellers
-with hotels, guesthouses and homestays across Nepal.
+**MeroStay** is a **multi-vertical Nepal travel marketplace**. A traveller books one **trip**
+containing several **booking items** of different types from different providers: hotel and
+homestay nights, bus seats, guides, tours/activities (flights later). MeroStay takes a
+**15% commission per item**. Data model: `Listing → Trip → BookingItem`
+(`docs/architecture/data-model.md`, ADR 0004).
 
 ### Users
 
 | Role | Description |
 |---|---|
 | `CUSTOMER` | Travellers who search, book and pay for stays |
-| `PARTNER` | Hotel / homestay owners who list and manage properties |
-| `ADMIN` | MeroStay staff who approve properties, moderate content and oversee bookings |
+| `PARTNER` | Providers: hotels/homestays, bus operators, guides, tour/activity operators |
+| `ADMIN` | MeroStay staff who verify providers, approve listings and oversee trips, payments and payouts |
 
 ### MVP scope
 
+Verticals: **hotels/homestays, buses, guides, tours** (activities via the generic model).
+**Flights are modelled in the schema but NOT built** (`listing_types.is_active = false`).
+
 1. Customer registration and login
-2. Hotel partner registration
-3. Property submission and admin approval
-4. Hotel and homestay listings
-5. Room management
-6. Pricing and availability
-7. Search and filters
-8. Property details
-9. Booking management
-10. Customer dashboard
-11. Hotel partner dashboard
-12. Admin dashboard
-13. Payment integration
-14. Reviews and ratings (verified stays only)
+2. Partner (provider) registration and verification, for every provider type
+3. Listing submission and admin approval (all MVP verticals)
+4. Inventory, pricing and availability per date
+5. Search and listing details per vertical
+6. Multi-item trip booking with per-item payment choice (online or at property)
+7. Payments (eSewa, Khalti), commission invoicing and provider payouts
+8. Customer, partner and admin dashboards
+9. Reviews and ratings (completed items only)
+10. Notifications (Sparrow SMS, Amazon SES)
 
 ### Business decisions (details: `docs/product/requirements.md` §6)
 
-- **Decided by the owner:** MeroStay takes a **commission on every booking**; customers can pay
-  **online or at the property**; **each property sets its own cancellation policy**.
-- **Delegated to the tech lead (owner may override):** partner verification documents, reviews in
-  the MVP (verified stays only), Sparrow SMS + Amazon SES for notifications.
-- Open details (commission rate, how pay-at-property commission is collected, policy format) are
-  raised with the owner at the start of the phase that needs them. **Never invent business policy.**
+- **Commission:** 15% of each item's **subtotal** (taxes excluded), per item, rounded half-up;
+  trip total = sum of items. Deducted from the provider's share. Rate stored per item;
+  listing → provider → platform default (1500 bps).
+- **Payment:** per item, **online or pay at property**. Pay-at-property commission is invoiced.
+- **Cancellation:** per item; the provider's/listing's policy is snapshotted onto the item.
+- **Currency:** ISO code on listings, items and trips (NPR default); one currency per trip (MVP).
+- **Delegated decisions (owner approved):** partner verification documents per provider type,
+  verified reviews, Sparrow SMS + Amazon SES.
+- Open details (invoice cadence, payout schedule, policy presets, tax confirmation) are raised
+  with the owner in the phase that needs them. **Never invent business policy.**
 
 ### Future (NOT in MVP — do not build until explicitly approved)
 
-- Tour guides
-- Bus tickets
-- Flight tickets
+- Flight booking and airline integrations (schema exists; no flows)
+- Direct partner API integrations (bus operators, hotels, channel managers)
+- Multi-currency trips, packages, bus seat maps
 - Mobile applications (iOS / Android)
 
 The architecture must leave room for these (see §3.4), but no code for them is written early.
@@ -122,7 +128,7 @@ Any hit must be inspected by a human. Placeholder values in `.env.example` are f
 
 - **Never overwrite existing work without checking it first** (read the file, check `git status`).
 - **Never delete important files, migrations or data without explicit permission.**
-- Never run destructive DB commands (`prisma migrate reset`, `DROP`, `TRUNCATE`) against anything except a disposable local DB, and announce it first.
+- Never run destructive DB commands (`prisma migrate reset`, `DROP`, `TRUNCATE`) against any database except a disposable one, and announce it first. The **only** standing exception is the dedicated test database (`TEST_DATABASE_URL`, a separate Neon branch), which `npm run test:integration` wipes and rebuilds by design. Never point it at dev or production; the harness refuses if it matches `DATABASE_URL`.
 - Ask before installing large or unusual dependencies; explain why each new dependency is needed.
 
 ---
@@ -179,31 +185,42 @@ mero-stay/
   - Services: business rules (pricing, availability, booking state machine). No `req`/`res`.
   - Repositories: Prisma queries only.
 - **Shared contracts:** request/response Zod schemas live in `packages/shared` and are used by both apps.
-- **Feature modules:** API code is grouped by domain (`modules/auth`, `modules/properties`,
-  `modules/rooms`, `modules/bookings`, `modules/payments`, `modules/admin`), not by technical layer.
+- **Feature modules:** API code is grouped by domain (`modules/auth`, `modules/providers`,
+  `modules/listings`, `modules/inventory`, `modules/trips`, `modules/payments`, `modules/finance`,
+  `modules/admin`), not by technical layer and **not by vertical**. Pure rules live in `src/domain/`.
 - **REST, versioned:** all endpoints under `/api/v1/...`. JSON in, JSON out.
 - **Consistent error shape:** `{ "error": { "code": "BOOKING_UNAVAILABLE", "message": "...", "details"?: ... } }`.
 
-### 3.4 Designing for future verticals
+### 3.4 Multi-vertical design (ADR 0004)
 
-Tours, bus and flight tickets will be added later. To keep that possible without rewrites:
-
-- Keep accommodation-specific logic inside its own modules; do not hard-code "hotel" into
-  generic concepts like users, payments, reviews or notifications.
-- Payments reference a generic "bookable" order, not a hotel-specific table.
-- No mobile-specific code now — but the API stays stateless-friendly and documented so a
-  mobile client can consume it.
+- Core tables (`providers`, `listings`, `inventory_slots`, `trips`, `booking_items`, payments,
+  payouts, reviews, notifications) are **vertical-agnostic**. Never add vertical-specific
+  columns to them.
+- A vertical is a `listing_types` row (lookup table, seeded by migration). Type-specific fields go
+  in a 1:1 `*_details` table (when search must query them) or `listings.attributes` JSON.
+- Adding a vertical must only **add** things: a listing-type row, optionally a detail table,
+  validation/display code. Guide: `docs/architecture/data-model.md#adding-a-new-vertical`.
+- Integration hooks exist (`integration_type`, `external_id`, `external_booking_ref`); the MVP is
+  an aggregator: partners list their own inventory.
+- No mobile-specific code now; the API stays stateless-friendly for future mobile clients.
 
 ### 3.5 Domain rules (non-negotiable)
 
-- **Money is stored as integers in paisa** (1 NPR = 100 paisa) — never floats. Format only at display time.
+- **Money is stored as 64-bit integers (`BIGINT`) in minor units** (paisa for NPR) **with an ISO currency code** — never
+  floats. In TypeScript amounts are **`bigint`**, never `number` (numbers lose precision above 2^53). Rates are integer
+  basis points. Use `src/domain/money.ts`; format only at display time. `bigint` does not serialise to JSON: convert at the API boundary.
+- **Database CHECK constraints re-verify every money formula** (commission, VAT, totals, payout);
+  never bypass or drop them.
 - **All timestamps stored in UTC**; converted to `Asia/Kathmandu` for display.
-- **Stay dates are calendar dates** (`DATE`), check-in inclusive, check-out exclusive (nights = checkout − checkin).
-- **No double bookings.** Availability checks and booking creation happen in a single DB transaction
-  with appropriate locking/constraints. This must have automated tests.
-- **Prices are snapshotted on the booking** at creation time; later price changes never alter existing bookings.
-- **Property lifecycle:** `DRAFT → PENDING_REVIEW → APPROVED | REJECTED`, plus `SUSPENDED`. Only `APPROVED` properties are publicly visible.
-- **Booking lifecycle:** `PENDING_PAYMENT → CONFIRMED → CHECKED_IN → COMPLETED`, with `CANCELLED` / `EXPIRED` / `REFUNDED` branches. Transitions are enforced in the service layer.
+- **Service dates are calendar dates** (`DATE`); ranges are start-inclusive, end-exclusive (nights = checkout − checkin).
+- **No overbooking.** Bookings increment `inventory_slots.capacity_booked` in one DB transaction;
+  a CHECK constraint rejects anything above capacity. This must have automated tests.
+- **Prices, commission rate and cancellation policy are snapshotted on each booking item**;
+  later changes never alter existing bookings.
+- **Trip totals = sum of item amounts**, kept in sync by the service that writes items.
+- **Listing lifecycle:** `DRAFT → PENDING_REVIEW → APPROVED | REJECTED`, plus `SUSPENDED`, `ARCHIVED`. Only `APPROVED` listings of an active listing type are public.
+- **Booking item lifecycle:** `PENDING → CONFIRMED → IN_PROGRESS → COMPLETED`, with `CANCELLED` / `NO_SHOW` / `EXPIRED`.
+  Payment and commission status changes follow `src/domain/booking-item-status.ts`.
 
 ---
 
@@ -265,7 +282,7 @@ Tours, bus and flight tickets will be added later. To keep that possible without
 - **Vitest** for unit and integration tests; **Supertest** for API endpoints; **Playwright** for end-to-end flows.
 - Every phase adds tests for what it builds. Business rules (pricing, availability, booking transitions,
   authorization) must have unit tests.
-- Integration tests run against a **separate test database**, never the dev database.
+- Integration tests run against a **separate test database** (`TEST_DATABASE_URL`, a Neon `test` branch locally; a temporary PostgreSQL in CI), never the dev database. The runner wipes it and applies all migrations each run.
 - Critical E2E journeys (added as features land): register → search → book → pay; partner submits property;
   admin approves property.
 - Never mark a phase complete with failing or skipped tests unless the owner has agreed and the reason is documented.
@@ -279,6 +296,7 @@ Tours, bus and flight tickets will be added later. To keep that possible without
 | `docs/README.md` | Documentation index |
 | `docs/product/requirements.md` | Users, MVP features, user stories |
 | `docs/architecture/overview.md` | System architecture |
+| `docs/architecture/data-model.md` | Entity reference, money formulas, how to add a vertical |
 | `docs/architecture/decisions/` | Architecture Decision Records (ADRs) |
 | `docs/development/roadmap.md` | Phase-by-phase plan |
 | `docs/development/git-workflow.md` | Branching, commits, pushing |
@@ -298,6 +316,9 @@ Full guide: `docs/development/local-setup.md`.
 npm install                  # install all workspaces
 npm run db:generate          # regenerate Prisma client
 npm run db:check             # verify Prisma ↔ Neon connectivity (pooled + direct)
+npm run db:migrate           # apply migrations to the dev database (direct URL)
+npm run db:migrate:status    # show applied/pending migrations
+npm run db:seed              # insert SAMPLE data into the dev database (once)
 npm run dev                  # API :4000 + web :3000 with reload
 npm run build                # production builds
 npm start                    # run production builds
@@ -305,7 +326,7 @@ npm run format | format:check
 npm run lint
 npm run typecheck            # api + web (runs next typegen) + e2e
 npm test                     # unit tests (no DB needed)
-npm run test:integration     # integration tests (needs DB)
+npm run test:integration     # integration tests: WIPES + migrates the TEST database
 npm run test:e2e             # build + Playwright (needs DB)
 ```
 
@@ -316,5 +337,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 ## 9. Current status
 
 - **Phase 0, Repository setup & documentation:** complete.
-- **Phase 1, Project foundation & dev environment:** complete on branch `phase/01-foundation`, awaiting owner review.
-- **Next:** Phase 2, Data model (awaiting approval).
+- **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
+- **Phase 2, Multi-vertical data model:** complete and merged to `main` (64-bit money columns).
+- **Next:** Phase 3, Authentication & roles (awaiting approval).

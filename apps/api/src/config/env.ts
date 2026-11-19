@@ -57,6 +57,8 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
  * is normally absent and real environment variables are used.
  */
 export function loadEnvFileIfPresent(): void {
+  // The test runner sets this so tests can never read the dev database URL from .env.
+  if (process.env.MEROSTAY_SKIP_ENV_FILE === "1") return;
   // Resolves to apps/api/.env from both src/config (tsx) and dist/config (node).
   const envFile = fileURLToPath(new URL("../../.env", import.meta.url));
   if (existsSync(envFile)) {

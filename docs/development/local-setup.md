@@ -64,12 +64,33 @@ npm run db:check
 #   ✔ Pooled (API runtime): Prisma connected to ep-….neon.tech/… in 412 ms
 #   ✔ Direct (Prisma CLI): Prisma connected to ep-….neon.tech/… in 389 ms
 
-# 5. (Once) download the browser used by end-to-end tests
+# 5. Create the tables in your dev database, and (optionally) add sample data
+npm run db:migrate
+npm run db:seed        # sample providers, listings and two trips; refuses to run twice
+
+# 6. Set up the separate TEST database (see "Test database" below)
+
+# 7. (Once) download the browser used by end-to-end tests
 npm run test:e2e:install
 ```
 
-> `apps/api/.env` and `apps/web/.env.local` are git-ignored and contain real credentials.
-> Never commit them, paste them into chat, or share screenshots of them.
+> `apps/api/.env`, `apps/api/.env.test` and `apps/web/.env.local` are git-ignored and contain
+> real credentials. Never commit them, paste them into chat, or share screenshots of them.
+
+### Test database
+
+Integration tests **delete everything** in their database and rebuild it from the migrations on
+every run, so they use a **separate** database, never your dev data.
+
+1. In the Neon console, open your project → **Branches** → **Create branch**, name it `test`
+   (branch from `main`; it is free and isolated).
+2. On the `test` branch press **Connect** and copy its **pooled** connection string.
+3. `cp apps/api/.env.test.example apps/api/.env.test` and paste it as `TEST_DATABASE_URL`.
+4. Run `npm run test:integration`.
+
+Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they never load
+`apps/api/.env`; and they **refuse to run** if the test URL points at the same database as
+`DATABASE_URL`. CI uses its own temporary PostgreSQL instead of Neon.
 
 ## 4. Environment variables
 
@@ -80,6 +101,8 @@ npm run test:e2e:install
 | `apps/api/.env` | `PORT` | API port (default `4000`) |
 | `apps/api/.env` | `NODE_ENV` | `development` / `test` / `production` |
 | `apps/api/.env` | `LOG_LEVEL` | `fatal` … `trace`, or `silent` (default `info`) |
+| `apps/api/.env.test` | `TEST_DATABASE_URL` | Pooled URL of the **test** Neon branch. Wiped by every integration test run |
+| `apps/api/.env.test` | `TEST_DATABASE_URL_UNPOOLED` | *Optional.* Derived from `TEST_DATABASE_URL` like the dev one |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
 The API validates its variables on startup and exits with a clear message listing any
@@ -91,6 +114,9 @@ invalid ones (without printing their values).
 |---|---|
 | `npm run db:check` | Verify Prisma ↔ Neon connectivity (pooled and direct) |
 | `npm run db:generate` | Regenerate the Prisma client after editing `schema.prisma` |
+| `npm run db:migrate` | Apply pending migrations to the dev database (`prisma migrate deploy`, direct URL) |
+| `npm run db:migrate:status` | Show which migrations are applied |
+| `npm run db:seed` | Insert sample data into the dev database (once) |
 | `npm run dev` | Start API (http://localhost:4000) **and** web (http://localhost:3000) with reload |
 | `npm run dev:api` / `npm run dev:web` | Start just one of them |
 | `npm run build` | Production build of API and web |
@@ -108,10 +134,12 @@ Database as **Operational**.
 | `npm run lint` | ESLint for API and web | No |
 | `npm run typecheck` | TypeScript for API, web and e2e | No |
 | `npm test` | Vitest unit tests (API + web) | No |
-| `npm run test:integration` | Vitest integration tests against a real database (your Neon, read-only; CI uses a temporary PostgreSQL) | **Yes** |
+| `npm run test:integration` | Wipes the **test** database, applies all migrations, then tests migrations, constraints, money maths against PostgreSQL, and the seed. CI uses a temporary PostgreSQL | **Test DB** |
 | `npm run test:e2e` | Builds, starts both apps, runs Playwright (desktop + mobile) | **Yes** |
 
-Run before every commit: `npm run format:check && npm run lint && npm run typecheck && npm test`.
+Run before every commit: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration`.
+
+Creating a migration: see [data-model.md → Working with migrations](../architecture/data-model.md#working-with-migrations).
 
 Playwright HTML report: `npx playwright show-report`.
 
@@ -126,6 +154,9 @@ Playwright HTML report: `npx playwright show-report`.
 
 | Problem | Fix |
 |---|---|
+| `TEST_DATABASE_URL is not set` | Create the Neon `test` branch and `apps/api/.env.test` (see "Test database") |
+| `Refusing to run: TEST_DATABASE_URL points at the same database as DATABASE_URL` | Your test URL is your dev database. Use the `test` branch's connection string |
+| `db:seed`: `Sample data is already present` | Expected on a second run; nothing was changed |
 | Port 3000 or 4000 in use | Find the process: `lsof -nP -iTCP:3000 -sTCP:LISTEN`, then stop it |
 | `Invalid environment configuration: DATABASE_URL: is required` | Create `apps/api/.env` from its example |
 | `db:check`: `password authentication failed` | Wrong password in `DATABASE_URL`. Copy the string again from the Neon console (reset the role password there if needed) |

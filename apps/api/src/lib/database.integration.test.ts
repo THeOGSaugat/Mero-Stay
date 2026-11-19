@@ -2,30 +2,19 @@ import { pino } from "pino";
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
-import { resolveDirectUrl } from "../config/database-url.js";
-import { loadEnvFileIfPresent } from "../config/env.js";
 import type { ReadinessResponse } from "../modules/health/health.routes.js";
+import { resolveTestDatabase } from "../testing/test-database.js";
 import { checkDatabaseConnection, createPrismaClient } from "./prisma.js";
 
 /**
- * Integration tests: these talk to a REAL PostgreSQL instance.
- * - Locally: your Neon database, via the direct DATABASE_URL_UNPOOLED in apps/api/.env.
+ * Integration tests run against the TEST database only (TEST_DATABASE_URL):
+ * - Locally: a separate Neon branch configured in apps/api/.env.test.
  * - In CI: a temporary PostgreSQL service container (no Neon secrets in CI).
- * They only run read-only queries, so they never modify data.
  *
- * These tests do NOT skip silently: with no database configured they fail loudly,
+ * They never skip silently: with no test database configured they fail loudly,
  * because a skipped integration suite would look like a pass.
  */
-loadEnvFileIfPresent();
-const databaseUrl = resolveDirectUrl(process.env);
-if (!databaseUrl) {
-  throw new Error(
-    "No database configured. Copy apps/api/.env.example to apps/api/.env and set " +
-      "DATABASE_URL_UNPOOLED (your Neon direct connection).",
-  );
-}
-
-const prisma = createPrismaClient(databaseUrl);
+const prisma = createPrismaClient(resolveTestDatabase().pooledUrl);
 const logger = pino({ level: "silent" });
 
 afterAll(async () => {

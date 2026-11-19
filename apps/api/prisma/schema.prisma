@@ -1,7 +1,17 @@
-// MeroStay Prisma schema.
+// MeroStay Prisma schema: multi-vertical travel marketplace.
 //
-// Phase 1: connection setup only. Business models (users, properties, rooms,
-// bookings, payments, ...) are added in the data-model phase.
+// Core idea (ADR 0004): every sellable thing is a generic LISTING of some LISTING TYPE
+// (hotel room, bus ticket, guide service, tour, ...). A traveller's order is a TRIP made of
+// BOOKING ITEMS, each pointing at one listing. Adding a new vertical = add a listing_types
+// row (+ optionally a *_details table). Core tables never change.
+//
+// Conventions
+// - Tables snake_case plural (@@map); columns snake_case (@map).
+// - Money: integer minor units (paisa for NPR) + ISO 4217 currency. Never floats.
+// - Rates: integer basis points (1500 = 15%).
+// - Timestamps: timestamptz (UTC). Stay/service dates: DATE.
+// - Arithmetic/consistency CHECK constraints live in the migration SQL (Prisma can't express them).
+//
 // Connection URL is configured in `prisma.config.ts` (Prisma 7+).
 
 generator client {
@@ -14,4 +24,848 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============================================================================
+// Users
+// ============================================================================
+
+enum UserRole {
+  CUSTOMER
+  PARTNER
+  ADMIN
+
+  @@map("user_role")
+}
+
+/// Minimal shape so trips and providers have owners. Credentials/sessions arrive in the auth phase.
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String?  @unique
+  phone     String?  @unique
+  fullName  String   @map("full_name")
+  role      UserRole @default(CUSTOMER)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  providers         Provider[]
+  trips             Trip[]
+  reviews           Review[]
+  notifications     Notification[]
+  reviewedDocuments ProviderDocument[] @relation("DocumentReviewer")
+
+  @@map("users")
+}
+
+// ============================================================================
+// Locations (Province → District → Municipality/Area → Point of interest)
+// ============================================================================
+
+enum LocationKind {
+  COUNTRY
+  PROVINCE
+  DISTRICT
+  MUNICIPALITY
+  AREA
+  POINT_OF_INTEREST
+
+  @@map("location_kind")
+}
+
+model Location {
+  id        String       @id @default(uuid()) @db.Uuid
+  parentId  String?      @map("parent_id") @db.Uuid
+  kind      LocationKind
+  name      String
+  slug      String       @unique
+  latitude  Decimal?     @db.Decimal(9, 6)
+  longitude Decimal?     @db.Decimal(9, 6)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  parent        Location?        @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children      Location[]       @relation("LocationHierarchy")
+  listings      Listing[]
+  busRoutesFrom BusRouteDetail[] @relation("BusOrigin")
+  busRoutesTo   BusRouteDetail[] @relation("BusDestination")
+  tourStarts    TourDetail[]
+
+  @@index([parentId])
+  @@map("locations")
+}
+
+// ============================================================================
+// Providers (who supplies items: hotel, bus operator, airline, guide, tour operator, ...)
+// ============================================================================
+
+/// Lookup table (not an enum) so a new provider type is a row, not a migration.
+model ProviderType {
+  code        String   @id
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  providers Provider[]
+
+  @@map("provider_types")
+}
+
+enum ProviderStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  SUSPENDED
+
+  @@map("provider_status")
+}
+
+/// How inventory reaches MeroStay. MVP is MANUAL only (aggregator model, partners list their own).
+enum IntegrationType {
+  MANUAL
+  API
+  CHANNEL_MANAGER
+
+  @@map("integration_type")
+}
+
+model Provider {
+  id                     String          @id @default(uuid()) @db.Uuid
+  providerTypeCode       String          @map("provider_type_code")
+  ownerUserId            String          @map("owner_user_id") @db.Uuid
+  legalName              String          @map("legal_name")
+  displayName            String          @map("display_name")
+  description            String?
+  status                 ProviderStatus  @default(DRAFT)
+  contactEmail           String?         @map("contact_email")
+  contactPhone           String?         @map("contact_phone")
+  addressLine            String?         @map("address_line")
+  /// Tax/registration numbers. Supporting files live in provider_documents.
+  panNumber              String?         @map("pan_number")
+  vatNumber              String?         @map("vat_number")
+  businessRegistrationNo String?         @map("business_registration_no")
+  /// Overrides the platform default commission for all of this provider's listings (NULL = default).
+  commissionRateBps      Int?            @map("commission_rate_bps")
+  integrationType        IntegrationType @default(MANUAL) @map("integration_type")
+  /// Provider's ID in an external system (future integrations).
+  externalRef            String?         @map("external_ref")
+  verifiedAt             DateTime?       @map("verified_at") @db.Timestamptz(3)
+  rejectionReason        String?         @map("rejection_reason")
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  providerType         ProviderType            @relation(fields: [providerTypeCode], references: [code])
+  owner                User                    @relation(fields: [ownerUserId], references: [id])
+  documents            ProviderDocument[]
+  payoutAccounts       ProviderPayoutAccount[]
+  listings             Listing[]
+  cancellationPolicies CancellationPolicy[]
+  bookingItems         BookingItem[]
+  payouts              Payout[]
+  invoices             ProviderInvoice[]
+  reviews              Review[]
+
+  @@index([ownerUserId])
+  @@index([providerTypeCode, status])
+  @@map("providers")
+}
+
+enum ProviderDocumentType {
+  OWNER_ID
+  BUSINESS_REGISTRATION
+  LOCAL_GOVERNMENT_REGISTRATION
+  PAN_CERTIFICATE
+  VAT_CERTIFICATE
+  TOURISM_LICENSE
+  GUIDE_LICENSE
+  VEHICLE_ROUTE_PERMIT
+  PROPERTY_OWNERSHIP_OR_LEASE
+  BANK_PROOF
+  OTHER
+
+  @@map("provider_document_type")
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("document_status")
+}
+
+/// Verification documents (requirements §6.2). Files are private: `storage_key` points to object storage.
+model ProviderDocument {
+  id              String               @id @default(uuid()) @db.Uuid
+  providerId      String               @map("provider_id") @db.Uuid
+  documentType    ProviderDocumentType @map("document_type")
+  storageKey      String               @map("storage_key")
+  mimeType        String               @map("mime_type")
+  sizeBytes       Int                  @map("size_bytes")
+  status          DocumentStatus       @default(PENDING)
+  documentNumber  String?              @map("document_number")
+  expiresOn       DateTime?            @map("expires_on") @db.Date
+  reviewedById    String?              @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?            @map("reviewed_at") @db.Timestamptz(3)
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider   Provider @relation(fields: [providerId], references: [id])
+  reviewedBy User?    @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([providerId])
+  @@map("provider_documents")
+}
+
+/// Where a provider's online-booking payouts are sent.
+model ProviderPayoutAccount {
+  id            String    @id @default(uuid()) @db.Uuid
+  providerId    String    @map("provider_id") @db.Uuid
+  bankName      String    @map("bank_name")
+  branch        String?
+  accountName   String    @map("account_name")
+  accountNumber String    @map("account_number")
+  isDefault     Boolean   @default(false) @map("is_default")
+  verifiedAt    DateTime? @map("verified_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider Provider @relation(fields: [providerId], references: [id])
+
+  @@index([providerId])
+  @@map("provider_payout_accounts")
+}
+
+// ============================================================================
+// Listings (the generic sellable unit)
+// ============================================================================
+
+/// Lookup table: one row per vertical. A new vertical is a row here (+ optional *_details table).
+model ListingType {
+  code       String   @id
+  name       String
+  /// What one billable unit is: "night", "seat", "day", "person", ...
+  unitLabel  String   @map("unit_label")
+  /// FALSE for container listings that group bookable ones (e.g. a hotel groups its rooms).
+  isBookable Boolean  @default(true) @map("is_bookable")
+  /// FALSE for verticals modelled but not yet offered (flights in the MVP).
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  listings Listing[]
+
+  @@map("listing_types")
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+  ARCHIVED
+
+  @@map("listing_status")
+}
+
+model Listing {
+  id                          String        @id @default(uuid()) @db.Uuid
+  providerId                  String        @map("provider_id") @db.Uuid
+  listingTypeCode             String        @map("listing_type_code")
+  /// Optional container, e.g. a hotel_room listing belongs to its hotel listing.
+  parentId                    String?       @map("parent_id") @db.Uuid
+  locationId                  String?       @map("location_id") @db.Uuid
+  title                       String
+  slug                        String        @unique
+  description                 String?
+  status                      ListingStatus @default(DRAFT)
+  currency                    String        @default("NPR") @db.Char(3)
+  /// Price per billable unit (see listing_types.unit_label), in minor units.
+  basePriceMinor              BigInt        @map("base_price_minor")
+  serviceChargeRateBps        Int           @default(0) @map("service_charge_rate_bps")
+  taxRateBps                  Int           @default(0) @map("tax_rate_bps")
+  /// Overrides provider/platform commission (NULL = inherit).
+  commissionRateBps           Int?          @map("commission_rate_bps")
+  defaultCancellationPolicyId String?       @map("default_cancellation_policy_id") @db.Uuid
+  addressLine                 String?       @map("address_line")
+  latitude                    Decimal?      @db.Decimal(9, 6)
+  longitude                   Decimal?      @db.Decimal(9, 6)
+  /// Small, rarely-queried type-specific extras, and new verticals before they earn a *_details table.
+  attributes                  Json          @default("{}")
+  /// Future integrations: ID in the provider's/partner's system and last sync time.
+  externalId                  String?       @map("external_id")
+  lastSyncedAt                DateTime?     @map("last_synced_at") @db.Timestamptz(3)
+  publishedAt                 DateTime?     @map("published_at") @db.Timestamptz(3)
+  createdAt                   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  provider                  Provider            @relation(fields: [providerId], references: [id])
+  listingType               ListingType         @relation(fields: [listingTypeCode], references: [code])
+  parent                    Listing?            @relation("ListingHierarchy", fields: [parentId], references: [id])
+  children                  Listing[]           @relation("ListingHierarchy")
+  location                  Location?           @relation(fields: [locationId], references: [id])
+  defaultCancellationPolicy CancellationPolicy? @relation(fields: [defaultCancellationPolicyId], references: [id])
+
+  hotelDetail        HotelDetail?
+  hotelRoomDetail    HotelRoomDetail?
+  busRouteDetail     BusRouteDetail?
+  guideServiceDetail GuideServiceDetail?
+  tourDetail         TourDetail?
+  flightRouteDetail  FlightRouteDetail?
+
+  inventorySlots InventorySlot[]
+  bookingItems   BookingItem[]
+  reviews        Review[]
+
+  @@unique([providerId, externalId])
+  @@index([providerId])
+  @@index([listingTypeCode, status])
+  @@index([locationId])
+  @@index([parentId])
+  @@map("listings")
+}
+
+// ---------------------------------------------------------------------------
+// Type-specific detail tables (1:1 with listings, keyed by listing_id).
+// Only for verticals whose fields search/filters must query with real columns.
+// ---------------------------------------------------------------------------
+
+enum AccommodationKind {
+  HOTEL
+  GUESTHOUSE
+  HOMESTAY
+  RESORT
+  TEAHOUSE
+  LODGE
+
+  @@map("accommodation_kind")
+}
+
+/// listing_type = hotel (container, not bookable): the property itself.
+model HotelDetail {
+  listingId         String            @id @map("listing_id") @db.Uuid
+  accommodationKind AccommodationKind @map("accommodation_kind")
+  starRating        Int?              @map("star_rating")
+  checkInTime       String            @map("check_in_time")
+  checkOutTime      String            @map("check_out_time")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("hotel_details")
+}
+
+/// listing_type = hotel_room: a bookable room type; unit = night.
+model HotelRoomDetail {
+  listingId   String  @id @map("listing_id") @db.Uuid
+  maxAdults   Int     @map("max_adults")
+  maxChildren Int     @default(0) @map("max_children")
+  bedType     String? @map("bed_type")
+  bedCount    Int     @default(1) @map("bed_count")
+  sizeSqm     Int?    @map("size_sqm")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("hotel_room_details")
+}
+
+/// listing_type = bus_ticket: one scheduled service (e.g. "Inaruwa → Ilam night bus"); unit = seat.
+/// Each date it runs is an inventory_slots row.
+model BusRouteDetail {
+  listingId             String  @id @map("listing_id") @db.Uuid
+  originLocationId      String  @map("origin_location_id") @db.Uuid
+  destinationLocationId String  @map("destination_location_id") @db.Uuid
+  /// Local Nepal time, "HH:MM".
+  departureTime         String  @map("departure_time")
+  durationMinutes       Int     @map("duration_minutes")
+  busType               String  @map("bus_type")
+  seatCapacity          Int     @map("seat_capacity")
+  boardingPoint         String? @map("boarding_point")
+
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  origin      Location @relation("BusOrigin", fields: [originLocationId], references: [id])
+  destination Location @relation("BusDestination", fields: [destinationLocationId], references: [id])
+
+  @@index([originLocationId, destinationLocationId])
+  @@map("bus_route_details")
+}
+
+/// listing_type = guide_service; unit = day.
+model GuideServiceDetail {
+  listingId     String   @id @map("listing_id") @db.Uuid
+  languages     String[]
+  regions       String[]
+  licenseNumber String?  @map("license_number")
+  maxGroupSize  Int      @map("max_group_size")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("guide_service_details")
+}
+
+enum TourDifficulty {
+  EASY
+  MODERATE
+  CHALLENGING
+  STRENUOUS
+
+  @@map("tour_difficulty")
+}
+
+/// listing_type = tour; unit = person. Each departure date is an inventory_slots row.
+model TourDetail {
+  listingId         String         @id @map("listing_id") @db.Uuid
+  durationDays      Int            @map("duration_days")
+  difficulty        TourDifficulty
+  startLocationId   String?        @map("start_location_id") @db.Uuid
+  maxAltitudeMeters Int?           @map("max_altitude_meters")
+  maxGroupSize      Int            @map("max_group_size")
+
+  listing       Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  startLocation Location? @relation(fields: [startLocationId], references: [id])
+
+  @@map("tour_details")
+}
+
+/// listing_type = flight_ticket. MODELLED, NOT BUILT in the MVP (listing_types.is_active = false).
+model FlightRouteDetail {
+  listingId              String @id @map("listing_id") @db.Uuid
+  airlineCode            String @map("airline_code")
+  flightNumber           String @map("flight_number")
+  originAirportCode      String @map("origin_airport_code") @db.Char(3)
+  destinationAirportCode String @map("destination_airport_code") @db.Char(3)
+  departureTime          String @map("departure_time")
+  durationMinutes        Int    @map("duration_minutes")
+  cabinClass             String @map("cabin_class")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("flight_route_details")
+}
+
+// ============================================================================
+// Availability: one row per listing per service date (night, departure, guide-day, ...)
+// ============================================================================
+
+enum InventorySlotStatus {
+  OPEN
+  CLOSED
+
+  @@map("inventory_slot_status")
+}
+
+model InventorySlot {
+  id                 String              @id @default(uuid()) @db.Uuid
+  listingId          String              @map("listing_id") @db.Uuid
+  serviceDate        DateTime            @map("service_date") @db.Date
+  capacityTotal      Int                 @map("capacity_total")
+  /// Incremented atomically by the booking service; CHECK keeps it ≤ capacity_total (no overbooking).
+  capacityBooked     Int                 @default(0) @map("capacity_booked")
+  /// Optional per-date price (e.g. festival season). NULL = listing base price.
+  priceOverrideMinor BigInt?             @map("price_override_minor")
+  status             InventorySlotStatus @default(OPEN)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  listing      Listing           @relation(fields: [listingId], references: [id])
+  bookingSlots BookingItemSlot[]
+
+  @@unique([listingId, serviceDate])
+  @@map("inventory_slots")
+}
+
+// ============================================================================
+// Cancellation policies (defined by provider/listing; snapshotted onto each booking item)
+// ============================================================================
+
+model CancellationPolicy {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// NULL = platform template any provider may use.
+  providerId  String?  @map("provider_id") @db.Uuid
+  name        String
+  description String
+  /// Ordered tiers: [{ "minHoursBeforeStart": 48, "refundBps": 10000 }, ...]. Validated by the app.
+  rules       Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  provider     Provider?     @relation(fields: [providerId], references: [id])
+  listings     Listing[]
+  bookingItems BookingItem[]
+
+  @@index([providerId])
+  @@map("cancellation_policies")
+}
+
+// ============================================================================
+// Trips and booking items
+// ============================================================================
+
+enum TripStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+
+  @@map("trip_status")
+}
+
+/// A traveller's order. Totals are stored aggregates of its booking items (items are the source of truth).
+model Trip {
+  id                   String     @id @default(uuid()) @db.Uuid
+  /// Human-friendly reference shown to customers, e.g. "MS-7K3F9Q".
+  reference            String     @unique
+  customerId           String     @map("customer_id") @db.Uuid
+  status               TripStatus @default(DRAFT)
+  /// MVP: one currency per trip.
+  currency             String     @default("NPR") @db.Char(3)
+  subtotalMinor        BigInt     @default(0) @map("subtotal_minor")
+  serviceChargeMinor   BigInt     @default(0) @map("service_charge_minor")
+  taxMinor             BigInt     @default(0) @map("tax_minor")
+  totalMinor           BigInt     @default(0) @map("total_minor")
+  commissionTotalMinor BigInt     @default(0) @map("commission_total_minor")
+  contactName          String?    @map("contact_name")
+  contactPhone         String?    @map("contact_phone")
+  contactEmail         String?    @map("contact_email")
+  expiresAt            DateTime?  @map("expires_at") @db.Timestamptz(3)
+  confirmedAt          DateTime?  @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt          DateTime?  @map("cancelled_at") @db.Timestamptz(3)
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer      User           @relation(fields: [customerId], references: [id])
+  items         BookingItem[]
+  payments      Payment[]
+  notifications Notification[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("trips")
+}
+
+enum BookingItemStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  EXPIRED
+
+  @@map("booking_item_status")
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PAY_AT_PROPERTY
+  PARTIALLY_REFUNDED
+  REFUNDED
+
+  @@map("payment_status")
+}
+
+enum CommissionStatus {
+  PENDING
+  INVOICED
+  PAID
+  WAIVED
+
+  @@map("commission_status")
+}
+
+enum PayoutStatus {
+  NOT_APPLICABLE
+  PENDING
+  ON_HOLD
+  PAID
+
+  @@map("payout_status")
+}
+
+/// One line of a trip: a bus seat set, a hotel stay, a guide booking, a tour seat, ...
+/// All money fields are snapshots taken at booking time; CHECK constraints keep them consistent.
+model BookingItem {
+  id                         String            @id @default(uuid()) @db.Uuid
+  tripId                     String            @map("trip_id") @db.Uuid
+  listingId                  String            @map("listing_id") @db.Uuid
+  /// Denormalised from the listing for payouts/invoices and provider dashboards.
+  providerId                 String            @map("provider_id") @db.Uuid
+  listingTypeCode            String            @map("listing_type_code")
+  status                     BookingItemStatus @default(PENDING)
+  /// First service date (check-in, travel date, first guide day). Inclusive.
+  startDate                  DateTime          @map("start_date") @db.Date
+  /// Last service date + 1 for ranges (check-out; exclusive). NULL for single-date items.
+  endDate                    DateTime?         @map("end_date") @db.Date
+  travellerCount             Int               @default(1) @map("traveller_count")
+  /// Total billable units (room-nights, seats, guide-days, persons) = sum of booking_item_slots.units.
+  quantity                   Int
+  currency                   String            @default("NPR") @db.Char(3)
+  /// Sum of booking_item_slots.amount_minor (per-date unit prices live there).
+  subtotalMinor              BigInt            @map("subtotal_minor")
+  serviceChargeRateBps       Int               @default(0) @map("service_charge_rate_bps")
+  serviceChargeMinor         BigInt            @default(0) @map("service_charge_minor")
+  taxRateBps                 Int               @default(0) @map("tax_rate_bps")
+  taxMinor                   BigInt            @default(0) @map("tax_minor")
+  /// What the customer pays for this item = subtotal + service charge + tax.
+  totalMinor                 BigInt            @map("total_minor")
+  /// Copied from listing → provider → platform default (1500) at booking time.
+  commissionRateBps          Int               @map("commission_rate_bps")
+  /// round_half_up(subtotal × rate / 10000). Taxes/fees excluded.
+  commissionMinor            BigInt            @map("commission_minor")
+  commissionStatus           CommissionStatus  @default(PENDING) @map("commission_status")
+  /// total − commission. For pay-at-property the provider collects `total` and owes `commission`.
+  providerPayoutMinor        BigInt            @map("provider_payout_minor")
+  payoutStatus               PayoutStatus      @default(PENDING) @map("payout_status")
+  paymentStatus              PaymentStatus     @default(UNPAID) @map("payment_status")
+  refundedMinor              BigInt            @default(0) @map("refunded_minor")
+  cancellationPolicyId       String?           @map("cancellation_policy_id") @db.Uuid
+  /// Frozen copy of the policy at booking time, so later edits never change this booking.
+  cancellationPolicySnapshot Json?             @map("cancellation_policy_snapshot")
+  cancellationReason         String?           @map("cancellation_reason")
+  /// Type-specific booking details: seat numbers, pickup point, guest names, ...
+  attributes                 Json              @default("{}")
+  /// Booking reference in the provider's own system (future integrations).
+  externalBookingRef         String?           @map("external_booking_ref")
+  payoutId                   String?           @map("payout_id") @db.Uuid
+  commissionInvoiceId        String?           @map("commission_invoice_id") @db.Uuid
+  confirmedAt                DateTime?         @map("confirmed_at") @db.Timestamptz(3)
+  completedAt                DateTime?         @map("completed_at") @db.Timestamptz(3)
+  cancelledAt                DateTime?         @map("cancelled_at") @db.Timestamptz(3)
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  trip               Trip                @relation(fields: [tripId], references: [id])
+  listing            Listing             @relation(fields: [listingId], references: [id])
+  provider           Provider            @relation(fields: [providerId], references: [id])
+  cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
+  payout             Payout?             @relation(fields: [payoutId], references: [id])
+  commissionInvoice  ProviderInvoice?    @relation(fields: [commissionInvoiceId], references: [id])
+
+  slots       BookingItemSlot[]
+  allocations PaymentAllocation[]
+  review      Review?
+
+  @@index([tripId])
+  @@index([listingId])
+  @@index([providerId, status])
+  @@index([payoutId])
+  @@index([commissionInvoiceId])
+  @@map("booking_items")
+}
+
+/// Per-date lines of a booking item: which inventory it consumed and at what unit price.
+model BookingItemSlot {
+  id              String   @id @default(uuid()) @db.Uuid
+  bookingItemId   String   @map("booking_item_id") @db.Uuid
+  /// NULL for items without managed inventory.
+  inventorySlotId String?  @map("inventory_slot_id") @db.Uuid
+  serviceDate     DateTime @map("service_date") @db.Date
+  units           Int
+  unitPriceMinor  BigInt   @map("unit_price_minor")
+  /// units × unit_price_minor (CHECK).
+  amountMinor     BigInt   @map("amount_minor")
+
+  bookingItem   BookingItem    @relation(fields: [bookingItemId], references: [id])
+  inventorySlot InventorySlot? @relation(fields: [inventorySlotId], references: [id])
+
+  @@unique([bookingItemId, serviceDate])
+  @@index([inventorySlotId])
+  @@map("booking_item_slots")
+}
+
+// ============================================================================
+// Payments, payouts, commission invoices (SHAPES ONLY — flows come in later phases)
+// ============================================================================
+
+enum PaymentKind {
+  CHARGE
+  REFUND
+
+  @@map("payment_kind")
+}
+
+enum PaymentTransactionStatus {
+  INITIATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+
+  @@map("payment_transaction_status")
+}
+
+/// One money movement with a gateway (eSewa, Khalti, ...). Gateway is text so adding one needs no migration.
+model Payment {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  tripId               String                   @map("trip_id") @db.Uuid
+  kind                 PaymentKind              @default(CHARGE)
+  gateway              String
+  status               PaymentTransactionStatus @default(INITIATED)
+  currency             String                   @default("NPR") @db.Char(3)
+  amountMinor          BigInt                   @map("amount_minor")
+  gatewayTransactionId String?                  @map("gateway_transaction_id")
+  /// Raw verification response (no secrets) for reconciliation.
+  gatewayResponse      Json?                    @map("gateway_response")
+  completedAt          DateTime?                @map("completed_at") @db.Timestamptz(3)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  trip        Trip                @relation(fields: [tripId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@unique([gateway, gatewayTransactionId])
+  @@index([tripId])
+  @@map("payments")
+}
+
+/// Splits a payment across booking items, so payment status is tracked per item.
+model PaymentAllocation {
+  id            String @id @default(uuid()) @db.Uuid
+  paymentId     String @map("payment_id") @db.Uuid
+  bookingItemId String @map("booking_item_id") @db.Uuid
+  amountMinor   BigInt @map("amount_minor")
+
+  payment     Payment     @relation(fields: [paymentId], references: [id])
+  bookingItem BookingItem @relation(fields: [bookingItemId], references: [id])
+
+  @@unique([paymentId, bookingItemId])
+  @@index([bookingItemId])
+  @@map("payment_allocations")
+}
+
+enum PayoutBatchStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+
+  @@map("payout_batch_status")
+}
+
+/// A transfer to a provider covering many online-paid booking items (net of commission).
+model Payout {
+  id          String            @id @default(uuid()) @db.Uuid
+  providerId  String            @map("provider_id") @db.Uuid
+  status      PayoutBatchStatus @default(PENDING)
+  currency    String            @default("NPR") @db.Char(3)
+  amountMinor BigInt            @map("amount_minor")
+  periodStart DateTime          @map("period_start") @db.Date
+  periodEnd   DateTime          @map("period_end") @db.Date
+  reference   String?
+  paidAt      DateTime?         @map("paid_at") @db.Timestamptz(3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider     Provider      @relation(fields: [providerId], references: [id])
+  bookingItems BookingItem[]
+
+  @@index([providerId])
+  @@map("payouts")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+
+  @@map("invoice_status")
+}
+
+/// Commission owed by a provider for pay-at-property items (the provider collected the money).
+model ProviderInvoice {
+  id          String        @id @default(uuid()) @db.Uuid
+  number      String        @unique
+  providerId  String        @map("provider_id") @db.Uuid
+  status      InvoiceStatus @default(DRAFT)
+  currency    String        @default("NPR") @db.Char(3)
+  amountMinor BigInt        @map("amount_minor")
+  issuedAt    DateTime?     @map("issued_at") @db.Timestamptz(3)
+  dueOn       DateTime?     @map("due_on") @db.Date
+  paidAt      DateTime?     @map("paid_at") @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider     Provider      @relation(fields: [providerId], references: [id])
+  bookingItems BookingItem[]
+
+  @@index([providerId])
+  @@map("provider_invoices")
+}
+
+// ============================================================================
+// Reviews and notifications (SHAPES ONLY)
+// ============================================================================
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+
+  @@map("review_status")
+}
+
+/// One review per COMPLETED booking item (verified stays/trips only; enforced by the review service).
+model Review {
+  id                String       @id @default(uuid()) @db.Uuid
+  bookingItemId     String       @unique @map("booking_item_id") @db.Uuid
+  authorId          String       @map("author_id") @db.Uuid
+  listingId         String       @map("listing_id") @db.Uuid
+  providerId        String       @map("provider_id") @db.Uuid
+  rating            Int
+  title             String?
+  body              String?
+  status            ReviewStatus @default(PUBLISHED)
+  providerReply     String?      @map("provider_reply")
+  providerRepliedAt DateTime?    @map("provider_replied_at") @db.Timestamptz(3)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  bookingItem BookingItem @relation(fields: [bookingItemId], references: [id])
+  author      User        @relation(fields: [authorId], references: [id])
+  listing     Listing     @relation(fields: [listingId], references: [id])
+  provider    Provider    @relation(fields: [providerId], references: [id])
+
+  @@index([listingId, status])
+  @@index([providerId])
+  @@map("reviews")
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+
+  @@map("notification_status")
+}
+
+/// Outbound SMS/email record (Sparrow SMS, Amazon SES). `provider` is text so adding one needs no migration.
+model Notification {
+  id                String              @id @default(uuid()) @db.Uuid
+  userId            String?             @map("user_id") @db.Uuid
+  tripId            String?             @map("trip_id") @db.Uuid
+  channel           NotificationChannel
+  provider          String
+  recipient         String
+  template          String
+  payload           Json                @default("{}")
+  status            NotificationStatus  @default(QUEUED)
+  providerMessageId String?             @map("provider_message_id")
+  errorMessage      String?             @map("error_message")
+  sentAt            DateTime?           @map("sent_at") @db.Timestamptz(3)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id])
+  trip Trip? @relation(fields: [tripId], references: [id])
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([status])
+  @@map("notifications")
 }
