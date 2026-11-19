@@ -28,8 +28,9 @@ The roadmap was renumbered (authentication is now Phase 4).
 - **Central DB-error mapping** (`lib/database-errors.ts`): overbooking → 409, money CHECKs → 422,
   unique → 409; raw PostgreSQL text never returned.
 - **Hold-expiry sweeper** (`expireStaleTrips`): set-based, not yet scheduled.
-- **Temporary unauthenticated trip API**: `userId` in the body; disabled by default in production
-  (`ALLOW_UNAUTHENTICATED_TRIPS_API`).
+- **Temporary unauthenticated trip API**: `userId` in the body; **off by default in every
+  environment**, served only with `ALLOW_UNAUTHENTICATED_TRIPS_API=true` (tightened before merge,
+  see the ADR 0005 amendment).
 
 **No schema changes, no new migration.** Payment method maps onto the existing `payment_status`.
 
@@ -76,14 +77,14 @@ What the integration tests prove (on Neon):
 ## Security checklist
 
 - [x] No real credentials committed (staged diffs scanned for Neon hosts, passwords, tokens)
-- [x] Unauthenticated trip endpoints disabled by default in production
+- [x] Unauthenticated trip endpoints off by default in every environment (explicit opt-in only)
 - [x] Raw database errors (which contain the failing row) never reach clients
 - [x] Strict Zod validation rejects unknown fields; clients never send money
 
 ## Known limitations / follow-ups
 
-1. **No authentication yet**: anyone with a trip id can read or change it (dev/test only;
-   off in production). Phase 4 replaces `userId` with the session and hides commission/payout
+1. **No authentication yet**: when the flag is on, anyone with a trip id can read or change it
+   (the flag is off by default). Phase 4 replaces `userId` with the session and hides commission/payout
    fields from customers ([api.md](../architecture/api.md#how-authentication-will-slot-in)).
 2. **Hold sweeper not scheduled**: abandoned drafts keep their holds until `expireStaleTrips` runs.
    Schedule it with the payments phase (or earlier if needed).

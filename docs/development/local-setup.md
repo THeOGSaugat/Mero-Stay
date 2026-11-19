@@ -103,7 +103,7 @@ Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they 
 | `apps/api/.env` | `LOG_LEVEL` | `fatal` … `trace`, or `silent` (default `info`) |
 | `apps/api/.env.test` | `TEST_DATABASE_URL` | Pooled URL of the **test** Neon branch. Wiped by every integration test run |
 | `apps/api/.env.test` | `TEST_DATABASE_URL_UNPOOLED` | *Optional.* Derived from `TEST_DATABASE_URL` like the dev one |
-| `apps/api/.env` | `ALLOW_UNAUTHENTICATED_TRIPS_API` | *Temporary.* `true`/`false`. Trip endpoints have no auth yet; unset = enabled in development/test, **disabled in production** |
+| `apps/api/.env` | `ALLOW_UNAUTHENTICATED_TRIPS_API` | *Temporary, until auth (Phase 4).* Default **`false`** (also when unset) in **every** environment: trip endpoints return `403 TRIPS_API_DISABLED`. Set `true` only locally to try the trip API; never on a public deployment |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
 The API validates its variables on startup and exits with a clear message listing any

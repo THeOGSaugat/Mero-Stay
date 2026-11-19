@@ -18,8 +18,8 @@ const envSchema = z
       .string({ error: "is required" })
       .regex(/^postgres(ql)?:\/\//, { error: "must be a postgresql:// connection string" }),
     /**
-     * TEMPORARY until authentication exists (ADR 0005): "true" enables the trip endpoints, which
-     * take a userId in the body. Unset = enabled outside production, disabled in production.
+     * TEMPORARY until authentication exists (ADR 0005). The trip endpoints take a userId in the
+     * body and check no ownership. OFF unless set to exactly "true", in EVERY environment.
      */
     ALLOW_UNAUTHENTICATED_TRIPS_API: z.enum(["true", "false"]).optional(),
   })
@@ -71,12 +71,13 @@ export function loadEnvFileIfPresent(): void {
   }
 }
 
-/** Whether the temporary, unauthenticated trip endpoints are served (see ALLOW_UNAUTHENTICATED_TRIPS_API). */
+/**
+ * Whether the temporary, unauthenticated trip endpoints are served. Explicit opt-in only:
+ * unset or "false" → off, regardless of NODE_ENV (a staging server with the wrong NODE_ENV must
+ * not expose them by accident).
+ */
 export function unauthenticatedTripsEnabled(
-  env: Pick<Env, "NODE_ENV" | "ALLOW_UNAUTHENTICATED_TRIPS_API">,
+  env: Pick<Env, "ALLOW_UNAUTHENTICATED_TRIPS_API">,
 ): boolean {
-  if (env.ALLOW_UNAUTHENTICATED_TRIPS_API !== undefined) {
-    return env.ALLOW_UNAUTHENTICATED_TRIPS_API === "true";
-  }
-  return env.NODE_ENV !== "production";
+  return env.ALLOW_UNAUTHENTICATED_TRIPS_API === "true";
 }

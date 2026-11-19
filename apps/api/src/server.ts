@@ -39,6 +39,11 @@ const server = app.listen(env.PORT, (error) => {
     process.exit(1);
   }
   logger.info({ port: env.PORT, env: env.NODE_ENV }, "MeroStay API listening");
+  if (unauthenticatedTripsEnabled(env)) {
+    logger.warn(
+      "ALLOW_UNAUTHENTICATED_TRIPS_API=true: trip endpoints are served WITHOUT authentication. Never enable this on a public deployment.",
+    );
+  }
 });
 
 let shuttingDown = false;

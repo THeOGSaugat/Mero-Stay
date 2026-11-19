@@ -127,22 +127,21 @@ describe("temporary unauthenticated trip API (ADR 0005)", () => {
     expect(errorOf(res).code).toBe("TRIPS_API_DISABLED");
   });
 
-  it("is off by default in production, on elsewhere, and can be set explicitly", () => {
-    expect(unauthenticatedTripsEnabled({ NODE_ENV: "production" })).toBe(false);
-    expect(unauthenticatedTripsEnabled({ NODE_ENV: "development" })).toBe(true);
-    expect(unauthenticatedTripsEnabled({ NODE_ENV: "test" })).toBe(true);
-    expect(
-      unauthenticatedTripsEnabled({
-        NODE_ENV: "production",
-        ALLOW_UNAUTHENTICATED_TRIPS_API: "true",
-      }),
-    ).toBe(true);
-    expect(
-      unauthenticatedTripsEnabled({
-        NODE_ENV: "development",
-        ALLOW_UNAUTHENTICATED_TRIPS_API: "false",
-      }),
-    ).toBe(false);
+  it('is OFF unless explicitly set to "true", in every environment', () => {
+    expect(unauthenticatedTripsEnabled({})).toBe(false);
+    expect(unauthenticatedTripsEnabled({ ALLOW_UNAUTHENTICATED_TRIPS_API: "false" })).toBe(false);
+    expect(unauthenticatedTripsEnabled({ ALLOW_UNAUTHENTICATED_TRIPS_API: "true" })).toBe(true);
+  });
+
+  it("the app factory defaults to OFF when no flag is passed", async () => {
+    const appWithoutFlag = createApp({
+      logger: pino({ level: "silent" }),
+      checkDatabase: () => Promise.resolve(),
+      prisma: exploding,
+    });
+    const res = await request(appWithoutFlag).post("/api/v1/trips").send({ userId: uuid });
+    expect(res.status).toBe(403);
+    expect(errorOf(res).code).toBe("TRIPS_API_DISABLED");
   });
 
   it("without a database client only the health endpoints exist", async () => {

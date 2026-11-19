@@ -74,6 +74,14 @@ partner integrations) and are hard to change later.
     not exist; 409 = state/availability conflicts; 422 = a well-formed request that breaks a business
     rule (e.g. `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`). Raw PostgreSQL text never reaches clients.
 
+## Amendment (2026-11-19, before merge): trips API off by default everywhere
+
+Decision 10 originally enabled the unauthenticated trip endpoints whenever `NODE_ENV` was not
+`production`. That default was unsafe: a staging or demo server without `NODE_ENV=production` would
+expose them. They are now **off unless `ALLOW_UNAUTHENTICATED_TRIPS_API=true`**, in every
+environment; the app factory also defaults to off, and the API logs a warning at startup whenever
+the flag is on. Documented in the README deployment notes and `.env.example`.
+
 ## Alternatives considered
 
 - **Money as JSON numbers:** silently wrong above 2^53 and ambiguous about units.

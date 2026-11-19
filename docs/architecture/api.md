@@ -4,7 +4,8 @@ Base path: `/api/v1`. JSON in, JSON out. Design decisions: [ADR 0005](decisions/
 Data model: [data-model.md](data-model.md).
 
 > **Temporary: no authentication.** Trip endpoints take a `userId` in the body and do not check
-> ownership. They are **disabled in production by default** (`ALLOW_UNAUTHENTICATED_TRIPS_API`).
+> ownership. They are **off by default in every environment** and only served when
+> `ALLOW_UNAUTHENTICATED_TRIPS_API=true` (set it only on your own machine).
 > See [How authentication will slot in](#how-authentication-will-slot-in).
 
 ## Conventions
@@ -37,7 +38,7 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | Status | Codes | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Malformed request; `details` lists `{ path, message }` |
-| 403 | `TRIPS_API_DISABLED` | Unauthenticated trip API switched off (production default) |
+| 403 | `TRIPS_API_DISABLED` | Trip API switched off (the default until authentication exists) |
 | 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND` | The resource in the URL does not exist |
 | 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `CONFLICT` | Conflicts with current state or availability |
 | 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_USER`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |

@@ -21,7 +21,7 @@ export interface AppDependencies {
   prisma?: PrismaClient;
   /**
    * Trip endpoints have no authentication yet and take a temporary userId (ADR 0005).
-   * Default: enabled. server.ts disables them in production unless explicitly allowed.
+   * Default: OFF (403 TRIPS_API_DISABLED). Only ALLOW_UNAUTHENTICATED_TRIPS_API=true turns them on.
    */
   unauthenticatedTripsEnabled?: boolean;
   /** Clock, injectable for tests (hold expiry, "today" in Nepal). */
@@ -70,7 +70,7 @@ export function createApp(deps: AppDependencies): Express {
     v1.use(
       createTripsRouter({
         service: createTripsService({ prisma: deps.prisma, now }),
-        unauthenticatedAccessEnabled: deps.unauthenticatedTripsEnabled ?? true,
+        unauthenticatedAccessEnabled: deps.unauthenticatedTripsEnabled ?? false,
       }),
     );
     app.use("/api/v1", v1);

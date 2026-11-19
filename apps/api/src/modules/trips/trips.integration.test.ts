@@ -15,6 +15,7 @@ const app = createApp({
   logger: pino({ level: "silent" }),
   checkDatabase: () => Promise.resolve(),
   prisma,
+  unauthenticatedTripsEnabled: true,
 });
 let world: World;
 /** The hotel + bus + guide trip from the first scenario (later used to test expiry of a mixed trip). */
@@ -638,6 +639,7 @@ describe("hold expiry", () => {
       logger: pino({ level: "silent" }),
       checkDatabase: () => Promise.resolve(),
       prisma,
+      unauthenticatedTripsEnabled: true,
       now: later,
     });
     const edit = await request(lateApp)
