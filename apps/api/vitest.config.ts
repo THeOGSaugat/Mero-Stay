@@ -16,7 +16,14 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["src/**/*.integration.test.ts"],
-          testTimeout: 15_000,
+          // Wipes and migrates the TEST database once per run (src/testing/global-setup.ts).
+          globalSetup: ["src/testing/global-setup.ts"],
+          // Never let test workers read the developer's .env (dev database).
+          env: { MEROSTAY_SKIP_ENV_FILE: "1" },
+          // One shared database: run files one after another.
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 120_000,
         },
       },
     ],

@@ -26,6 +26,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "npm run db:generate -w @merostay/api",
+    "db:migrate": "npm run db:migrate -w @merostay/api",
+    "db:migrate:status": "npm run db:migrate:status -w @merostay/api",
+    "db:seed": "npm run db:seed -w @merostay/api",
     "db:check": "npm run db:check -w @merostay/api"
   },
   "devDependencies": {
