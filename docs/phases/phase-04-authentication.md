@@ -1,6 +1,6 @@
 # Phase 04: Authentication & Ownership
 
-- **Status:** Awaiting Neon test-branch verification and owner review (see "Verification")
+- **Status:** Approved pending merge (Neon verification passed 2026-11-20)
 - **Branch:** `phase/04-authentication`
 - **Date:** 2026-11-20
 
@@ -42,10 +42,19 @@ OAuth, 2FA, email verification, password reset.
 | `lint` / `typecheck` / `format:check` / `build` | Pass |
 | Unit tests | API 153/153 (12 files), web 16/16 |
 | Integration, throwaway PostgreSQL 17 | **118/118** (7 files: auth, trips incl. ownership, listings, Phase 2 schema/constraints/seed) |
-| **Integration, Neon `test` branch** | **NOT RUN: blocked.** Neon rejected the test branch's stored credentials (`28P01 password authentication failed`, both pooled and direct; dev branch connects fine; `.env.test` unchanged since 2026-11-19). Needs a fresh connection string from the owner; results will be added here. |
+| **Integration, Neon `test` branch** | **118/118 (7 files), 548 s**, on branch `ep-fragrant-dream-…` (separate from dev `ep-muddy-sunset-…`). Afterwards: dev branch untouched (0 users/sessions/trips), test branch holds the test data. |
 | Migration on dev Neon | Applied; status up to date; drift check 0 |
 | Mutation checks | Owner filter removed from reads/locks → 8 failures; CSRF check disabled → 2 failures |
 | Built server smoke test | Refuses to start without `SESSION_SECRET`; anonymous trip 401; register 201 (HttpOnly cookie); trip write without CSRF 403, with CSRF 201; logout 204; `/auth/me` then 401; old flag set to `true` has no effect |
+
+### Neon verification history
+
+1. First attempt: blocked before any test ran. Neon rejected the old test-branch credentials (`28P01`).
+2. Second attempt: **refused by the test-database guard** because the new `TEST_DATABASE_URL` pointed at
+   the dev database (same host, database and credentials; the Neon Connect dialog defaults to the main
+   branch). No test ran and nothing was wiped. This is the guard working as designed.
+3. Third attempt, with the `test` branch's own connection strings: guard passed (pooled and direct on
+   the same database, different from dev), **118/118 passed**.
 
 ## Security checklist
 
@@ -62,7 +71,7 @@ reset, no 2FA, in-memory rate limits, `trust proxy`, expired-session cleanup
 
 ## Known limitations / follow-ups
 
-1. **Neon test-branch credentials** must be refreshed before the Neon run (see above).
+1. ~~Neon test-branch credentials~~: refreshed by the owner; Neon run passed (see above).
 2. Your local `apps/api/.env` needs `SESSION_SECRET` before `npm run dev` (the API refuses to start
    without it): `SESSION_SECRET=$(openssl rand -base64 48)`.
 3. `packages/shared` moved to the web phase (no second consumer of the Zod schemas yet).
