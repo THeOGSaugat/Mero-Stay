@@ -3,13 +3,11 @@ import { currencyCodeSchema, isoDateSchema, uuidSchema } from "../../lib/validat
 import { PAYMENT_METHODS } from "./trip-pricing.js";
 
 /**
- * POST /api/v1/trips
- * `userId` is TEMPORARY: there is no authentication yet (ADR 0005). When auth arrives, the owner
- * comes from the session and this field is ignored, so clients keep working.
+ * POST /api/v1/trips. The owner is the logged-in user (ADR 0006); a body that still sends
+ * `userId` is rejected by `.strict()` with 400 VALIDATION_ERROR.
  */
 export const createTripBodySchema = z
   .object({
-    userId: uuidSchema,
     currency: currencyCodeSchema.default("NPR"),
     contact: z
       .object({

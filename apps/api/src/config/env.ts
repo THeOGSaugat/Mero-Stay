@@ -1,6 +1,14 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import {
+  DEFAULT_RATE_LIMITS,
+  DEFAULT_SESSION_TTL_HOURS,
+  type AuthConfig,
+} from "../modules/auth/auth.config.js";
+
+/** Treat "VAR=" (empty) like an unset variable. */
+const emptyAsUndefined = (value: unknown) => (value === "" ? undefined : value);
 
 /**
  * Environment variables the API needs. Validated once at startup so that a
@@ -18,10 +26,23 @@ const envSchema = z
       .string({ error: "is required" })
       .regex(/^postgres(ql)?:\/\//, { error: "must be a postgresql:// connection string" }),
     /**
-     * TEMPORARY until authentication exists (ADR 0005). The trip endpoints take a userId in the
-     * body and check no ownership. OFF unless set to exactly "true", in EVERY environment.
+     * Signs CSRF tokens (ADR 0006). Required by the API server (not by CLI scripts).
+     * Generate with: openssl rand -base64 48
      */
-    ALLOW_UNAUTHENTICATED_TRIPS_API: z.enum(["true", "false"]).optional(),
+    SESSION_SECRET: z.preprocess(
+      emptyAsUndefined,
+      z
+        .string()
+        .min(32, { error: "must be at least 32 characters (openssl rand -base64 48)" })
+        .optional(),
+    ),
+    /** Absolute session lifetime in hours (default 168 = 7 days). */
+    SESSION_TTL_HOURS: z.preprocess(
+      emptyAsUndefined,
+      z.coerce.number().int().min(1).max(720).default(DEFAULT_SESSION_TTL_HOURS),
+    ),
+    /** Send the session cookie only over HTTPS. Default: true in production, false otherwise. */
+    SESSION_COOKIE_SECURE: z.preprocess(emptyAsUndefined, z.enum(["true", "false"]).optional()),
   })
   .superRefine((env, ctx) => {
     // Neon only accepts TLS connections. In production, refuse to start without it
@@ -34,6 +55,13 @@ const envSchema = z
         code: "custom",
         path: ["DATABASE_URL"],
         message: "must include sslmode=require in production",
+      });
+    }
+    if (env.NODE_ENV === "production" && env.SESSION_COOKIE_SECURE === "false") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SESSION_COOKIE_SECURE"],
+        message: "cannot be false in production (session cookies must be HTTPS-only)",
       });
     }
   });
@@ -72,12 +100,22 @@ export function loadEnvFileIfPresent(): void {
 }
 
 /**
- * Whether the temporary, unauthenticated trip endpoints are served. Explicit opt-in only:
- * unset or "false" → off, regardless of NODE_ENV (a staging server with the wrong NODE_ENV must
- * not expose them by accident).
+ * Auth settings for the API server. Throws (and the server refuses to start) without a
+ * SESSION_SECRET, so a deployment can never run with a missing or guessable secret.
  */
-export function unauthenticatedTripsEnabled(
-  env: Pick<Env, "ALLOW_UNAUTHENTICATED_TRIPS_API">,
-): boolean {
-  return env.ALLOW_UNAUTHENTICATED_TRIPS_API === "true";
+export function authConfigFromEnv(env: Env): AuthConfig {
+  if (!env.SESSION_SECRET) {
+    throw new Error(
+      "Invalid environment configuration:\n  - SESSION_SECRET: is required (generate with: openssl rand -base64 48)",
+    );
+  }
+  return {
+    sessionSecret: env.SESSION_SECRET,
+    sessionTtlMs: env.SESSION_TTL_HOURS * 60 * 60 * 1000,
+    cookieSecure:
+      env.SESSION_COOKIE_SECURE === undefined
+        ? env.NODE_ENV === "production"
+        : env.SESSION_COOKIE_SECURE === "true",
+    rateLimits: DEFAULT_RATE_LIMITS,
+  };
 }

@@ -1,39 +1,23 @@
-import { Router, type RequestHandler } from "express";
-import { AppError } from "../../lib/errors.js";
+import { Router } from "express";
+import type { AuthMiddleware } from "../auth/auth.middleware.js";
 import { createTripsController } from "./trips.controller.js";
 import type { TripsService } from "./trips.service.js";
 
 export interface TripsRouterDeps {
   service: TripsService;
-  /**
-   * Trip endpoints have NO authentication yet (a later phase) and take a temporary `userId`.
-   * They are enabled by default only outside production (ADR 0005).
-   */
-  unauthenticatedAccessEnabled: boolean;
+  auth: AuthMiddleware;
 }
 
-/** Trip and booking-item endpoints. Mounted under /api/v1. */
-export function createTripsRouter({
-  service,
-  unauthenticatedAccessEnabled,
-}: TripsRouterDeps): Router {
+/**
+ * Trip and booking-item endpoints, mounted under /api/v1. ALWAYS authenticated (ADR 0006):
+ * a valid session (401 otherwise) and, for state-changing requests, a valid CSRF token (403).
+ * Ownership is enforced inside the service: another user's trip is a 404.
+ */
+export function createTripsRouter({ service, auth }: TripsRouterDeps): Router {
   const controller = createTripsController(service);
   const router = Router();
 
-  const guard: RequestHandler = (_req, _res, next) => {
-    if (!unauthenticatedAccessEnabled) {
-      next(
-        new AppError(
-          403,
-          "TRIPS_API_DISABLED",
-          "Trip endpoints are disabled until authentication is available.",
-        ),
-      );
-      return;
-    }
-    next();
-  };
-  router.use("/trips", guard);
+  router.use("/trips", auth.loadSession, auth.requireAuth, auth.requireCsrf);
 
   router.post("/trips", controller.create);
   router.get("/trips/:id", controller.get);

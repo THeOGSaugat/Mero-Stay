@@ -75,6 +75,7 @@ describe("migrations", () => {
         "provider_types",
         "providers",
         "reviews",
+        "sessions",
         "tour_details",
         "trips",
         "users",

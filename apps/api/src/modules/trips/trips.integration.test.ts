@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { pino } from "pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -5,6 +6,7 @@ import { createApp } from "../../app.js";
 import { toDbDate } from "../../domain/dates.js";
 import type { ErrorResponseBody } from "../../lib/errors.js";
 import { createPrismaClient } from "../../lib/prisma.js";
+import { testAuthConfig } from "../../testing/auth-config.js";
 import { createWorld, type World } from "../../testing/fixtures.js";
 import { countMoneyFields, moneyBoundaryViolations } from "../../testing/json-safety.js";
 import { resolveTestDatabase } from "../../testing/test-database.js";
@@ -15,9 +17,39 @@ const app = createApp({
   logger: pino({ level: "silent" }),
   checkDatabase: () => Promise.resolve(),
   prisma,
-  unauthenticatedTripsEnabled: true,
+  auth: testAuthConfig(),
 });
 let world: World;
+
+/** A logged-in user: cookie-keeping agent + CSRF token (ADR 0006). */
+interface Client {
+  agent: ReturnType<typeof request.agent>;
+  csrfToken: string;
+  userId: string;
+  /** "name=value" of the session cookie, for requests through another app instance. */
+  cookie: string;
+}
+
+async function signUp(label: string): Promise<Client> {
+  const agent = request.agent(app);
+  const res = await agent.post("/api/v1/auth/register").send({
+    email: `${label}-${randomUUID().slice(0, 8)}@test.local`,
+    password: "a long test passphrase",
+    fullName: label,
+  });
+  expect(res.status).toBe(201);
+  const body = res.body as { data: { user: { id: string }; csrfToken: string } };
+  const setCookie = ([] as string[]).concat(res.headers["set-cookie"] ?? []);
+  return {
+    agent,
+    csrfToken: body.data.csrfToken,
+    userId: body.data.user.id,
+    cookie: setCookie[0]?.split(";")[0] ?? "",
+  };
+}
+
+/** The trip owner used throughout this file. */
+let me: Client;
 /** The hotel + bus + guide trip from the first scenario (later used to test expiry of a mixed trip). */
 let multiVerticalTripId: string;
 
@@ -29,9 +61,6 @@ interface Money {
   serviceChargeMinor: string;
   taxMinor: string;
   totalMinor: string;
-  commissionRateBps: number;
-  commissionMinor: string;
-  providerPayoutMinor: string;
 }
 interface TripItem {
   id: string;
@@ -39,8 +68,6 @@ interface TripItem {
   listing: { id: string; listingType: string };
   paymentMethod: string;
   paymentStatus: string;
-  commissionStatus: string;
-  payoutStatus: string;
   quantity: number;
   lines: { date: string; units: number; unitPriceMinor: string; amountMinor: string }[];
   money: Money;
@@ -59,16 +86,35 @@ interface Trip {
 
 const errorOf = (res: request.Response) => (res.body as ErrorResponseBody).error;
 
-async function call(method: "get" | "post" | "patch" | "delete", url: string, body?: object) {
-  const req = request(app)[method](url);
+async function call(
+  method: "get" | "post" | "patch" | "delete",
+  url: string,
+  body?: object,
+  as: Client = me,
+) {
+  const req = as.agent[method](url).set("X-CSRF-Token", as.csrfToken);
   const res = body ? await req.send(body) : await req;
   responses.push(res.body);
   return res;
 }
+
+/** Commission/payout data is not in the customer view, so it is checked in the database. */
+async function dbItem(id: string) {
+  return prisma.bookingItem.findUniqueOrThrow({
+    where: { id },
+    select: {
+      commissionRateBps: true,
+      commissionMinor: true,
+      providerPayoutMinor: true,
+      commissionStatus: true,
+      payoutStatus: true,
+    },
+  });
+}
 const tripOf = (res: request.Response) => (res.body as { data: Trip }).data;
 
 async function newTrip(currency = "NPR"): Promise<Trip> {
-  const res = await call("post", "/api/v1/trips", { userId: world.users.customer.id, currency });
+  const res = await call("post", "/api/v1/trips", { currency });
   expect(res.status).toBe(201);
   return tripOf(res);
 }
@@ -102,6 +148,7 @@ async function holdLeaks() {
 
 beforeAll(async () => {
   world = await createWorld(prisma);
+  me = await signUp("owner");
 });
 
 afterAll(async () => {
@@ -135,19 +182,24 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
       { date: world.day(1), units: 1, unitPriceMinor: "420000", amountMinor: "420000" },
     ]);
     // 7,700 + 10% SC 770 + 13% VAT on 8,470 = 1,101.10 → 9,571.10; commission 15% × 7,700 = 1,155.
-    expect(item.money).toMatchObject({
+    expect(item.money).toEqual({
       subtotalMinor: "770000",
+      serviceChargeRateBps: 1000,
       serviceChargeMinor: "77000",
+      taxRateBps: 1300,
       taxMinor: "110110",
       totalMinor: "957110",
-      commissionRateBps: 1500,
-      commissionMinor: "115500",
-      providerPayoutMinor: "841610",
+      refundedMinor: "0",
     });
     expect(item).toMatchObject({
       status: "PENDING",
       paymentMethod: "pay_at_property",
       paymentStatus: "PAY_AT_PROPERTY",
+    });
+    expect(await dbItem(item.id)).toEqual({
+      commissionRateBps: 1500,
+      commissionMinor: 115_500n,
+      providerPayoutMinor: 841_610n,
       commissionStatus: "PENDING",
       payoutStatus: "NOT_APPLICABLE",
     });
@@ -179,13 +231,15 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
       "bus_ticket",
       "guide_service",
     ]);
-    expect(items[1]!.money).toMatchObject({
-      subtotalMinor: "360000",
-      commissionMinor: "54000",
-      providerPayoutMinor: "306000",
+    expect(items[1]!.money).toMatchObject({ subtotalMinor: "360000", totalMinor: "360000" });
+    expect(items[1]).toMatchObject({ paymentStatus: "UNPAID" });
+    expect(await dbItem(items[1]!.id)).toMatchObject({
+      commissionMinor: 54_000n,
+      providerPayoutMinor: 306_000n,
+      payoutStatus: "PENDING",
     });
-    expect(items[1]).toMatchObject({ paymentStatus: "UNPAID", payoutStatus: "PENDING" });
-    expect(items[2]!.money).toMatchObject({ subtotalMinor: "900000", commissionMinor: "135000" });
+    expect(items[2]!.money).toMatchObject({ subtotalMinor: "900000" });
+    expect(await dbItem(items[2]!.id)).toMatchObject({ commissionMinor: 135_000n });
     expect(items[2]!.quantity).toBe(3);
   });
 
@@ -196,13 +250,12 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
       serviceChargeMinor: "77000",
       taxMinor: "110110",
       totalMinor: "2217110", // 9,571.10 + 3,600 + 9,000
-      commissionTotalMinor: "304500", // 1,155 + 540 + 1,350
       payOnlineMinor: "1260000",
       payAtPropertyMinor: "957110",
-      commissionFromPayoutsMinor: "189000", // online: deducted from payouts
-      commissionInvoicedMinor: "115500", // pay at property: invoiced
-      providerPayoutsMinor: "1071000",
     });
+    // Commission is stored per item and summed on the trip (not in the customer view).
+    const stored = await prisma.trip.findUniqueOrThrow({ where: { id: trip.id } });
+    expect(stored.commissionTotalMinor).toBe(304_500n); // 1,155 + 540 + 1,350
   });
 
   it("holds exactly the booked units in inventory", async () => {
@@ -245,7 +298,6 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
     ).data;
     expect(quoted.lines.map((l) => l.candidateIndex)).toEqual([null, null, null, 0]);
     expect(quoted.totals.subtotalMinor).toBe("2210000"); // + 1,800
-    expect(quoted.totals.commissionTotalMinor).toBe("331500"); // + 270
 
     // Nothing was written: the trip and the inventory are unchanged.
     expect(tripOf(await call("get", `/api/v1/trips/${trip.id}`)).totals).toEqual(trip.totals);
@@ -261,16 +313,14 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
     expect(confirmed.expiresAt).not.toBeNull(); // payment window
 
     const [hotel, bus, guide] = confirmed.items;
-    expect(hotel).toMatchObject({
-      status: "CONFIRMED",
+    expect(hotel).toMatchObject({ status: "CONFIRMED", paymentStatus: "PAY_AT_PROPERTY" });
+    expect(await dbItem(hotel!.id)).toMatchObject({
       commissionStatus: "INVOICED",
-      paymentStatus: "PAY_AT_PROPERTY",
       payoutStatus: "NOT_APPLICABLE",
     });
-    for (const online of [bus, guide]) {
-      expect(online).toMatchObject({
-        status: "PENDING",
-        paymentStatus: "UNPAID",
+    for (const online of [bus!, guide!]) {
+      expect(online).toMatchObject({ status: "PENDING", paymentStatus: "UNPAID" });
+      expect(await dbItem(online.id)).toMatchObject({
         commissionStatus: "PENDING",
         payoutStatus: "PENDING",
       });
@@ -515,11 +565,12 @@ describe("rules that return 404 / 409 / 422", () => {
     expect(errorOf(res).code).toBe("CURRENCY_MISMATCH");
   });
 
-  it("rejects an unknown user, unknown trip, unknown item and confirming an empty trip", async () => {
+  it("rejects a body that still sends userId, an unknown trip, an unknown item and confirming an empty trip", async () => {
+    // The temporary userId is gone: the owner comes from the session (ADR 0006).
     const user = await call("post", "/api/v1/trips", {
       userId: "00000000-0000-4000-8000-000000000000",
     });
-    expect([user.status, errorOf(user).code]).toEqual([422, "UNKNOWN_USER"]);
+    expect([user.status, errorOf(user).code]).toEqual([400, "VALIDATION_ERROR"]);
     const trip = await call("get", "/api/v1/trips/00000000-0000-4000-8000-000000000000");
     expect([trip.status, errorOf(trip).code]).toEqual([404, "TRIP_NOT_FOUND"]);
     const t = await newTrip();
@@ -579,10 +630,8 @@ describe("PATCH and DELETE items: money and holds are recomputed", () => {
     const res = await call("patch", `/api/v1/trips/${tripId}/items/${itemId}`, {
       paymentMethod: "pay_at_property",
     });
-    expect(tripOf(res).items[0]).toMatchObject({
-      paymentStatus: "PAY_AT_PROPERTY",
-      payoutStatus: "NOT_APPLICABLE",
-    });
+    expect(tripOf(res).items[0]).toMatchObject({ paymentStatus: "PAY_AT_PROPERTY" });
+    expect(await dbItem(itemId)).toMatchObject({ payoutStatus: "NOT_APPLICABLE" });
     expect(tripOf(res).totals).toMatchObject({
       payAtPropertyMinor: tripOf(res).totals.totalMinor,
       payOnlineMinor: "0",
@@ -599,12 +648,95 @@ describe("PATCH and DELETE items: money and holds are recomputed", () => {
   });
 });
 
+describe("ownership: a trip is visible and editable only by its owner (ADR 0006)", () => {
+  let tripId: string;
+  let itemId: string;
+  let stranger: Client;
+
+  beforeAll(async () => {
+    stranger = await signUp("stranger");
+    const t = await newTrip();
+    tripId = t.id;
+    const added = await addItem(tripId, {
+      listingId: world.listings.bus.id,
+      startDate: world.day(1),
+      quantity: 1,
+      paymentMethod: "online",
+    });
+    itemId = tripOf(added).items[0]!.id;
+  });
+
+  it.each([
+    ["read", "get", () => `/api/v1/trips/${tripId}`, undefined],
+    [
+      "add an item to",
+      "post",
+      () => `/api/v1/trips/${tripId}/items`,
+      { listingId: "", startDate: "", quantity: 1, paymentMethod: "online" },
+    ],
+    [
+      "change an item of",
+      "patch",
+      () => `/api/v1/trips/${tripId}/items/${itemId}`,
+      { quantity: 2 },
+    ],
+    ["delete an item of", "delete", () => `/api/v1/trips/${tripId}/items/${itemId}`, undefined],
+    ["quote", "post", () => `/api/v1/trips/${tripId}/quote`, {}],
+    ["confirm", "post", () => `/api/v1/trips/${tripId}/confirm`, undefined],
+  ] as const)(
+    "another user cannot %s my trip: 404 TRIP_NOT_FOUND, same as a trip that does not exist",
+    async (_label, method, url, body) => {
+      const payload =
+        body && "listingId" in body
+          ? { ...body, listingId: world.listings.bus.id, startDate: world.day(1) }
+          : body;
+      const res = await call(method, url(), payload, stranger);
+      expect(res.status).toBe(404);
+      expect(errorOf(res)).toEqual({ code: "TRIP_NOT_FOUND", message: "Trip not found." });
+
+      const missing = await call(method, url().replace(tripId, randomUUID()), payload, stranger);
+      expect(missing.body).toEqual(res.body); // indistinguishable: existence does not leak
+    },
+  );
+
+  it("the stranger's attempts changed nothing", async () => {
+    const trip = tripOf(await call("get", `/api/v1/trips/${tripId}`));
+    expect(trip.status).toBe("DRAFT");
+    expect(trip.items.map((i) => [i.id, i.quantity])).toEqual([[itemId, 1]]);
+  });
+
+  it("without a session every trip endpoint is 401", async () => {
+    const anonymous = await request(app).get(`/api/v1/trips/${tripId}`);
+    expect([anonymous.status, errorOf(anonymous).code]).toEqual([401, "UNAUTHENTICATED"]);
+  });
+
+  it("with a session but no CSRF token, writes are refused (403) and reads still work", async () => {
+    const write = await me.agent.post(`/api/v1/trips/${tripId}/quote`).send({});
+    expect([write.status, errorOf(write).code]).toEqual([403, "CSRF_TOKEN_INVALID"]);
+    const forged = await me.agent
+      .post(`/api/v1/trips/${tripId}/quote`)
+      .set("X-CSRF-Token", stranger.csrfToken)
+      .send({});
+    expect(forged.status).toBe(403); // another session's token does not work
+    expect((await me.agent.get(`/api/v1/trips/${tripId}`)).status).toBe(200);
+  });
+
+  it("each user only ever sees their own trips: the stranger can still use their own", async () => {
+    const own = await call("post", "/api/v1/trips", {}, stranger);
+    expect(own.status).toBe(201);
+    expect((await call("get", `/api/v1/trips/${tripOf(own).id}`, undefined, stranger)).status).toBe(
+      200,
+    );
+    expect((await call("get", `/api/v1/trips/${tripOf(own).id}`)).status).toBe(404); // and I can't see theirs
+  });
+});
+
 describe("invariants after all API writes", () => {
   it("every trip's stored totals equal the sum of its active items", async () => {
     const mismatches = await prisma.$queryRaw<{ reference: string }[]>`
       SELECT t.reference FROM trips t
       JOIN booking_items bi ON bi.trip_id = t.id AND bi.status NOT IN ('CANCELLED', 'EXPIRED')
-      WHERE t.customer_id = ${world.users.customer.id}::uuid
+      WHERE t.customer_id = ${me.userId}::uuid
       GROUP BY t.id
       HAVING t.subtotal_minor <> SUM(bi.subtotal_minor) OR t.total_minor <> SUM(bi.total_minor)
           OR t.commission_total_minor <> SUM(bi.commission_minor)`;
@@ -613,6 +745,17 @@ describe("invariants after all API writes", () => {
 
   it("inventory holds equal the units of active booking items (nothing leaked, nothing lost)", async () => {
     expect(await holdLeaks()).toEqual([]);
+  });
+
+  it("no customer response ever contained commission or provider-payout data", () => {
+    const leaks = JSON.stringify(responses).match(
+      /"[A-Za-z]*(?:[Cc]ommission|[Pp]ayout)[A-Za-z]*"\s*:/g,
+    );
+    expect(leaks).toBeNull();
+  });
+
+  it("no response ever contained a password hash", () => {
+    expect(JSON.stringify(responses)).not.toMatch(/argon2|passwordHash|password_hash/);
   });
 
   it("every money field in every response was a digit string with its currency, and JSON-safe", () => {
@@ -639,11 +782,13 @@ describe("hold expiry", () => {
       logger: pino({ level: "silent" }),
       checkDatabase: () => Promise.resolve(),
       prisma,
-      unauthenticatedTripsEnabled: true,
+      auth: testAuthConfig(),
       now: later,
     });
     const edit = await request(lateApp)
       .post(`/api/v1/trips/${t.id}/items`)
+      .set("Cookie", me.cookie)
+      .set("X-CSRF-Token", me.csrfToken)
       .send({
         listingId: world.listings.bus.id,
         startDate: world.day(1),
@@ -662,7 +807,10 @@ describe("hold expiry", () => {
     expect(after.status).toBe("EXPIRED");
     expect(after.items.map((i) => i.status)).toEqual(["EXPIRED"]);
     expect(after.totalMinor).toBe(0n);
-    expect(await booked(world.listings.bus.id, 1)).toBe(held - 3);
+    // Its 3 seats are back (other stale drafts on the same date may have released more), and every
+    // remaining hold matches an active item exactly.
+    expect(await booked(world.listings.bus.id, 1)).toBeLessThanOrEqual(held - 3);
+    expect(await holdLeaks()).toEqual([]);
 
     // The mixed trip (hotel paid at property = CONFIRMED; bus + guide online = PENDING) keeps the
     // hotel, expires the unpaid online items, and becomes CONFIRMED with hotel-only totals.

@@ -10,8 +10,13 @@ import { ACTIVE_ITEM_STATUSES, type TripWithItems } from "./trips.repository.js"
 import type { TripQuote } from "./trips.service.js";
 
 /**
- * Trip and quote response shapes. Every money field is a digit string in minor units ("115500" =
- * Rs 1,155.00), next to `currency` and `currencyExponent` (ADR 0005). Never a JSON number.
+ * Trip and quote response shapes for the CUSTOMER who owns the trip. Every money field is a digit
+ * string in minor units ("115500" = Rs 1,155.00), next to `currency` and `currencyExponent`
+ * (ADR 0005). Never a JSON number.
+ *
+ * Commission and provider-payout data are MeroStay/provider business information and are NOT part
+ * of the customer view (ADR 0006): no commission rate/amount, provider payout, commission status
+ * or payout status. They remain stored on each item; admin/partner views arrive with their phases.
  */
 
 type Item = TripWithItems["items"][number];
@@ -24,9 +29,6 @@ function serializeMoney(priced: Omit<PricedItem, "lines" | "currency" | "quantit
     taxRateBps: priced.taxRateBps,
     taxMinor: minorToString(priced.taxMinor),
     totalMinor: minorToString(priced.totalMinor),
-    commissionRateBps: priced.commissionRateBps,
-    commissionMinor: minorToString(priced.commissionMinor),
-    providerPayoutMinor: minorToString(priced.providerPayoutMinor),
   };
 }
 
@@ -39,18 +41,15 @@ function serializeLines(lines: PricedItem["lines"]) {
   }));
 }
 
+/** What the customer pays: totals and the split between paying online and at the property. */
 export function serializeTotals(totals: TripQuoteTotals) {
   return {
     subtotalMinor: minorToString(totals.subtotalMinor),
     serviceChargeMinor: minorToString(totals.serviceChargeMinor),
     taxMinor: minorToString(totals.taxMinor),
     totalMinor: minorToString(totals.totalMinor),
-    commissionTotalMinor: minorToString(totals.commissionTotalMinor),
     payOnlineMinor: minorToString(totals.payOnlineMinor),
     payAtPropertyMinor: minorToString(totals.payAtPropertyMinor),
-    commissionFromPayoutsMinor: minorToString(totals.commissionFromPayoutsMinor),
-    commissionInvoicedMinor: minorToString(totals.commissionInvoicedMinor),
-    providerPayoutsMinor: minorToString(totals.providerPayoutsMinor),
   };
 }
 
@@ -71,8 +70,6 @@ export function serializeItem(item: Item) {
     quantity: item.quantity,
     paymentMethod: paymentMethodOf(item.paymentStatus),
     paymentStatus: item.paymentStatus,
-    commissionStatus: item.commissionStatus,
-    payoutStatus: item.payoutStatus,
     ...currencyInfo(item.currency),
     lines: item.slots.map((slot) => ({
       date: fromDbDate(slot.serviceDate),
@@ -105,18 +102,15 @@ export function serializeTrip(trip: TripWithItems) {
       id: trip.id,
       reference: trip.reference,
       status: trip.status,
-      /** TEMPORARY until authentication: the trip owner as supplied when the trip was created. */
-      userId: trip.customerId,
       ...currencyInfo(trip.currency),
       contact: { name: trip.contactName, phone: trip.contactPhone, email: trip.contactEmail },
       totals: {
         ...serializeTotals(split),
-        // Stored aggregates are the source of truth for these five; they equal the item sums.
+        // Stored aggregates are the source of truth for these four; they equal the item sums.
         subtotalMinor: minorToString(trip.subtotalMinor),
         serviceChargeMinor: minorToString(trip.serviceChargeMinor),
         taxMinor: minorToString(trip.taxMinor),
         totalMinor: minorToString(trip.totalMinor),
-        commissionTotalMinor: minorToString(trip.commissionTotalMinor),
       },
       items: trip.items.map(serializeItem),
       expiresAt: trip.expiresAt?.toISOString() ?? null,

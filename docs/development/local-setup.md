@@ -55,6 +55,8 @@ npm install
 
 # 3. Create your local environment files and paste the strings in
 cp apps/api/.env.example apps/api/.env
+#    edit apps/api/.env: also set SESSION_SECRET (required by the API server):
+#      SESSION_SECRET=$(openssl rand -base64 48)
 cp apps/web/.env.example apps/web/.env.local
 #    edit apps/api/.env: paste the string as DATABASE_URL (the only value to change)
 
@@ -103,7 +105,9 @@ Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they 
 | `apps/api/.env` | `LOG_LEVEL` | `fatal` … `trace`, or `silent` (default `info`) |
 | `apps/api/.env.test` | `TEST_DATABASE_URL` | Pooled URL of the **test** Neon branch. Wiped by every integration test run |
 | `apps/api/.env.test` | `TEST_DATABASE_URL_UNPOOLED` | *Optional.* Derived from `TEST_DATABASE_URL` like the dev one |
-| `apps/api/.env` | `ALLOW_UNAUTHENTICATED_TRIPS_API` | *Temporary, until auth (Phase 4).* Default **`false`** (also when unset) in **every** environment: trip endpoints return `403 TRIPS_API_DISABLED`. Set `true` only locally to try the trip API; never on a public deployment |
+| `apps/api/.env` | `SESSION_SECRET` | **Required by the API server.** ≥ 32 characters; signs CSRF tokens. Generate: `openssl rand -base64 48`. Never commit it |
+| `apps/api/.env` | `SESSION_TTL_HOURS` | *Optional.* Session lifetime in hours (default 168 = 7 days) |
+| `apps/api/.env` | `SESSION_COOKIE_SECURE` | *Optional.* HTTPS-only cookie. Default `true` in production (where `false` is refused), `false` locally |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
 The API validates its variables on startup and exits with a clear message listing any
@@ -155,6 +159,8 @@ Playwright HTML report: `npx playwright show-report`.
 
 | Problem | Fix |
 |---|---|
+| API exits: `SESSION_SECRET: is required` | Add `SESSION_SECRET=$(openssl rand -base64 48)` to `apps/api/.env` |
+| Trip requests return `401` / `403 CSRF_TOKEN_INVALID` | Log in first (`POST /api/v1/auth/login`), keep the cookie, and send the `csrfToken` as `X-CSRF-Token` on writes. See [api.md](../architecture/api.md#authentication-adr-0006) |
 | `TEST_DATABASE_URL is not set` | Create the Neon `test` branch and `apps/api/.env.test` (see "Test database") |
 | `Refusing to run: TEST_DATABASE_URL points at the same database as DATABASE_URL` | Your test URL is your dev database. Use the `test` branch's connection string |
 | `db:seed`: `Sample data is already present` | Expected on a second run; nothing was changed |

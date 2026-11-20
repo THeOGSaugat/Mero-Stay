@@ -33,17 +33,33 @@ export const ACTIVE_ITEM_STATUSES = [
   "NO_SHOW",
 ] as const;
 
-export async function findTrip(db: Db, id: string): Promise<TripWithItems | null> {
-  return db.trip.findUnique({ where: { id }, include: TRIP_INCLUDE });
+/**
+ * A trip by id, ONLY if it belongs to `customerId`. Another user's trip is indistinguishable from a
+ * missing one (callers turn null into 404), so trip existence never leaks across accounts.
+ */
+export async function findTrip(
+  db: Db,
+  id: string,
+  customerId: string,
+): Promise<TripWithItems | null> {
+  return db.trip.findFirst({ where: { id, customerId }, include: TRIP_INCLUDE });
 }
 
 /**
  * Row-locks the trip until the transaction ends (SELECT ... FOR UPDATE), so concurrent edits of the
  * same trip run one after another and trip totals can never be computed from a stale item list.
  */
-export async function lockTrip(tx: Prisma.TransactionClient, id: string): Promise<boolean> {
-  const rows = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id::text AS id FROM trips WHERE id = ${id}::uuid FOR UPDATE`;
+export async function lockTrip(
+  tx: Prisma.TransactionClient,
+  id: string,
+  customerId?: string,
+): Promise<boolean> {
+  // Owner-scoped when customerId is given (API requests); unscoped only for the system sweeper.
+  const rows = customerId
+    ? await tx.$queryRaw<{ id: string }[]>`
+        SELECT id::text AS id FROM trips WHERE id = ${id}::uuid AND customer_id = ${customerId}::uuid FOR UPDATE`
+    : await tx.$queryRaw<{ id: string }[]>`
+        SELECT id::text AS id FROM trips WHERE id = ${id}::uuid FOR UPDATE`;
   return rows.length === 1;
 }
 

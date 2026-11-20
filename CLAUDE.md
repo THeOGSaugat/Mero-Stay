@@ -194,6 +194,8 @@ mero-stay/
   `currencyExponent`, produced by explicit serializers (ADR 0005). Never a JSON number; never a global BigInt patch.
 - **Database constraint violations are mapped centrally** (`lib/database-errors.ts`) to 409/422; raw PostgreSQL text never reaches clients.
 - **Trip writes** run in one transaction holding a row lock on the trip; inventory is reserved by atomic increments that the overbooking CHECK guards.
+- **Trips are always authenticated and owner-scoped in the data layer** (`WHERE customer_id = session user`); another
+  user's trip is a 404, never a 403. Customer responses never include commission or provider-payout data.
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -233,8 +235,10 @@ mero-stay/
 - **Secrets:** never hard-code or log API keys, passwords, tokens or connection strings. Load from
   environment variables, validated at startup with Zod. Commit only `.env.example` with placeholders.
 - **Passwords:** hash with Argon2id (or bcrypt cost ≥ 12). Never store or log plaintext.
-- **Sessions/auth:** tokens in `httpOnly`, `Secure`, `SameSite` cookies — not `localStorage`.
-  Short-lived access tokens + rotating refresh tokens. Final design decided and documented in the auth phase.
+- **Sessions/auth (ADR 0006):** opaque session token in an `httpOnly`, `SameSite=Lax` cookie (`Secure` +
+  `__Host-` prefix in production); only its SHA-256 is stored in `sessions`; logout deletes the row. State-changing
+  requests with a session need `X-CSRF-Token`. Passwords: Argon2id (node:crypto, OWASP parameters). Never put
+  tokens in `localStorage`. Never return password hashes: select users through `PUBLIC_USER_SELECT`.
 - **Authorization on the server, every time.** Role checks (`CUSTOMER` / `PARTNER` / `ADMIN`) *and*
   ownership checks (a partner can only edit their own properties; a customer can only see their own bookings).
   Hiding a button in the UI is not authorization.
@@ -301,7 +305,8 @@ mero-stay/
 | `docs/product/requirements.md` | Users, MVP features, user stories |
 | `docs/architecture/overview.md` | System architecture |
 | `docs/architecture/data-model.md` | Entity reference, money formulas, how to add a vertical |
-| `docs/architecture/api.md` | `/api/v1` endpoints, money-as-string convention, error codes |
+| `docs/architecture/api.md` | `/api/v1` endpoints, auth, money-as-string convention, error codes |
+| `docs/development/operational-gaps.md` | Known gaps that must be closed before launch |
 | `docs/architecture/decisions/` | Architecture Decision Records (ADRs) |
 | `docs/development/roadmap.md` | Phase-by-phase plan |
 | `docs/development/git-workflow.md` | Branching, commits, pushing |
@@ -345,4 +350,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
 - **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
 - **Phase 3, Search & booking API:** merged to `main`, tagged `v0.3.0`.
-- **Next:** Phase 4, Authentication & roles (awaiting approval).
+- **Phase 4, Authentication & ownership:** complete on branch `phase/04-authentication`, awaiting owner review.
+- **Next:** Phase 5, Provider onboarding & verification (awaiting approval).

@@ -11,6 +11,7 @@ describe("parseEnv", () => {
       PORT: 4000,
       LOG_LEVEL: "info",
       DATABASE_URL: validUrl,
+      SESSION_TTL_HOURS: 168,
     });
   });
 

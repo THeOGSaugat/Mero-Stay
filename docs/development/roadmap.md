@@ -12,19 +12,19 @@ generic data model, not hotels only.
 | 0 | Repository setup & documentation | Git checks, `.gitignore`, CLAUDE.md, docs structure | ✅ Done |
 | 1 | Project foundation & dev environment | npm workspaces, Next.js + Tailwind, Express + TS API, Neon PostgreSQL (ADR 0003), Prisma, ESLint/Prettier, Vitest + Playwright, health checks, CI | ✅ Done (v0.1.0) |
 | 2 | Multi-vertical data model | Generic provider / listing / trip / booking-item schema with detail tables, inventory, per-item commission, payment and cancellation; shapes for payments, payouts, invoices, reviews, notifications; DB integrity constraints; sample seed; separate test database; schema tests (ADR 0004) | ✅ Done (merged) |
-| 3 | Search & booking API | Vertical-agnostic `/api/v1` search (listing types, listings, details + availability) and trip API (create, add/update/remove items with inventory holds, quote dry-run, confirm); money as minor-unit strings; DB-constraint error mapping; temporary unauthenticated access, off in production (ADR 0005, [api.md](../architecture/api.md)) | ✅ Done (awaiting review) |
-| 4 | Authentication & roles | Customer + partner registration/login (email or phone), password hashing, sessions, role & ownership guards; replace the temporary `userId` on trip endpoints; hide commission/payout from customers; introduce `packages/shared` | Planned |
-| 5 | Provider onboarding & verification | Partner chooses provider type, profile, verification documents (private uploads), payout account | Planned |
+| 3 | Search & booking API | Vertical-agnostic `/api/v1` search (listing types, listings, details + availability) and trip API (create, add/update/remove items with inventory holds, quote dry-run, confirm); money as minor-unit strings; DB-constraint error mapping; temporary unauthenticated access, off in production (ADR 0005, [api.md](../architecture/api.md)) | ✅ Done (v0.3.0) |
+| 4 | Authentication & ownership | Customer registration/login/logout/me with Argon2id passwords and server-side sessions in httpOnly cookies, CSRF tokens, rate limits; trips always authenticated and owner-only (404 for others); customer view hides commission/payout; unauthenticated flag removed (ADR 0006) | ✅ Done (awaiting review) |
+| 5 | Provider onboarding & verification | Partner accounts and role guards (PARTNER/ADMIN), partner chooses provider type, profile, verification documents (private uploads), payout account | Planned |
 | 6 | Admin verification & approvals | Admin queues for providers and listings, approve/reject with reason, user/provider lists | Planned |
 | 7 | Listings & inventory management | Partners manage listings per vertical, cancellation policies, per-date inventory and prices | Planned |
-| 8 | Customer web: search & trip builder | Search pages per vertical, listing detail pages, multi-item trip builder UI on the Phase 3 API | Planned |
+| 8 | Customer web: search & trip builder | Search pages per vertical, listing detail pages, multi-item trip builder UI and login/register pages on the Phase 3–4 API; introduce `packages/shared` for Zod contracts | Planned |
 | 9 | Payments | eSewa + Khalti (sandbox), server verification, idempotent callbacks, per-item allocation; scheduled hold-expiry job | Planned |
 | 10 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refunds per item | Planned |
 | 11 | Commission & payouts | Commission invoices for pay-at-property items, payouts for online-paid items, admin finance views | Planned |
 | 12 | Dashboards | Customer, partner and admin dashboards with real data | Planned |
 | 13 | Reviews & ratings | Verified (completed-item) reviews, ratings on listings, partner replies, moderation | Planned |
-| 14 | Notifications | `NotificationService` with Sparrow SMS + Amazon SES | Planned |
-| 15 | Hardening & launch prep | Security review, performance, accessibility, E2E coverage of key journeys in CI, deployment plan | Planned |
+| 14 | Notifications | `NotificationService` with Sparrow SMS + Amazon SES; email verification and password reset | Planned |
+| 15 | Hardening & launch prep | Security review, 2FA (admins/partners), shared rate-limit store, `trust proxy`, performance, accessibility, E2E coverage of key journeys in CI, deployment plan | Planned |
 
 Business decisions behind these phases: [requirements §6](../product/requirements.md#6-business-decisions).
 

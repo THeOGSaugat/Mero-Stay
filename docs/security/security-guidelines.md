@@ -10,14 +10,21 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Production secrets live in the hosting provider's secret store, never in the repo.
 - A leaked secret is **rotated**, not just deleted from Git.
 
-## 2. Authentication
+## 2. Authentication (implemented in Phase 4, ADR 0006)
 
-- Password hashing: Argon2id (preferred) or bcrypt with cost ≥ 12.
-- Minimum password policy: at least 8 characters; check against common-password lists.
-- Tokens are stored in `httpOnly`, `Secure`, `SameSite=Lax` (or `Strict`) cookies.
-- Rate-limit login, registration, password reset and OTP endpoints; lock out or slow down repeated failures.
-- Generic error messages on login ("invalid email or password") to avoid account enumeration.
-- CSRF protection for cookie-authenticated state-changing requests (SameSite + origin check or CSRF token).
+- Passwords: Argon2id via `node:crypto` (m = 19 MiB, t = 2, p = 1; OWASP), random 16-byte salt,
+  PHC string; a database CHECK rejects anything that is not an Argon2id hash.
+- Password policy: 12–128 characters, no composition rules, common passwords rejected.
+- Sessions: random 256-bit token in an `httpOnly`, `SameSite=Lax` cookie (`Secure` + `__Host-` in
+  production); the database stores only SHA-256(token); absolute lifetime 7 days; logout deletes
+  the session; suspended users lose all sessions; a login always issues a new session.
+- CSRF: `X-CSRF-Token` = HMAC(`SESSION_SECRET`, session) required on state-changing requests with a
+  session; login/register accept only `application/json`.
+- Rate limits: login 10 / 15 min per email and 30 / 15 min per IP; registration 5 / hour per IP.
+- One generic "Email or password is incorrect." for every failed login, with a dummy Argon2 check for
+  unknown emails so timing does not reveal accounts.
+- Never return or log passwords, hashes or session tokens. Users are selected through
+  `PUBLIC_USER_SELECT`; only the login query reads `password_hash`.
 
 ## 3. Authorization
 
@@ -25,6 +32,7 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Every resource access checks **ownership** (partner ↔ property, customer ↔ booking).
 - Admin actions are recorded in an audit log (who, what, when).
 - IDs in URLs are not secrets. Never rely on an ID being unguessable for access control.
+- Trips are owner-scoped in the query itself; another user's trip is a 404 (no existence leak).
 
 ## 4. Input & output
 
