@@ -344,5 +344,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 0, Repository setup & documentation:** complete.
 - **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
 - **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
-- **Phase 3, Search & booking API:** complete on branch `phase/03-search-booking-api`, awaiting owner review.
+- **Phase 3, Search & booking API:** merged to `main`, tagged `v0.3.0`.
 - **Next:** Phase 4, Authentication & roles (awaiting approval).
