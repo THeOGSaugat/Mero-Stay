@@ -1,14 +1,29 @@
 # MeroStay API (v1)
 
-Base path: `/api/v1`. JSON in, JSON out. Design decisions: [ADR 0005](decisions/0005-search-and-booking-api-conventions.md).
-Data model: [data-model.md](data-model.md).
+Base path: `/api/v1`. JSON in, JSON out. Design decisions:
+[ADR 0005](decisions/0005-search-and-booking-api-conventions.md) (search/booking conventions),
+[ADR 0006](decisions/0006-authentication.md) (authentication). Data model: [data-model.md](data-model.md).
 
-> **Temporary: no authentication.** Trip endpoints take a `userId` in the body and do not check
-> ownership. They are **off by default in every environment** and only served when
-> `ALLOW_UNAUTHENTICATED_TRIPS_API=true` (set it only on your own machine).
-> See [How authentication will slot in](#how-authentication-will-slot-in).
+| Area | Access |
+|---|---|
+| `/api/health…`, `/api/v1/listing-types`, `/api/v1/listings…` | **Public** (browsing needs no account) |
+| `/api/v1/auth/register`, `/api/v1/auth/login` | Public, rate-limited, JSON only |
+| `/api/v1/auth/me`, `/api/v1/auth/logout` | Session required |
+| `/api/v1/trips…` | **Session required, owner only.** Writes also need `X-CSRF-Token` |
 
 ## Conventions
+
+### Authentication (ADR 0006)
+
+- **Session cookie:** `merostay_session` (`__Host-merostay_session` over HTTPS): `HttpOnly`,
+  `SameSite=Lax`, `Path=/`, `Secure` in production, absolute lifetime 7 days. Set by register and
+  login; cleared by logout. Browsers send it automatically.
+- **CSRF:** every state-changing request with a session (`POST`/`PATCH`/`DELETE` on `/trips…` and
+  `/auth/logout`) must send `X-CSRF-Token: <csrfToken>`. The token comes back in the body of
+  register, login and `GET /auth/me`; re-fetch it from `/auth/me` after a page reload.
+- **Ownership:** a trip is visible and editable only by the user who created it. Anyone else gets
+  `404 TRIP_NOT_FOUND`, exactly as for a trip that does not exist (existence never leaks).
+- **No password data is ever returned** (no hash, no password, no session token in any body).
 
 ### Money
 
@@ -38,10 +53,13 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | Status | Codes | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Malformed request; `details` lists `{ path, message }` |
-| 403 | `TRIPS_API_DISABLED` | Trip API switched off (the default until authentication exists) |
+| 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
+| 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) |
 | 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND` | The resource in the URL does not exist |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `CONFLICT` | Conflicts with current state or availability |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_USER`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT` | Conflicts with current state, availability or an existing account |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |
+| 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
 
 Database constraint violations are mapped (overbooking → 409, money checks → 422). Raw
@@ -52,6 +70,10 @@ PostgreSQL text is never returned.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health`, `/api/health/ready` | Liveness / readiness (unchanged) |
+| POST | `/api/v1/auth/register` | Create a customer account and log in |
+| POST | `/api/v1/auth/login` | Log in |
+| POST | `/api/v1/auth/logout` | Log out (deletes the session) |
+| GET | `/api/v1/auth/me` | Current user + CSRF token |
 | GET | `/api/v1/listing-types` | All verticals and whether they are active/bookable |
 | GET | `/api/v1/listings` | Search bookable listings |
 | GET | `/api/v1/listings/:id` | Listing details + availability calendar |
@@ -62,6 +84,43 @@ PostgreSQL text is never returned.
 | DELETE | `/api/v1/trips/:id/items/:itemId` | Remove an item (releases inventory) |
 | POST | `/api/v1/trips/:id/quote` | Dry-run pricing, optionally with candidate items |
 | POST | `/api/v1/trips/:id/confirm` | Submit the trip (no payment taken) |
+
+### POST /api/v1/auth/register → 201 (+ session cookie)
+
+```json
+{ "email": "ram@example.com", "password": "at least 12 characters", "fullName": "Ram Bahadur", "phone": "+9779812345678" }
+```
+
+Email is trimmed and lower-cased. Password: 12–128 characters, not a common password. `phone` is
+optional (international format). New accounts are `CUSTOMER`s. Duplicate email → `409 EMAIL_TAKEN`,
+duplicate phone → `409 PHONE_TAKEN`. Limit: 5 per hour per IP.
+
+### POST /api/v1/auth/login → 200 (+ session cookie)
+
+```json
+{ "email": "ram@example.com", "password": "…" }
+```
+
+Any failure → `401 INVALID_CREDENTIALS` "Email or password is incorrect." (same for unknown email,
+wrong password, or an account without a password). A new session replaces any session the browser
+already held. Limits: 10 per 15 min per email, 30 per 15 min per IP.
+
+Register, login and `GET /auth/me` all return:
+
+```json
+{ "data": {
+  "user": { "id": "…", "email": "ram@example.com", "phone": null, "fullName": "Ram Bahadur",
+            "role": "CUSTOMER", "status": "ACTIVE", "createdAt": "…" },
+  "csrfToken": "…",
+  "sessionExpiresAt": "…"
+} }
+```
+
+### POST /api/v1/auth/logout → 204
+
+Requires the session and `X-CSRF-Token`. Deletes the session server-side and clears the cookie.
+
+### GET /api/v1/auth/me → 200 / 401
 
 ### GET /api/v1/listing-types
 
@@ -126,8 +185,11 @@ or `null`. 404 for inactive verticals, drafts and unverified providers.
 ### POST /api/v1/trips → 201
 
 ```json
-{ "userId": "uuid (TEMPORARY)", "currency": "NPR", "contact": { "name": "…", "phone": "…", "email": "…" } }
+{ "currency": "NPR", "contact": { "name": "…", "phone": "…", "email": "…" } }
 ```
+
+The owner is the logged-in user. Both fields are optional (`currency` defaults to `NPR`, contact
+defaults to the user's details). Sending `userId` is rejected (400).
 
 ### POST /api/v1/trips/:id/items → 201 (full trip)
 
@@ -153,25 +215,27 @@ left exactly as it was.
 
 Releases the item's inventory and recomputes totals.
 
+### Trip responses are the customer view
+
+Trip and quote responses show what the customer pays. **Commission rate/amount, provider payout,
+commission status and payout status are not included**; they are stored per item for MeroStay
+and providers (admin/partner views come in later phases).
+
 ### GET /api/v1/trips/:id → 200
 
 ```json
 { "data": {
-  "id": "…", "reference": "MS-7K3F9QXR", "status": "DRAFT", "userId": "…",
+  "id": "…", "reference": "MS-7K3F9QXR", "status": "DRAFT",
   "currency": "NPR", "currencyExponent": 2,
   "totals": {
     "subtotalMinor": "2030000", "serviceChargeMinor": "77000", "taxMinor": "110110",
-    "totalMinor": "2217110", "commissionTotalMinor": "304500",
-    "payOnlineMinor": "1260000", "payAtPropertyMinor": "957110",
-    "commissionFromPayoutsMinor": "189000", "commissionInvoicedMinor": "115500",
-    "providerPayoutsMinor": "1071000"
+    "totalMinor": "2217110", "payOnlineMinor": "1260000", "payAtPropertyMinor": "957110"
   },
   "items": [{
     "id": "…", "status": "PENDING",
     "listing": { "id": "…", "title": "…", "listingType": "hotel_room", "provider": { "id": "…", "name": "…" } },
     "startDate": "2027-01-10", "endDate": "2027-01-12", "travellerCount": 1, "quantity": 2,
     "paymentMethod": "pay_at_property", "paymentStatus": "PAY_AT_PROPERTY",
-    "commissionStatus": "PENDING", "payoutStatus": "NOT_APPLICABLE",
     "currency": "NPR", "currencyExponent": 2,
     "lines": [
       { "date": "2027-01-10", "units": 1, "unitPriceMinor": "350000", "amountMinor": "350000" },
@@ -179,8 +243,7 @@ Releases the item's inventory and recomputes totals.
     ],
     "money": { "subtotalMinor": "770000", "serviceChargeRateBps": 1000, "serviceChargeMinor": "77000",
                "taxRateBps": 1300, "taxMinor": "110110", "totalMinor": "957110",
-               "commissionRateBps": 1500, "commissionMinor": "115500",
-               "providerPayoutMinor": "841610", "refundedMinor": "0" },
+               "refundedMinor": "0" },
     "cancellationPolicy": { "policyId": "…", "name": "Moderate", "rules": [ … ], "capturedAt": "…" },
     "attributes": {}
   }],
@@ -188,7 +251,7 @@ Releases the item's inventory and recomputes totals.
 } }
 ```
 
-Totals: the first five are the stored trip aggregates (sum of active items). The split by
+Totals: the first four are the stored trip aggregates (sum of active items). The split by
 payment method is derived from the items: `payOnlineMinor + payAtPropertyMinor = totalMinor`.
 
 ### POST /api/v1/trips/:id/quote → 200 (dry run, nothing is written)
@@ -203,7 +266,7 @@ trip. Mixed currencies → 422 `CURRENCY_MISMATCH`.
 
 No payment is taken (the gateway is a later phase).
 
-| Item paid… | Item status | Commission status | Notes |
+| Item paid… | Item status (in the response) | Stored commission status | Notes |
 |---|---|---|---|
 | at the property | `CONFIRMED` | `INVOICED` | Provider owes the commission |
 | online | stays `PENDING` | `PENDING` | Awaits payment; commission later deducted from the payout |
@@ -230,12 +293,8 @@ client. A new vertical (e.g. permits) is a `listing_types` row, an optional deta
 | Payouts / invoices | Finance endpoints reading `commissionStatus` / `payoutStatus` |
 | Multi-currency trips | `currency` is already on every money-bearing object |
 
-## How authentication will slot in
+## Authentication history
 
-1. Auth middleware puts the user on the request; the trip router's temporary guard is replaced by
-   it.
-2. `POST /trips` takes the owner from the session; a `userId` in the body is ignored for one release,
-   then rejected.
-3. Every trip endpoint checks `trip.customerId === session user` (admins excepted) → 404 otherwise.
-4. Commission and payout fields are visible only to admins and the owning partner.
-5. Paths, request bodies (minus `userId`) and response shapes stay the same, so clients keep working.
+Phase 3 served the trips API with a temporary `userId` and an opt-in flag. Phase 4 replaced both
+with sessions and ownership (ADR 0006); the paths and the response shapes (minus `userId` and the
+commission/payout fields) stayed the same.

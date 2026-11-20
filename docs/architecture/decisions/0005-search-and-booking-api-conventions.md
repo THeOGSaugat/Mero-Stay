@@ -1,6 +1,8 @@
 # 0005. Search and booking API conventions
 
-- **Status:** Accepted (pending owner review of Phase 3)
+- **Status:** Accepted. **Decision 10 and its amendment are superseded by [ADR 0006](0006-authentication.md)**
+  (Phase 4): the temporary `userId` and the opt-in flag were removed; trips always require a session.
+  The text below is kept as the historical record.
 - **Date:** 2026-11-19
 - **Phase:** 03
 

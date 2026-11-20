@@ -1,6 +1,8 @@
 # Phase 03: Search & Booking API
 
-- **Status:** Awaiting review
+- **Status:** Approved, merged, tagged `v0.3.0`.
+- **Superseded in part:** the temporary unauthenticated trip access described here was removed in
+  Phase 4 (ADR 0006). This report is kept as the historical record.
 - **Branch:** `phase/03-search-booking-api`
 - **Date completed:** 2026-11-19
 

@@ -41,11 +41,16 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
 
 ## Deployment notes
 
-- **`ALLOW_UNAUTHENTICATED_TRIPS_API` must stay `false` (or unset) on every public deployment.**
-  Until authentication arrives (Phase 4), the trip endpoints take a `userId` in the request body and
-  check no ownership. The default is **off** in every environment: `/api/v1/trips…` returns
-  `403 TRIPS_API_DISABLED`. Set it to `true` only on your own machine to try the trip API; the
-  API logs a warning at startup whenever it is on.
+- **`SESSION_SECRET` is required**: the API refuses to start without it. Generate a separate value
+  per environment (`openssl rand -base64 48`), store it in the host's secret manager, never in Git.
+  Rotating it only invalidates CSRF tokens (clients re-fetch them from `GET /api/v1/auth/me`).
+- **Serve the API over HTTPS.** With `NODE_ENV=production` session cookies are `Secure` with the
+  `__Host-` prefix, and `SESSION_COOKIE_SECURE=false` is refused.
+- Trips (booking) endpoints always require a logged-in user and only show a user their own trips
+  (ADR 0006). Search stays public.
+- Login/registration rate limits are kept in process memory: run **one** API instance until a
+  shared store is added, and configure the proxy's client IP before relying on per-IP limits (see
+  operational gaps).
 - Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
 - Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
 - Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).
