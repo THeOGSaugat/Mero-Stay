@@ -4,6 +4,10 @@ import helmet from "helmet";
 import type { Logger } from "pino";
 import { pinoHttp } from "pino-http";
 import type { PrismaClient } from "./generated/prisma/client.js";
+import type { AuthConfig } from "./modules/auth/auth.config.js";
+import { createAuthMiddleware } from "./modules/auth/auth.middleware.js";
+import { createAuthRouter } from "./modules/auth/auth.routes.js";
+import { createAuthService } from "./modules/auth/auth.service.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { notFoundHandler } from "./middleware/not-found.js";
 import { createHealthRouter } from "./modules/health/health.routes.js";
@@ -19,11 +23,8 @@ export interface AppDependencies {
   healthCheckTimeoutMs?: number;
   /** Database client for the /api/v1 endpoints. Without it only the health endpoints exist. */
   prisma?: PrismaClient;
-  /**
-   * Trip endpoints have no authentication yet and take a temporary userId (ADR 0005).
-   * Default: OFF (403 TRIPS_API_DISABLED). Only ALLOW_UNAUTHENTICATED_TRIPS_API=true turns them on.
-   */
-  unauthenticatedTripsEnabled?: boolean;
+  /** Session/CSRF/rate-limit settings (ADR 0006). Required together with `prisma`. */
+  auth?: AuthConfig;
   /** Clock, injectable for tests (hold expiry, "today" in Nepal). */
   now?: () => Date;
 }
@@ -64,13 +65,28 @@ export function createApp(deps: AppDependencies): Express {
   );
 
   if (deps.prisma) {
+    if (!deps.auth) throw new Error("createApp: `auth` config is required when `prisma` is given");
     const now = deps.now ?? (() => new Date());
+    const authService = createAuthService({ prisma: deps.prisma, config: deps.auth, now });
+    const authMiddleware = createAuthMiddleware(authService, deps.auth);
+
     const v1 = Router();
+    // Public: browsing and search need no account.
     v1.use(createListingsRouter({ prisma: deps.prisma, now }));
+    // Accounts and sessions.
+    v1.use(
+      createAuthRouter({
+        service: authService,
+        middleware: authMiddleware,
+        config: deps.auth,
+        now,
+      }),
+    );
+    // Always authenticated; owner-scoped.
     v1.use(
       createTripsRouter({
         service: createTripsService({ prisma: deps.prisma, now }),
-        unauthenticatedAccessEnabled: deps.unauthenticatedTripsEnabled ?? false,
+        auth: authMiddleware,
       }),
     );
     app.use("/api/v1", v1);

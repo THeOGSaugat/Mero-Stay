@@ -5,6 +5,7 @@ import { createApp } from "../../app.js";
 import { toDbDate } from "../../domain/dates.js";
 import type { ErrorResponseBody } from "../../lib/errors.js";
 import { createPrismaClient } from "../../lib/prisma.js";
+import { testAuthConfig } from "../../testing/auth-config.js";
 import { createWorld, type World } from "../../testing/fixtures.js";
 import { countMoneyFields, moneyBoundaryViolations } from "../../testing/json-safety.js";
 import { resolveTestDatabase } from "../../testing/test-database.js";
@@ -14,6 +15,7 @@ const app = createApp({
   logger: pino({ level: "silent" }),
   checkDatabase: () => Promise.resolve(),
   prisma,
+  auth: testAuthConfig(),
 });
 let world: World;
 

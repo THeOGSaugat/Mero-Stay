@@ -1,19 +1,16 @@
 import { createApp } from "./app.js";
-import {
-  loadEnvFileIfPresent,
-  parseEnv,
-  unauthenticatedTripsEnabled,
-  type Env,
-} from "./config/env.js";
+import type { AuthConfig } from "./modules/auth/auth.config.js";
+import { authConfigFromEnv, loadEnvFileIfPresent, parseEnv, type Env } from "./config/env.js";
 import { createLogger } from "./lib/logger.js";
 import { checkDatabaseConnection, createPrismaClient } from "./lib/prisma.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-function readConfig(): Env {
+function readConfig(): { env: Env; auth: AuthConfig } {
   loadEnvFileIfPresent();
   try {
-    return parseEnv(process.env);
+    const env = parseEnv(process.env);
+    return { env, auth: authConfigFromEnv(env) };
   } catch (err) {
     // The logger is not available yet because it depends on this config.
     // eslint-disable-next-line no-console
@@ -22,7 +19,7 @@ function readConfig(): Env {
   }
 }
 
-const env = readConfig();
+const { env, auth } = readConfig();
 const logger = createLogger(env);
 const prisma = createPrismaClient(env.DATABASE_URL);
 
@@ -30,7 +27,7 @@ const app = createApp({
   logger,
   checkDatabase: () => checkDatabaseConnection(prisma),
   prisma,
-  unauthenticatedTripsEnabled: unauthenticatedTripsEnabled(env),
+  auth,
 });
 
 const server = app.listen(env.PORT, (error) => {
@@ -39,11 +36,6 @@ const server = app.listen(env.PORT, (error) => {
     process.exit(1);
   }
   logger.info({ port: env.PORT, env: env.NODE_ENV }, "MeroStay API listening");
-  if (unauthenticatedTripsEnabled(env)) {
-    logger.warn(
-      "ALLOW_UNAUTHENTICATED_TRIPS_API=true: trip endpoints are served WITHOUT authentication. Never enable this on a public deployment.",
-    );
-  }
 });
 
 let shuttingDown = false;

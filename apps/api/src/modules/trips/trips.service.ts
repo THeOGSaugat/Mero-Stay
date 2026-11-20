@@ -116,8 +116,9 @@ export function createTripsService({
 }: TripsServiceDeps) {
   const holdUntil = () => new Date(now().getTime() + holdMinutes * 60_000);
 
-  async function getTrip(id: string): Promise<TripWithItems> {
-    const trip = await findTrip(prisma, id);
+  /** The caller's own trip, or 404 (also for trips that exist but belong to someone else). */
+  async function getTrip(id: string, ownerId: string): Promise<TripWithItems> {
+    const trip = await findTrip(prisma, id, ownerId);
     if (!trip) throw new AppError(404, "TRIP_NOT_FOUND", "Trip not found.");
     return trip;
   }
@@ -138,8 +139,10 @@ export function createTripsService({
     }
   }
 
-  async function lockEditableTrip(tx: Prisma.TransactionClient, tripId: string) {
-    if (!(await lockTrip(tx, tripId))) throw new AppError(404, "TRIP_NOT_FOUND", "Trip not found.");
+  async function lockEditableTrip(tx: Prisma.TransactionClient, tripId: string, ownerId: string) {
+    if (!(await lockTrip(tx, tripId, ownerId))) {
+      throw new AppError(404, "TRIP_NOT_FOUND", "Trip not found.");
+    }
     const trip = await tx.trip.findUniqueOrThrow({ where: { id: tripId } });
     assertEditable(trip);
     return trip;
@@ -327,13 +330,16 @@ export function createTripsService({
     });
   }
 
-  async function createTrip(input: {
-    userId: string;
-    currency: string;
-    contact?: { name?: string; phone?: string; email?: string };
-  }): Promise<TripWithItems> {
-    const user = await prisma.user.findUnique({ where: { id: input.userId } });
-    if (!user) throw new AppError(422, "UNKNOWN_USER", "userId does not match a user.");
+  async function createTrip(
+    ownerId: string,
+    input: { currency: string; contact?: { name?: string; phone?: string; email?: string } },
+  ): Promise<TripWithItems> {
+    // The owner comes from the authenticated session (never from the request body).
+    const user = await prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { id: true, fullName: true, phone: true, email: true },
+    });
+    if (!user) throw new AppError(401, "UNAUTHENTICATED", "Log in to continue.");
 
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -348,7 +354,7 @@ export function createTripsService({
             expiresAt: holdUntil(),
           },
         });
-        return getTrip(trip.id);
+        return getTrip(trip.id, user.id);
       } catch (err) {
         if (mapDatabaseError(err)?.code === "CONFLICT" && attempt < 4) continue; // reference collision
         throw err;
@@ -359,10 +365,11 @@ export function createTripsService({
 
   async function addItem(
     tripId: string,
+    ownerId: string,
     input: AddItemInput,
   ): Promise<{ trip: TripWithItems; itemId: string }> {
     const itemId = await prisma.$transaction(async (tx) => {
-      const trip = await lockEditableTrip(tx, tripId);
+      const trip = await lockEditableTrip(tx, tripId, ownerId);
       const resolved = await resolveItem(tx, trip.currency, input);
       await reserve(tx, resolved);
       const item = await tx.bookingItem.create({
@@ -375,16 +382,17 @@ export function createTripsService({
       await recalculateTrip(tx, trip, { expiresAt: holdUntil() });
       return item.id;
     }, TX_OPTIONS);
-    return { trip: await getTrip(tripId), itemId };
+    return { trip: await getTrip(tripId, ownerId), itemId };
   }
 
   async function updateItem(
     tripId: string,
+    ownerId: string,
     itemId: string,
     patch: UpdateItemInput,
   ): Promise<TripWithItems> {
     await prisma.$transaction(async (tx) => {
-      const trip = await lockEditableTrip(tx, tripId);
+      const trip = await lockEditableTrip(tx, tripId, ownerId);
       const item = await findItemInTrip(tx, tripId, itemId);
       if (!item) throw new AppError(404, "ITEM_NOT_FOUND", "Booking item not found in this trip.");
 
@@ -409,12 +417,16 @@ export function createTripsService({
       await tx.bookingItem.update({ where: { id: item.id }, data });
       await recalculateTrip(tx, trip, { expiresAt: holdUntil() });
     }, TX_OPTIONS);
-    return getTrip(tripId);
+    return getTrip(tripId, ownerId);
   }
 
-  async function removeItem(tripId: string, itemId: string): Promise<TripWithItems> {
+  async function removeItem(
+    tripId: string,
+    ownerId: string,
+    itemId: string,
+  ): Promise<TripWithItems> {
     await prisma.$transaction(async (tx) => {
-      const trip = await lockEditableTrip(tx, tripId);
+      const trip = await lockEditableTrip(tx, tripId, ownerId);
       const item = await findItemInTrip(tx, tripId, itemId);
       if (!item) throw new AppError(404, "ITEM_NOT_FOUND", "Booking item not found in this trip.");
       await release(tx, item.slots);
@@ -422,7 +434,7 @@ export function createTripsService({
       await tx.bookingItem.delete({ where: { id: item.id } });
       await recalculateTrip(tx, trip, { expiresAt: holdUntil() });
     }, TX_OPTIONS);
-    return getTrip(tripId);
+    return getTrip(tripId, ownerId);
   }
 
   /**
@@ -430,8 +442,12 @@ export function createTripsService({
    * candidate items, without writing anything. Availability here is advisory (it can change a
    * moment later); the authoritative check is the database constraint when an item is added.
    */
-  async function quote(tripId: string, candidates: AddItemInput[]): Promise<TripQuote> {
-    const trip = await getTrip(tripId);
+  async function quote(
+    tripId: string,
+    ownerId: string,
+    candidates: AddItemInput[],
+  ): Promise<TripQuote> {
+    const trip = await getTrip(tripId, ownerId);
     assertEditable(trip);
 
     const lines: QuoteLine[] = [];
@@ -553,9 +569,9 @@ export function createTripsService({
    * Trip → CONFIRMED when every item is confirmed, otherwise PENDING (awaiting payment) with a
    * fresh hold window. Money snapshots were frozen when items were added; nothing is re-priced.
    */
-  async function confirm(tripId: string): Promise<TripWithItems> {
+  async function confirm(tripId: string, ownerId: string): Promise<TripWithItems> {
     await prisma.$transaction(async (tx) => {
-      const trip = await lockEditableTrip(tx, tripId);
+      const trip = await lockEditableTrip(tx, tripId, ownerId);
       const items = await findActiveItems(tx, tripId);
       if (items.length === 0)
         throw new AppError(409, "TRIP_EMPTY", "Add at least one item before confirming.");
@@ -600,7 +616,7 @@ export function createTripsService({
         expiresAt: awaitingPayment ? holdUntil() : null,
       });
     }, TX_OPTIONS);
-    return getTrip(tripId);
+    return getTrip(tripId, ownerId);
   }
 
   /**

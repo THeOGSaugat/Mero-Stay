@@ -38,23 +38,55 @@ enum UserRole {
   @@map("user_role")
 }
 
-/// Minimal shape so trips and providers have owners. Credentials/sessions arrive in the auth phase.
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("user_status")
+}
+
+/// A person who uses MeroStay. Auth fields added in Phase 4 (ADR 0006).
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String?  @unique
-  phone     String?  @unique
-  fullName  String   @map("full_name")
-  role      UserRole @default(CUSTOMER)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id           String     @id @default(uuid()) @db.Uuid
+  /// Stored normalized (trimmed, lower-case); a CHECK constraint enforces it.
+  email        String?    @unique
+  phone        String?    @unique
+  fullName     String     @map("full_name")
+  role         UserRole   @default(CUSTOMER)
+  status       UserStatus @default(ACTIVE)
+  /// Argon2id PHC string ("$argon2id$v=19$m=...,t=...,p=...$salt$hash"). NULL = cannot log in
+  /// (e.g. sample/seed users). NEVER selected for API responses.
+  passwordHash String?    @map("password_hash")
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   providers         Provider[]
   trips             Trip[]
   reviews           Review[]
   notifications     Notification[]
   reviewedDocuments ProviderDocument[] @relation("DocumentReviewer")
+  sessions          Session[]
 
   @@map("users")
+}
+
+/// Server-side login session (ADR 0006). The cookie holds a random token; only its SHA-256 is
+/// stored, so a database leak does not reveal usable session tokens. Logout deletes the row.
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  /// Lower-case hex SHA-256 of the cookie token.
+  tokenHash String   @unique @map("token_hash") @db.Char(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Absolute expiry; the session is invalid afterwards even if the cookie is still sent.
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 // ============================================================================
