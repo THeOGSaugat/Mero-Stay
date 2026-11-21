@@ -51,6 +51,14 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
 - Login/registration rate limits are kept in process memory: run **one** API instance until a
   shared store is added, and configure the proxy's client IP before relying on per-IP limits (see
   operational gaps).
+- **Run the hold-release job** (ADR 0007), otherwise abandoned trips keep their inventory held:
+  either schedule `node apps/api/dist/scripts/hold-release.js` every minute with the platform's
+  cron/scheduler, or run `node apps/api/dist/scripts/hold-release.js --watch` as one always-on worker
+  process. It is idempotent and safe if two runs overlap. It needs only `DATABASE_URL`.
+- **Online payments:** leave `PAYMENT_GATEWAY` unset in production (the simulated test gateway is
+  refused there; payment endpoints answer 503). Live eSewa/Khalti come in a later phase.
+- **Admins** are users with role `ADMIN`, set directly in the database by an operator (no endpoint
+  grants it): `UPDATE users SET role = 'ADMIN' WHERE email = '…';`. Use it sparingly.
 - Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
 - Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
 - Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).

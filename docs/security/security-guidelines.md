@@ -48,6 +48,13 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Make callback handlers idempotent (unique provider transaction ID; repeated callbacks are no-ops).
 - Store provider references and raw verification responses (without secrets) for reconciliation.
 - Use sandbox credentials in development; never commit merchant secrets.
+- Phase 5 (ADR 0007): the only gateway is a **simulated** one for development; the API refuses to
+  start with `PAYMENT_GATEWAY=simulated` in production. Intents are idempotent per trip (one open
+  charge per trip, enforced by a unique index); confirmations are idempotent (a succeeded payment is
+  returned unchanged); database triggers stop over-allocation and keep each item's payment status
+  equal to its allocations.
+- Admin-only actions (e.g. recording a pay-at-property settlement) require `role = ADMIN` on the
+  session user, checked before any data is read; the role cannot be granted through the API.
 
 ## 6. File uploads
 

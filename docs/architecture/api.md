@@ -2,14 +2,17 @@
 
 Base path: `/api/v1`. JSON in, JSON out. Design decisions:
 [ADR 0005](decisions/0005-search-and-booking-api-conventions.md) (search/booking conventions),
-[ADR 0006](decisions/0006-authentication.md) (authentication). Data model: [data-model.md](data-model.md).
+[ADR 0006](decisions/0006-authentication.md) (authentication),
+[ADR 0007](decisions/0007-payments-and-invoices.md) (payments, invoices, hold-release job).
+Data model: [data-model.md](data-model.md).
 
 | Area | Access |
 |---|---|
 | `/api/health…`, `/api/v1/listing-types`, `/api/v1/listings…` | **Public** (browsing needs no account) |
 | `/api/v1/auth/register`, `/api/v1/auth/login` | Public, rate-limited, JSON only |
 | `/api/v1/auth/me`, `/api/v1/auth/logout` | Session required |
-| `/api/v1/trips…` | **Session required, owner only.** Writes also need `X-CSRF-Token` |
+| `/api/v1/trips…` (including `/trips/:id/payments…`) | **Session required, owner only.** Writes also need `X-CSRF-Token` |
+| `/api/v1/admin…` | **Session with role `ADMIN`** (403 for everyone else). Writes also need `X-CSRF-Token` |
 
 ## Conventions
 
@@ -54,16 +57,17 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Malformed request; `details` lists `{ path, message }` |
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
-| 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND` | The resource in the URL does not exist |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT` | Conflicts with current state, availability or an existing account |
+| 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / not an admin |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED` | Conflicts with current state, availability or an existing account |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
+| 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
 
-Database constraint violations are mapped (overbooking → 409, money checks → 422). Raw
-PostgreSQL text is never returned.
+Database constraint violations are mapped (overbooking → 409, money checks → 422, payment/invoice
+guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never returned.
 
 ## Endpoints
 
@@ -83,7 +87,12 @@ PostgreSQL text is never returned.
 | PATCH | `/api/v1/trips/:id/items/:itemId` | Change dates/quantity/payment method |
 | DELETE | `/api/v1/trips/:id/items/:itemId` | Remove an item (releases inventory) |
 | POST | `/api/v1/trips/:id/quote` | Dry-run pricing, optionally with candidate items |
-| POST | `/api/v1/trips/:id/confirm` | Submit the trip (no payment taken) |
+| POST | `/api/v1/trips/:id/confirm` | Submit the trip (no payment taken; issues commission invoices) |
+| POST | `/api/v1/trips/:id/payments/intent` | Create (or reuse) the payment intent for what is due online |
+| POST | `/api/v1/trips/:id/payments/:paymentId/confirm` | Record the gateway result (simulated this phase) |
+| GET | `/api/v1/trips/:id/payments` | The trip's payments and their allocations |
+| POST | `/api/v1/admin/trips/:id/payments/at-property/settle` | ADMIN: record that pay-at-property items were paid on arrival |
+| GET | `/api/v1/admin/trips/:id/invoices` | ADMIN: the trip's commission invoices |
 
 ### POST /api/v1/auth/register → 201 (+ session cookie)
 
@@ -243,16 +252,20 @@ and providers (admin/partner views come in later phases).
     ],
     "money": { "subtotalMinor": "770000", "serviceChargeRateBps": 1000, "serviceChargeMinor": "77000",
                "taxRateBps": 1300, "taxMinor": "110110", "totalMinor": "957110",
-               "refundedMinor": "0" },
+               "paidMinor": "0", "refundedMinor": "0" },
     "cancellationPolicy": { "policyId": "…", "name": "Moderate", "rules": [ … ], "capturedAt": "…" },
     "attributes": {}
   }],
+  "onlinePayment": { "paidMinor": "0", "dueMinor": "1260000" },
   "expiresAt": "…", "confirmedAt": null
 } }
 ```
 
 Totals: the first four are the stored trip aggregates (sum of active items). The split by
 payment method is derived from the items: `payOnlineMinor + payAtPropertyMinor = totalMinor`.
+`onlinePayment` (Phase 5): money received online so far (`paidMinor`, sum of allocations from
+succeeded payments) and still to pay online (`dueMinor = payOnlineMinor − paidMinor`). Per item,
+`money.paidMinor` is what has been allocated to that item.
 
 ### POST /api/v1/trips/:id/quote → 200 (dry run, nothing is written)
 
@@ -264,15 +277,132 @@ trip. Mixed currencies → 422 `CURRENCY_MISMATCH`.
 
 ### POST /api/v1/trips/:id/confirm → 200
 
-No payment is taken (the gateway is a later phase).
+No payment is taken here (see payments below).
 
 | Item paid… | Item status (in the response) | Stored commission status | Notes |
 |---|---|---|---|
-| at the property | `CONFIRMED` | `INVOICED` | Provider owes the commission |
-| online | stays `PENDING` | `PENDING` | Awaits payment; commission later deducted from the payout |
+| at the property | `CONFIRMED` | `INVOICED` | Provider owes the commission; one **issued commission invoice per provider** is created in the same transaction (ADR 0007) |
+| online | stays `PENDING` | `PENDING` | Awaits online payment; commission later deducted from the payout |
 
 Trip → `CONFIRMED` when every item is confirmed; otherwise `PENDING` (awaiting payment) with a new
-`expiresAt`. Money is not re-priced. A confirmed/pending trip can't be edited (409).
+`expiresAt`. Money is not re-priced. A confirmed/pending trip can't be edited (409), so a retried
+confirm never creates a second invoice.
+
+## Payments (ADR 0007)
+
+Online payment is a two-step flow: create an intent for what is due, then confirm it with the
+gateway's result. **This phase has only a simulated gateway** (`PAYMENT_GATEWAY=simulated`,
+refused in production); without a gateway both steps return `503 PAYMENTS_UNAVAILABLE`. Amounts
+are always computed on the server; the client never sends a price. All endpoints are owner-only
+(another user's trip → `404 TRIP_NOT_FOUND`) and writes need `X-CSRF-Token`.
+
+**Per-item payment status**
+
+| Status | Method | Meaning |
+|---|---|---|
+| `UNPAID` | online | Nothing received yet |
+| `PARTIALLY_PAID` | online | Part of the total received; the item stays `PENDING` and is **never expired** by the hold-release job |
+| `PAID` | online | Allocations equal the item total; the item is `CONFIRMED` |
+| `PAY_AT_PROPERTY` | at property | Due to the provider on arrival |
+| `PAID_AT_PROPERTY` | at property | Settled at the property (recorded by an admin) |
+| `PARTIALLY_REFUNDED`, `REFUNDED` | online | Refunds (later phase) |
+
+**Payment (transaction) status:** `INITIATED` (open intent) → `SUCCEEDED` / `FAILED` / `CANCELLED`
+(cancelled when replaced by a new intent or when the hold-release job sweeps the trip). A finished
+payment never changes.
+
+### POST /api/v1/trips/:id/payments/intent → 201 (new) / 200 (existing)
+
+Body: none or `{}`. The trip must be `PENDING` (confirmed, awaiting payment) and inside its hold
+window. Due lines = every pending online item's `total − paid`, in item order.
+
+```json
+{ "data": {
+  "created": true,
+  "currency": "NPR", "currencyExponent": 2,
+  "payment": {
+    "id": "…", "tripId": "…", "kind": "CHARGE", "gateway": "simulated", "status": "INITIATED",
+    "currency": "NPR", "currencyExponent": 2,
+    "amountMinor": "1260000", "capturedMinor": "0", "gatewayTransactionId": null,
+    "allocations": [], "createdAt": "…", "completedAt": null
+  },
+  "due": {
+    "lines": [ { "itemId": "…", "dueMinor": "360000" }, { "itemId": "…", "dueMinor": "900000" } ],
+    "totalDueMinor": "1260000"
+  }
+} }
+```
+
+`payment.id` is the payment reference (send it to the gateway as the order id). **Idempotent:**
+while the due lines are unchanged, every call (also concurrent ones) returns the same open intent
+with `200` and `created: false`. A trip has at most one open intent (enforced by the database).
+Errors: `409 TRIP_NOT_CONFIRMED` (draft), `409 NOTHING_DUE`, `409 TRIP_EXPIRED`.
+
+### POST /api/v1/trips/:id/payments/:paymentId/confirm → 200
+
+Simulated gateway callback. Body (all optional):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `outcome` | `"succeeded"` | `"failed"` records a failed attempt (nothing allocated) |
+| `capturedAmountMinor` | full `amountMinor` | Digit string; less than the intent amount simulates a partial capture |
+| `gatewayTransactionId` | `SIM-<uuid>` | Unique per gateway |
+
+On success the captured amount is allocated to the due lines **in order**: an item becomes `PAID`
+(and `CONFIRMED`) only when fully covered, otherwise `PARTIALLY_PAID`. The trip becomes `CONFIRMED`
+when no item is pending; after a partial payment, a new intent covers the remainder.
+
+```json
+{ "data": { "replayed": false, "payment": { "id": "…", "status": "SUCCEEDED",
+  "amountMinor": "1260000", "capturedMinor": "500000",
+  "allocations": [ { "itemId": "…", "amountMinor": "360000" }, { "itemId": "…", "amountMinor": "140000" } ],
+  "currency": "NPR", "currencyExponent": 2, "…": "…" } } }
+```
+
+**Idempotent:** confirming a payment that already succeeded returns it with `replayed: true` and
+changes nothing (no second capture, no second allocation, also under concurrency). Errors:
+`404 PAYMENT_NOT_FOUND` (not a payment of this trip), `409 PAYMENT_NOT_OPEN` (failed/cancelled),
+`409 PAYMENT_INTENT_STALE` (the amount due changed; create a new intent), `409 TRIP_EXPIRED`,
+`422 INVALID_CAPTURED_AMOUNT` (more than the intent).
+
+### GET /api/v1/trips/:id/payments → 200
+
+`{ "data": { "currency": "NPR", "currencyExponent": 2, "payments": [ <payment>, … ] } }`, oldest first.
+
+## Admin endpoints (ADR 0007)
+
+Admin = the session user has role `ADMIN` (re-read on every request). No API grants that role;
+an operator sets it in the database. Every other user gets `403 FORBIDDEN` for every `/admin` URL
+before any data is read. Admin writes are logged with the admin's user id.
+
+### POST /api/v1/admin/trips/:id/payments/at-property/settle → 200
+
+Body: `{ "itemIds": ["…"] }` (1–50 distinct ids of the trip's items). Records that the customer
+paid the provider on arrival: `PAY_AT_PROPERTY → PAID_AT_PROPERTY`. No money moves through MeroStay;
+the commission stays `INVOICED`. Idempotent per item (`changed: false` the second time). Errors:
+`404 TRIP_NOT_FOUND`, `404 ITEM_NOT_FOUND`, `422 ITEM_NOT_PAY_AT_PROPERTY`, `409 ITEM_NOT_CONFIRMED`.
+
+```json
+{ "data": { "tripId": "…", "items": [ { "id": "…", "status": "CONFIRMED",
+  "paymentMethod": "pay_at_property", "paymentStatus": "PAID_AT_PROPERTY", "changed": true } ] } }
+```
+
+### GET /api/v1/admin/trips/:id/invoices → 200
+
+The trip's commission invoices (internal view; provider-facing invoice endpoints arrive with the
+partner dashboards). One invoice per provider with pay-at-property items:
+
+```json
+{ "data": [ { "id": "…", "number": "INV-20261121-K7Q3ZP2M", "status": "ISSUED", "tripId": "…",
+  "provider": { "id": "…", "name": "…" }, "currency": "NPR", "currencyExponent": 2,
+  "amountMinor": "115500", "issuedAt": "…", "dueOn": null, "paidAt": null,
+  "items": [ { "id": "…", "listingType": "hotel_room", "paymentStatus": "PAY_AT_PROPERTY",
+    "commissionStatus": "INVOICED", "subtotalMinor": "770000", "commissionRateBps": 1500,
+    "commissionMinor": "115500" } ] } ] }
+```
+
+`amountMinor` always equals the sum of its items' `commissionMinor` (checked by the database when
+the invoice is issued).
 
 ## Why the API is vertical-agnostic
 
@@ -288,9 +418,9 @@ client. A new vertical (e.g. permits) is a `listing_types` row, an optional deta
 |---|---|
 | Flights | Set `listing_types.is_active = true` for `flight_ticket`; flights then appear in search and can be added like any item |
 | New verticals | Data only (see above); optional per-type filters can be added as optional query parameters |
-| Payment gateway | New endpoints under `/trips/:id/payments`; online items move `UNPAID → PAID`, items `PENDING → CONFIRMED`; existing endpoints unchanged |
-| Refunds / cancellation | New `/trips/:id/items/:itemId/cancel`, using the frozen `cancellationPolicy` snapshot |
-| Payouts / invoices | Finance endpoints reading `commissionStatus` / `payoutStatus` |
+| Live payment gateways (eSewa, Khalti) | New `gateway` values; the intent response gains the provider's redirect data and confirm verifies server-to-server. Paths and shapes stay |
+| Refunds / cancellation | New `/trips/:id/items/:itemId/cancel`, using the frozen `cancellationPolicy` snapshot; `REFUND` payments (ADR 0007 plan) |
+| Payouts / provider invoices | Finance and partner endpoints reading `payouts`, `provider_invoices`, `commissionStatus` / `payoutStatus` |
 | Multi-currency trips | `currency` is already on every money-bearing object |
 
 ## Authentication history

@@ -108,6 +108,8 @@ Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they 
 | `apps/api/.env` | `SESSION_SECRET` | **Required by the API server.** ≥ 32 characters; signs CSRF tokens. Generate: `openssl rand -base64 48`. Never commit it |
 | `apps/api/.env` | `SESSION_TTL_HOURS` | *Optional.* Session lifetime in hours (default 168 = 7 days) |
 | `apps/api/.env` | `SESSION_COOKIE_SECURE` | *Optional.* HTTPS-only cookie. Default `true` in production (where `false` is refused), `false` locally |
+| `apps/api/.env` | `PAYMENT_GATEWAY` | *Optional.* `simulated` enables the test-mode payment gateway for local development (ADR 0007). Unset = online payment endpoints return 503. Refused in production |
+| `apps/api/.env` | `HOLD_RELEASE_INTERVAL_SECONDS` | *Optional.* Seconds between hold-release runs in watch mode (default 60) |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
 The API validates its variables on startup and exits with a clear message listing any
@@ -122,13 +124,33 @@ invalid ones (without printing their values).
 | `npm run db:migrate` | Apply pending migrations to the dev database (`prisma migrate deploy`, direct URL) |
 | `npm run db:migrate:status` | Show which migrations are applied |
 | `npm run db:seed` | Insert sample data into the dev database (once) |
-| `npm run dev` | Start API (http://localhost:4000) **and** web (http://localhost:3000) with reload |
-| `npm run dev:api` / `npm run dev:web` | Start just one of them |
+| `npm run dev` | Start API (http://localhost:4000), web (http://localhost:3000) **and** the hold-release worker, with reload |
+| `npm run dev:api` / `npm run dev:web` | Start just one of them (no worker) |
+| `npm run jobs:hold-release` | Release inventory held by abandoned trips once, then exit |
+| `npm run jobs:hold-release:watch` | Same, every `HOLD_RELEASE_INTERVAL_SECONDS` until stopped (Ctrl+C) |
 | `npm run build` | Production build of API and web |
 | `npm start` | Run the production builds (after `npm run build`) |
 
 Open http://localhost:3000. The **System status** panel should show Web app, API and
 Database as **Operational**.
+
+### Scheduled jobs (ADR 0007)
+
+The **hold-release job** gives back inventory held by abandoned trips (draft or unpaid trips whose
+30-minute hold has passed). In development `npm run dev` runs it every minute. In production run
+the built script either from the platform's scheduler every minute
+(`node apps/api/dist/scripts/hold-release.js`, exits when done) or as one always-on worker
+(`node apps/api/dist/scripts/hold-release.js --watch`). Overlapping runs are safe: each stale trip
+is released exactly once (`FOR UPDATE SKIP LOCKED`). It needs only `DATABASE_URL`. CI does not run
+it on a schedule; its behaviour is covered by `src/jobs/*.test.ts`.
+
+### Trying payments locally
+
+Set `PAYMENT_GATEWAY=simulated` in `apps/api/.env`, confirm a trip with online items, then
+`POST /api/v1/trips/:id/payments/intent` and `POST /api/v1/trips/:id/payments/:paymentId/confirm`
+(optionally `{"capturedAmountMinor": "100000"}` for a partial payment). See
+[api.md](../architecture/api.md#payments-adr-0007). To use the admin endpoints, promote your local
+user: `UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';`.
 
 ## 6. Quality checks and tests
 

@@ -196,6 +196,9 @@ mero-stay/
 - **Trip writes** run in one transaction holding a row lock on the trip; inventory is reserved by atomic increments that the overbooking CHECK guards.
 - **Trips are always authenticated and owner-scoped in the data layer** (`WHERE customer_id = session user`); another
   user's trip is a 404, never a 403. Customer responses never include commission or provider-payout data.
+- **Payments (ADR 0007):** amounts are computed on the server; one open intent per trip; confirmation is idempotent;
+  database guard triggers keep allocations ≤ captured and ≤ item total, item payment status = allocations, and
+  invoice amount = linked commission. The simulated gateway is refused in production. `/admin…` requires role ADMIN.
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -338,6 +341,7 @@ npm run typecheck            # api + web (runs next typegen) + e2e
 npm test                     # unit tests (no DB needed)
 npm run test:integration     # integration tests: WIPES + migrates the TEST database
 npm run test:e2e             # build + Playwright (needs DB)
+npm run jobs:hold-release    # release abandoned inventory holds once (cron); :watch = every 60 s (dev runs it)
 ```
 
 Before committing: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration`.
@@ -351,4 +355,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
 - **Phase 3, Search & booking API:** merged to `main`, tagged `v0.3.0`.
 - **Phase 4, Authentication & ownership:** merged to `main`, tagged `v0.4.0`.
-- **Next:** Phase 5, Provider onboarding & verification (awaiting approval).
+- **Phase 5, Payments, invoices & hold-release job:** complete on branch `phase/05-payments-invoices`, awaiting owner review.
+  (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
+- **Next:** Phase 6 (awaiting approval; roadmap suggests Provider onboarding & verification).
