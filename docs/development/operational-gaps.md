@@ -17,8 +17,17 @@ onboarding at the owner's request).
 | 7 | **No live payment gateway.** Only the simulated test gateway exists, and it is refused in production. | In production online payment is unavailable (`503 PAYMENTS_UNAVAILABLE`); only pay-at-property bookings can complete. | Live gateways phase (Phase 10): eSewa and Khalti with server-to-server verification and signed callbacks. |
 | 8 | **A real gateway can report success late**, after the trip's hold expired or the hold-release job released the items. | With the simulated gateway this cannot happen (confirm is refused after the hold, `409 TRIP_EXPIRED`). A real provider's money would arrive for released items. | Live gateways (Phase 10) with Cancellations & refunds (Phase 11): accept the callback, record the payment, then re-book or refund it. |
 | 9 | **No persistent admin audit log; admins are created by SQL.** | Admin actions (pay-at-property settlement) are only in structured logs with the admin's user id. An operator grants `ADMIN` with an `UPDATE` statement. | Admin phase (Phase 7): audit-log table, admin user management. |
-| 10 | **Invoice numbering and payment terms are not decided.** Numbers are `INV-YYYYMMDD-<random>`; `due_on` is empty. | Invoices exist and are correct, but may not meet Nepal's tax-invoice rules (e.g. sequential numbers) and have no due date. | Commission & payouts phase (Phase 12): owner decision with the accountant. |
+| 10 | **Invoice numbering and payment terms are not implemented yet** (owner decisions recorded below). Numbers are still `INV-YYYYMMDD-<random>`; `due_on` is empty. | Invoices exist and are correct, but may not meet Nepal's tax-invoice rules (sequential numbers) and have no due date. | Commission & payouts phase (Phase 12): implement the decisions below after the tax advisor confirms the numbering rules. |
 | 11 | **Only admins can record a pay-at-property settlement.** | Providers cannot mark "paid on arrival" themselves. | With partner accounts (Provider onboarding, Phase 6) or the partner dashboard (Phase 13). |
+
+## Owner decisions on invoicing (recorded 2026-11-21, after Phase 5)
+
+| Topic | Decision | Status |
+|---|---|---|
+| Invoice numbering | **Sequential numbering is deferred to the tax advisor / finance phase.** The design must support **gap-free sequential numbers per fiscal year** (e.g. a per-fiscal-year counter allocated in the same transaction that issues the invoice, never reused after a void). | Open (gap 10). Today: `INV-YYYYMMDD-<random>` |
+| Payment terms | **Default Net 15** (due 15 days after issue). This is a placeholder until finance confirms it. | Not applied yet: `due_on` stays empty until the finance phase |
+| Invoice cadence | **One invoice per trip** (per provider within the trip), as built in Phase 5. | Done (ADR 0007) |
+| Payout schedule | **Deferred to the payouts phase.** | Open (Commission & payouts, Phase 12) |
 
 ## Closed
 
