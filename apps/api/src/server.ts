@@ -1,6 +1,12 @@
 import { createApp } from "./app.js";
 import type { AuthConfig } from "./modules/auth/auth.config.js";
-import { authConfigFromEnv, loadEnvFileIfPresent, parseEnv, type Env } from "./config/env.js";
+import {
+  authConfigFromEnv,
+  loadEnvFileIfPresent,
+  parseEnv,
+  paymentsConfigFromEnv,
+  type Env,
+} from "./config/env.js";
 import { createLogger } from "./lib/logger.js";
 import { checkDatabaseConnection, createPrismaClient } from "./lib/prisma.js";
 
@@ -28,6 +34,7 @@ const app = createApp({
   checkDatabase: () => checkDatabaseConnection(prisma),
   prisma,
   auth,
+  payments: paymentsConfigFromEnv(env),
 });
 
 const server = app.listen(env.PORT, (error) => {
@@ -35,7 +42,10 @@ const server = app.listen(env.PORT, (error) => {
     logger.fatal({ err: error }, "MeroStay API failed to start");
     process.exit(1);
   }
-  logger.info({ port: env.PORT, env: env.NODE_ENV }, "MeroStay API listening");
+  logger.info(
+    { port: env.PORT, env: env.NODE_ENV, paymentGateway: env.PAYMENT_GATEWAY ?? "none" },
+    "MeroStay API listening",
+  );
 });
 
 let shuttingDown = false;

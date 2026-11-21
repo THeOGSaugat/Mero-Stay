@@ -9,6 +9,11 @@ export const TRIP_INCLUDE = {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     include: {
       slots: { orderBy: { serviceDate: "asc" } },
+      // Money the customer has paid towards this item online (succeeded charges only, ADR 0007).
+      allocations: {
+        where: { payment: { kind: "CHARGE", status: "SUCCEEDED" } },
+        select: { amountMinor: true },
+      },
       listing: {
         select: {
           id: true,

@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import type { UserRole } from "../../generated/prisma/enums.js";
 import { AppError } from "../../lib/errors.js";
 import { sessionCookieName, type AuthConfig } from "./auth.config.js";
 import type { AuthService } from "./auth.service.js";
@@ -9,8 +10,15 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export function createAuthMiddleware(service: AuthService, config: AuthConfig) {
   const cookieName = sessionCookieName(config);
 
-  /** Reads the session cookie and sets req.auth when it belongs to a valid, active session. */
+  /**
+   * Reads the session cookie and sets req.auth when it belongs to a valid, active session.
+   * Runs once per request: routers that each guard themselves do not repeat the lookup.
+   */
   const loadSession: RequestHandler = async (req, _res, next) => {
+    if (req.auth) {
+      next();
+      return;
+    }
     const token = parseCookies(req.headers.cookie).get(cookieName);
     if (token) {
       const context = await service.resolveSession(token);
@@ -58,7 +66,22 @@ export function createAuthMiddleware(service: AuthService, config: AuthConfig) {
     );
   };
 
-  return { loadSession, requireAuth, requireCsrf, requireJson, cookieName };
+  /**
+   * 403 unless the session user has one of `roles`. The role comes from the users row loaded with
+   * the session on this request, so a role change takes effect immediately. Run after requireAuth.
+   */
+  const requireRole =
+    (...roles: readonly UserRole[]): RequestHandler =>
+    (req, _res, next) => {
+      const role = req.auth?.user.role;
+      next(
+        role !== undefined && roles.includes(role)
+          ? undefined
+          : new AppError(403, "FORBIDDEN", "Your account cannot use this endpoint."),
+      );
+    };
+
+  return { loadSession, requireAuth, requireCsrf, requireRole, requireJson, cookieName };
 }
 
 export type AuthMiddleware = ReturnType<typeof createAuthMiddleware>;

@@ -20,14 +20,29 @@ const ITEM_TRANSITIONS: Record<BookingItemStatus, readonly BookingItemStatus[]> 
 };
 
 const PAYMENT_TRANSITIONS: Record<PaymentStatus, readonly PaymentStatus[]> = {
-  // Customer chooses: pay online now, or pay the provider on arrival.
-  UNPAID: ["PAID", "PAY_AT_PROPERTY"],
+  // Customer chooses: pay online now, or pay the provider on arrival. Online money arrives through
+  // allocations of succeeded payments: in full (PAID) or in part first (PARTIALLY_PAID, ADR 0007).
+  UNPAID: ["PARTIALLY_PAID", "PAID", "PAY_AT_PROPERTY"],
+  // A partly paid item is completed by a later payment, or refunded what it received.
+  PARTIALLY_PAID: ["PAID", "REFUNDED"],
   PAID: ["PARTIALLY_REFUNDED", "REFUNDED"],
   PARTIALLY_REFUNDED: ["REFUNDED"],
-  // Money was never with MeroStay, so there is nothing to refund through us.
-  PAY_AT_PROPERTY: [],
+  // Money was never with MeroStay, so there is nothing to refund through us. The only change is
+  // recording that the provider was paid on arrival.
+  PAY_AT_PROPERTY: ["PAID_AT_PROPERTY"],
+  PAID_AT_PROPERTY: [],
   REFUNDED: [],
 };
+
+/** Statuses of items the customer pays at the property (the method is encoded in the status). */
+export const PAY_AT_PROPERTY_STATUSES: readonly PaymentStatus[] = [
+  "PAY_AT_PROPERTY",
+  "PAID_AT_PROPERTY",
+];
+
+export function isPayAtProperty(paymentStatus: PaymentStatus): boolean {
+  return PAY_AT_PROPERTY_STATUSES.includes(paymentStatus);
+}
 
 const COMMISSION_TRANSITIONS: Record<CommissionStatus, readonly CommissionStatus[]> = {
   PENDING: ["INVOICED", "PAID", "WAIVED"],
@@ -59,7 +74,7 @@ export function canTransitionCommissionStatus(
 ): boolean {
   if (!COMMISSION_TRANSITIONS[from].includes(to)) return false;
 
-  if (to === "INVOICED") return paymentStatus === "PAY_AT_PROPERTY";
+  if (to === "INVOICED") return isPayAtProperty(paymentStatus);
   if (from === "PENDING" && to === "PAID") {
     return paymentStatus === "PAID" || paymentStatus === "PARTIALLY_REFUNDED";
   }

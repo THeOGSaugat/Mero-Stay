@@ -14,6 +14,7 @@ import {
   assertItemTransition,
 } from "../../domain/booking-item-status.js";
 import { mapDatabaseError } from "../../lib/database-errors.js";
+import { issueCommissionInvoices } from "../finance/invoices.service.js";
 import { AppError } from "../../lib/errors.js";
 import { assertNotInPast, invalidDateRange } from "../listings/listings.service.js";
 import {
@@ -562,10 +563,11 @@ export function createTripsService({
   }
 
   /**
-   * Submits the trip. No payment is taken here (the gateway is a later phase):
-   * - pay-at-property items → CONFIRMED, commission INVOICED (owed by the provider, §6.1);
-   * - online items stay PENDING / UNPAID until payment; their commission will be deducted
-   *   from the provider payout.
+   * Submits the trip. No payment is taken here (see the payments module, ADR 0007):
+   * - pay-at-property items → CONFIRMED, commission INVOICED with an issued commission invoice per
+   *   provider (owed by the provider, §6.1);
+   * - online items stay PENDING / UNPAID until they are paid online; their commission will be
+   *   deducted from the provider payout.
    * Trip → CONFIRMED when every item is confirmed, otherwise PENDING (awaiting payment) with a
    * fresh hold window. Money snapshots were frozen when items were added; nothing is re-priced.
    */
@@ -603,12 +605,15 @@ export function createTripsService({
           assertCommissionTransition(item.commissionStatus, "INVOICED", item.paymentStatus);
           await tx.bookingItem.update({
             where: { id: item.id },
-            data: { status: "CONFIRMED", commissionStatus: "INVOICED", confirmedAt },
+            data: { status: "CONFIRMED", confirmedAt },
           });
         } else {
-          awaitingPayment = true; // stays PENDING / UNPAID until the payment phase
+          awaitingPayment = true; // stays PENDING / UNPAID until it is paid online (ADR 0007)
         }
       }
+      // Commission of the pay-at-property items → INVOICED, backed by one issued invoice per
+      // provider (same transaction, so an invoice exists exactly when the commission is INVOICED).
+      await issueCommissionInvoices(tx, trip.id, confirmedAt);
 
       await recalculateTrip(tx, trip, {
         status: awaitingPayment ? "PENDING" : "CONFIRMED",
@@ -620,12 +625,20 @@ export function createTripsService({
   }
 
   /**
-   * Releases inventory held by trips whose hold window has passed: their PENDING items become
-   * EXPIRED; confirmed (pay-at-property) items are kept, and such trips become CONFIRMED.
+   * Releases inventory held by trips whose hold window has passed: their PENDING items that hold
+   * no customer money become EXPIRED; confirmed items (pay-at-property, or paid online) are kept.
+   * Items with part of their price already paid online (PARTIALLY_PAID) are never expired: the
+   * customer's money is attached to them (a CHECK enforces it). Open payment intents of a swept
+   * trip are cancelled. The trip then becomes PENDING (partly paid items left), CONFIRMED (only
+   * confirmed items left) or EXPIRED (nothing left).
    *
-   * One transaction with four set-based statements per batch, regardless of how many trips are
-   * stale (a per-trip loop took ~4 s per trip over Neon's network latency). `SKIP LOCKED` lets it
-   * run safely alongside live requests. Not scheduled yet: a job runner arrives with payments.
+   * One transaction per batch: one locking SELECT and four set-based updates, regardless of how
+   * many trips are stale (a per-trip loop took ~4 s per trip over Neon's network latency).
+   *
+   * Idempotent and safe to run concurrently (scheduled by src/jobs/hold-release.ts, ADR 0007):
+   * `FOR UPDATE SKIP LOCKED` gives each concurrent run a disjoint set of trips (and skips trips a
+   * live request is editing), and a swept trip no longer matches the WHERE clause, so its holds
+   * can only ever be released once.
    */
   async function expireStaleTrips(limit = 500): Promise<number> {
     // The only item change made here is PENDING → EXPIRED; check it against the domain rules once.
@@ -652,6 +665,7 @@ export function createTripsService({
           JOIN booking_items bi ON bi.id = bis.booking_item_id
           WHERE bi.trip_id = ANY(${ids}::uuid[])
             AND bi.status = 'PENDING'
+            AND bi.payment_status IN ('UNPAID', 'PAY_AT_PROPERTY')
             AND bis.inventory_slot_id IS NOT NULL
           GROUP BY bis.inventory_slot_id
         ) held
@@ -660,7 +674,9 @@ export function createTripsService({
       // 2. Expire those items.
       await tx.$executeRaw`
         UPDATE booking_items SET status = 'EXPIRED', updated_at = ${at}
-        WHERE trip_id = ANY(${ids}::uuid[]) AND status = 'PENDING'`;
+        WHERE trip_id = ANY(${ids}::uuid[])
+          AND status = 'PENDING'
+          AND payment_status IN ('UNPAID', 'PAY_AT_PROPERTY')`;
 
       // 3. Trip totals = sums of remaining active items; status from what is left.
       await tx.$executeRaw`
@@ -670,8 +686,13 @@ export function createTripsService({
           tax_minor              = agg.tax,
           total_minor            = agg.total,
           commission_total_minor = agg.commission,
-          status = CASE WHEN agg.confirmed > 0 THEN 'CONFIRMED'::trip_status ELSE 'EXPIRED'::trip_status END,
-          confirmed_at = CASE WHEN agg.confirmed > 0 THEN COALESCE(t.confirmed_at, ${at}) ELSE t.confirmed_at END,
+          status = CASE
+            WHEN agg.pending > 0 THEN 'PENDING'::trip_status
+            WHEN agg.confirmed > 0 THEN 'CONFIRMED'::trip_status
+            ELSE 'EXPIRED'::trip_status END,
+          confirmed_at = CASE
+            WHEN agg.pending = 0 AND agg.confirmed > 0 THEN COALESCE(t.confirmed_at, ${at})
+            ELSE t.confirmed_at END,
           expires_at = NULL,
           updated_at = ${at}
         FROM (
@@ -681,13 +702,21 @@ export function createTripsService({
             COALESCE(SUM(bi.tax_minor)            FILTER (WHERE bi.status NOT IN ('CANCELLED', 'EXPIRED')), 0) AS tax,
             COALESCE(SUM(bi.total_minor)          FILTER (WHERE bi.status NOT IN ('CANCELLED', 'EXPIRED')), 0) AS total,
             COALESCE(SUM(bi.commission_minor)     FILTER (WHERE bi.status NOT IN ('CANCELLED', 'EXPIRED')), 0) AS commission,
-            COUNT(*) FILTER (WHERE bi.status = 'CONFIRMED') AS confirmed
+            COUNT(*) FILTER (WHERE bi.status = 'CONFIRMED') AS confirmed,
+            COUNT(*) FILTER (WHERE bi.status = 'PENDING') AS pending
           FROM trips t2
           LEFT JOIN booking_items bi ON bi.trip_id = t2.id
           WHERE t2.id = ANY(${ids}::uuid[])
           GROUP BY t2.id
         ) agg
         WHERE t.id = agg.id`;
+
+      // 4. Cancel their open payment intents (they covered items that no longer exist as due).
+      await tx.$executeRaw`
+        UPDATE payments SET status = 'CANCELLED', completed_at = ${at}, updated_at = ${at}
+        WHERE trip_id = ANY(${ids}::uuid[])
+          AND kind = 'CHARGE'
+          AND status IN ('INITIATED', 'PENDING')`;
 
       return ids.length;
     }, TX_OPTIONS);

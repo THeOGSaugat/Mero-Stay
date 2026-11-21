@@ -14,6 +14,10 @@ import { createHealthRouter } from "./modules/health/health.routes.js";
 import { createListingsRouter } from "./modules/listings/listings.routes.js";
 import { createTripsRouter } from "./modules/trips/trips.routes.js";
 import { createTripsService } from "./modules/trips/trips.service.js";
+import { createAdminRouter } from "./modules/admin/admin.routes.js";
+import { NO_PAYMENTS, type PaymentsConfig } from "./modules/payments/payments.config.js";
+import { createPaymentsRouter } from "./modules/payments/payments.routes.js";
+import { createPaymentsService } from "./modules/payments/payments.service.js";
 
 export interface AppDependencies {
   logger: Logger;
@@ -25,6 +29,8 @@ export interface AppDependencies {
   prisma?: PrismaClient;
   /** Session/CSRF/rate-limit settings (ADR 0006). Required together with `prisma`. */
   auth?: AuthConfig;
+  /** Online payment gateway (ADR 0007). Default: none (payment intents/confirm return 503). */
+  payments?: PaymentsConfig;
   /** Clock, injectable for tests (hold expiry, "today" in Nepal). */
   now?: () => Date;
 }
@@ -89,6 +95,15 @@ export function createApp(deps: AppDependencies): Express {
         auth: authMiddleware,
       }),
     );
+    const paymentsService = createPaymentsService({
+      prisma: deps.prisma,
+      now,
+      config: deps.payments ?? NO_PAYMENTS,
+    });
+    // Always authenticated; owner-scoped (ADR 0007).
+    v1.use(createPaymentsRouter({ service: paymentsService, auth: authMiddleware }));
+    // MeroStay staff only: role ADMIN on the session user.
+    v1.use(createAdminRouter({ payments: paymentsService, auth: authMiddleware }));
     app.use("/api/v1", v1);
   }
 
