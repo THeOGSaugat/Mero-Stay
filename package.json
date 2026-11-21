@@ -40,6 +40,9 @@
     "prettier": "3.10.1",
     "typescript": "5.9.3"
   },
+  "overrides": {
+    "effect": "3.22.5"
+  },
   "allowScripts": {
     "@prisma/engines@7.10.1": true,
     "esbuild@0.28.2": true,
