@@ -12,6 +12,7 @@ describe("parseEnv", () => {
       LOG_LEVEL: "info",
       DATABASE_URL: validUrl,
       SESSION_TTL_HOURS: 168,
+      HOLD_RELEASE_INTERVAL_SECONDS: 60,
     });
   });
 

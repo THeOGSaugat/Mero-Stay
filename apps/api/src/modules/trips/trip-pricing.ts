@@ -1,4 +1,5 @@
 import type { PaymentStatus, PayoutStatus } from "../../generated/prisma/enums.js";
+import { isPayAtProperty } from "../../domain/booking-item-status.js";
 import {
   calculateItemCharges,
   resolveCommissionRateBps,
@@ -40,7 +41,7 @@ export function statusesForPaymentMethod(method: PaymentMethod): {
 }
 
 export function paymentMethodOf(paymentStatus: PaymentStatus): PaymentMethod {
-  return paymentStatus === "PAY_AT_PROPERTY" ? "pay_at_property" : "online";
+  return isPayAtProperty(paymentStatus) ? "pay_at_property" : "online";
 }
 
 export interface PricingListing {

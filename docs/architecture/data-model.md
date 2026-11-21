@@ -63,10 +63,10 @@ Listing types in the MVP:
 | `trips` | One customer order | `reference`, `customer_id`, `status`, `currency`, stored totals: subtotal, service charge, tax, total, `commission_total_minor` |
 | `booking_items` | One line of a trip | `listing_id`, `provider_id`, `listing_type_code`, `status`, dates, `quantity`, money snapshot (below), `payment_status`, `commission_status`, `payout_status`, `cancellation_policy_id` + snapshot, `attributes`, `external_booking_ref` |
 | `booking_item_slots` | Per-date lines of an item | `inventory_slot_id`, `service_date`, `units`, `unit_price_minor`, `amount_minor` |
-| `payments` | A gateway charge or refund (shape) | `gateway` (text), `kind`, `status`, `amount_minor`, `gateway_transaction_id` (unique per gateway) |
-| `payment_allocations` | How a payment splits across items (shape) | `payment_id`, `booking_item_id`, `amount_minor` |
+| `payments` | A gateway charge (intent → succeeded/failed/cancelled) or refund (ADR 0007) | `gateway` (text), `kind`, `status`, `amount_minor` (requested), `captured_minor`, `intent_fingerprint`, `gateway_transaction_id` (unique per gateway); at most one open charge per trip |
+| `payment_allocations` | How a succeeded payment splits across items (ADR 0007) | `payment_id`, `booking_item_id`, `amount_minor`; immutable; Σ ≤ captured and Σ per item ≤ item total (triggers) |
 | `payouts` | Transfer to a provider for online-paid items (shape) | provider, period, amount, status |
-| `provider_invoices` | Commission owed for pay-at-property items (shape) | number, provider, amount, status |
+| `provider_invoices` | Commission owed for pay-at-property items, one per trip and provider (ADR 0007) | number, provider, `trip_id`, amount = Σ linked items' commission (checked at issue), status DRAFT → ISSUED → PAID / VOID |
 | `reviews` | One review per completed booking item (shape) | `booking_item_id` (unique), `rating` 1–5, provider reply |
 | `notifications` | SMS/email records (shape) | `channel`, `provider` (text), recipient, template, status |
 
@@ -89,7 +89,7 @@ Per-item statuses:
 | Field | Values | Rule (see `src/domain/booking-item-status.ts`) |
 |---|---|---|
 | `status` | PENDING → CONFIRMED → IN_PROGRESS → COMPLETED; CANCELLED, NO_SHOW, EXPIRED | Final states are final |
-| `payment_status` | UNPAID → PAID or PAY_AT_PROPERTY; PAID → (PARTIALLY_)REFUNDED | Pay-at-property cannot be refunded through MeroStay |
+| `payment_status` | UNPAID → PARTIALLY_PAID → PAID (online, by allocations) or PAY_AT_PROPERTY → PAID_AT_PROPERTY; PAID → (PARTIALLY_)REFUNDED | Pay-at-property cannot be refunded through MeroStay; a trigger keeps online statuses equal to the allocations (ADR 0007) |
 | `commission_status` | PENDING → PAID (online: deducted from payout) / PENDING → INVOICED → PAID (pay at property); WAIVED | Invoicing only for pay-at-property |
 | `payout_status` | PENDING, ON_HOLD, PAID; NOT_APPLICABLE for pay-at-property | |
 

@@ -6,6 +6,7 @@ import {
   DEFAULT_SESSION_TTL_HOURS,
   type AuthConfig,
 } from "../modules/auth/auth.config.js";
+import type { PaymentsConfig } from "../modules/payments/payments.config.js";
 
 /** Treat "VAR=" (empty) like an unset variable. */
 const emptyAsUndefined = (value: unknown) => (value === "" ? undefined : value);
@@ -43,6 +44,17 @@ const envSchema = z
     ),
     /** Send the session cookie only over HTTPS. Default: true in production, false otherwise. */
     SESSION_COOKIE_SECURE: z.preprocess(emptyAsUndefined, z.enum(["true", "false"]).optional()),
+    /**
+     * Online payment gateway (ADR 0007). Only "simulated" exists this phase: payments are marked
+     * succeeded by an API call instead of a real provider, so it is REFUSED in production. Unset =
+     * online payments are unavailable (payment endpoints return 503). Explicit opt-in everywhere.
+     */
+    PAYMENT_GATEWAY: z.preprocess(emptyAsUndefined, z.enum(["simulated"]).optional()),
+    /** How often the hold-release worker runs in --watch mode (default 60 s). */
+    HOLD_RELEASE_INTERVAL_SECONDS: z.preprocess(
+      emptyAsUndefined,
+      z.coerce.number().int().min(5).max(3600).default(60),
+    ),
   })
   .superRefine((env, ctx) => {
     // Neon only accepts TLS connections. In production, refuse to start without it
@@ -55,6 +67,13 @@ const envSchema = z
         code: "custom",
         path: ["DATABASE_URL"],
         message: "must include sslmode=require in production",
+      });
+    }
+    if (env.NODE_ENV === "production" && env.PAYMENT_GATEWAY === "simulated") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["PAYMENT_GATEWAY"],
+        message: "cannot be simulated in production (anyone could mark their own payment as paid)",
       });
     }
     if (env.NODE_ENV === "production" && env.SESSION_COOKIE_SECURE === "false") {
@@ -118,4 +137,9 @@ export function authConfigFromEnv(env: Env): AuthConfig {
         : env.SESSION_COOKIE_SECURE === "true",
     rateLimits: DEFAULT_RATE_LIMITS,
   };
+}
+
+/** Online payment settings for the API server (ADR 0007). */
+export function paymentsConfigFromEnv(env: Env): PaymentsConfig {
+  return { gateway: env.PAYMENT_GATEWAY ?? null };
 }

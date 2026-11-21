@@ -189,6 +189,7 @@ describe("multi-vertical trip: hotel + bus + guide → quote → confirm", () =>
       taxRateBps: 1300,
       taxMinor: "110110",
       totalMinor: "957110",
+      paidMinor: "0",
       refundedMinor: "0",
     });
     expect(item).toMatchObject({

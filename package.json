@@ -12,7 +12,7 @@
     "apps/web"
   ],
   "scripts": {
-    "dev": "concurrently --names api,web --prefix-colors blue,green --kill-others-on-fail \"npm run dev -w @merostay/api\" \"npm run dev -w @merostay/web\"",
+    "dev": "concurrently --names api,web,jobs --prefix-colors blue,green,magenta --kill-others-on-fail \"npm run dev -w @merostay/api\" \"npm run dev -w @merostay/web\" \"npm run jobs:hold-release:watch -w @merostay/api\"",
     "start": "concurrently --names api,web --prefix-colors blue,green --kill-others \"npm run start -w @merostay/api\" \"npm run start -w @merostay/web\"",
     "dev:api": "npm run dev -w @merostay/api",
     "dev:web": "npm run dev -w @merostay/web",
@@ -29,7 +29,9 @@
     "db:migrate": "npm run db:migrate -w @merostay/api",
     "db:migrate:status": "npm run db:migrate:status -w @merostay/api",
     "db:seed": "npm run db:seed -w @merostay/api",
-    "db:check": "npm run db:check -w @merostay/api"
+    "db:check": "npm run db:check -w @merostay/api",
+    "jobs:hold-release": "npm run jobs:hold-release -w @merostay/api",
+    "jobs:hold-release:watch": "npm run jobs:hold-release:watch -w @merostay/api"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",

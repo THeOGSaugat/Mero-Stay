@@ -63,6 +63,15 @@ export function inspectDatabaseError(err: unknown): DatabaseErrorInfo | null {
 }
 
 const OVERBOOKING_CONSTRAINT = "inventory_slots_no_overbooking_chk";
+/** Payment, allocation and invoice guards (ADR 0007). Checked before the generic money prefixes. */
+const PAYMENT_CONSTRAINT_PREFIXES = [
+  "payments_",
+  "payment_allocations_",
+  "provider_invoices_",
+  "booking_items_payment_",
+  "booking_items_paid_",
+  "booking_items_invoice",
+];
 const MONEY_CONSTRAINT_PREFIXES = ["booking_items_", "booking_item_slots_", "trips_"];
 
 /** Maps a database error to an AppError, or returns null if it is not a known constraint violation. */
@@ -76,6 +85,19 @@ export function mapDatabaseError(err: unknown): AppError | null {
       409,
       "INSUFFICIENT_AVAILABILITY",
       "Not enough availability for the requested dates and quantity.",
+    );
+  }
+  if (
+    sqlState === "23514" &&
+    constraint &&
+    PAYMENT_CONSTRAINT_PREFIXES.some((p) => constraint.startsWith(p))
+  ) {
+    // Payments are computed and locked on the server, so this means a bug or a race the database
+    // stopped: nothing was charged, allocated or invoiced twice.
+    return new AppError(
+      422,
+      "PAYMENT_INVARIANT_VIOLATED",
+      "The payment amounts failed a consistency check and were not saved.",
     );
   }
   if (

@@ -6,6 +6,7 @@ import {
   canTransitionCommissionStatus,
   canTransitionItemStatus,
   canTransitionPaymentStatus,
+  isPayAtProperty,
 } from "./booking-item-status.js";
 
 describe("booking item status", () => {
@@ -49,6 +50,30 @@ describe("payment status (per item)", () => {
   it("never reopens a refunded item", () => {
     expect(canTransitionPaymentStatus("REFUNDED", "PAID")).toBe(false);
   });
+
+  it("online money can arrive in parts: UNPAID → PARTIALLY_PAID → PAID (Phase 5)", () => {
+    expect(canTransitionPaymentStatus("UNPAID", "PARTIALLY_PAID")).toBe(true);
+    expect(canTransitionPaymentStatus("PARTIALLY_PAID", "PAID")).toBe(true);
+    expect(canTransitionPaymentStatus("PARTIALLY_PAID", "UNPAID")).toBe(false);
+    expect(canTransitionPaymentStatus("PAID", "PARTIALLY_PAID")).toBe(false);
+    expect(canTransitionPaymentStatus("PARTIALLY_PAID", "PAY_AT_PROPERTY")).toBe(false);
+  });
+
+  it("pay-at-property is settled once, never turned into an online payment", () => {
+    expect(canTransitionPaymentStatus("PAY_AT_PROPERTY", "PAID_AT_PROPERTY")).toBe(true);
+    expect(canTransitionPaymentStatus("PAY_AT_PROPERTY", "PAID")).toBe(false);
+    expect(canTransitionPaymentStatus("UNPAID", "PAID_AT_PROPERTY")).toBe(false);
+    expect(canTransitionPaymentStatus("PAID_AT_PROPERTY", "REFUNDED")).toBe(false);
+    expect(canTransitionPaymentStatus("PAID_AT_PROPERTY", "PAY_AT_PROPERTY")).toBe(false);
+  });
+
+  it("knows which statuses mean pay at property", () => {
+    expect(isPayAtProperty("PAY_AT_PROPERTY")).toBe(true);
+    expect(isPayAtProperty("PAID_AT_PROPERTY")).toBe(true);
+    for (const status of ["UNPAID", "PARTIALLY_PAID", "PAID", "REFUNDED"] as const) {
+      expect(isPayAtProperty(status)).toBe(false);
+    }
+  });
 });
 
 describe("commission status (per item)", () => {
@@ -61,6 +86,12 @@ describe("commission status (per item)", () => {
     expect(canTransitionCommissionStatus("PENDING", "INVOICED", "PAY_AT_PROPERTY")).toBe(true);
     expect(canTransitionCommissionStatus("INVOICED", "PAID", "PAY_AT_PROPERTY")).toBe(true);
     expect(canTransitionCommissionStatus("PENDING", "PAID", "PAY_AT_PROPERTY")).toBe(false);
+  });
+
+  it("a settled pay-at-property item can still be invoiced; a partly paid one cannot be collected", () => {
+    expect(canTransitionCommissionStatus("PENDING", "INVOICED", "PAID_AT_PROPERTY")).toBe(true);
+    expect(canTransitionCommissionStatus("PENDING", "PAID", "PARTIALLY_PAID")).toBe(false);
+    expect(canTransitionCommissionStatus("PENDING", "INVOICED", "PARTIALLY_PAID")).toBe(false);
   });
 
   it("cannot collect commission on an unpaid item", () => {

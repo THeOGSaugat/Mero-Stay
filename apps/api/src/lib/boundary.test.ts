@@ -122,6 +122,41 @@ describe("database error mapping", () => {
     }
   });
 
+  it("payment/allocation/invoice guards → 422 PAYMENT_INVARIANT_VIOLATED (Phase 5)", () => {
+    for (const constraint of [
+      "payment_allocations_within_payment_chk",
+      "payment_allocations_within_item_chk",
+      "payments_finished_immutable_chk",
+      "provider_invoices_amount_matches_items_chk",
+      "booking_items_payment_matches_allocations_chk",
+      "booking_items_paid_never_expires_chk",
+      "booking_items_invoice_link_chk",
+      "booking_items_invoiced_has_invoice_chk",
+    ]) {
+      expect(mapDatabaseError(checkViolation(constraint))).toMatchObject({
+        statusCode: 422,
+        code: "PAYMENT_INVARIANT_VIOLATED",
+      });
+    }
+  });
+
+  it("finds a guard trigger's constraint from its message (the adapter drops the field)", () => {
+    const raised = Object.assign(new Error("x"), {
+      code: "P2010",
+      meta: {
+        driverAdapterError: {
+          cause: {
+            originalCode: "23514",
+            originalMessage:
+              'violates check constraint "payment_allocations_within_item_chk": allocations exceed the item total',
+          },
+        },
+      },
+    });
+    expect(mapDatabaseError(raised)).toMatchObject({ code: "PAYMENT_INVARIANT_VIOLATED" });
+    expect(JSON.stringify(mapDatabaseError(raised))).not.toMatch(/violates|allocations exceed/);
+  });
+
   it("never copies the raw PostgreSQL text (failing row) into the API error", () => {
     const mapped = mapDatabaseError(checkViolation("booking_items_commission_chk"));
     expect(JSON.stringify(mapped)).not.toMatch(/Failing row|secret-uuid|violates/);

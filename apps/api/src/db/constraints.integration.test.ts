@@ -242,7 +242,7 @@ describe("64-bit money columns", () => {
       FROM information_schema.columns
       WHERE table_schema = 'public' AND column_name LIKE '%\_minor'
       ORDER BY table_name, column_name`;
-    expect(rows.length).toBe(20);
+    expect(rows.length).toBe(21); // + payments.captured_minor (Phase 5)
     expect(rows.filter((row) => row.data_type !== "bigint")).toEqual([]);
   });
 

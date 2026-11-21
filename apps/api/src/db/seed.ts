@@ -1,10 +1,11 @@
-import type { PrismaClient } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import {
   calculateItemCharges,
   resolveCommissionRateBps,
   summarizeTrip,
   type ItemCharges,
 } from "../domain/money.js";
+import { issueCommissionInvoices } from "../modules/finance/invoices.service.js";
 
 /**
  * SAMPLE data for local development and tests. All names are fictional ("Sample").
@@ -28,6 +29,35 @@ export interface SeedSummary {
 }
 
 const date = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
+
+/**
+ * A succeeded online payment of one whole item, recorded in the order the database requires
+ * (ADR 0007): payment captured → allocation → item PAID. The guard triggers reject any shortcut.
+ */
+async function recordSamplePayment(
+  tx: Prisma.TransactionClient,
+  input: {
+    tripId: string;
+    itemId: string;
+    gateway: string;
+    amountMinor: bigint;
+    gatewayTransactionId: string;
+  },
+): Promise<void> {
+  await tx.payment.create({
+    data: {
+      tripId: input.tripId,
+      gateway: input.gateway,
+      status: "SUCCEEDED",
+      amountMinor: input.amountMinor,
+      capturedMinor: input.amountMinor,
+      gatewayTransactionId: input.gatewayTransactionId,
+      completedAt: new Date(),
+      allocations: { create: [{ bookingItemId: input.itemId, amountMinor: input.amountMinor }] },
+    },
+  });
+  await tx.bookingItem.update({ where: { id: input.itemId }, data: { paymentStatus: "PAID" } });
+}
 
 function itemMoney(charges: ItemCharges) {
   return {
@@ -387,7 +417,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         startDate: date("2026-12-20"),
         travellerCount: 2,
         ...itemMoney(busCharges),
-        paymentStatus: "PAID",
+        // Becomes PAID below, once the payment is allocated (the database checks they agree).
+        paymentStatus: "UNPAID",
         cancellationPolicyId: flexible.id,
         cancellationPolicySnapshot: { name: flexible.name, rules: flexible.rules ?? [] },
         attributes: { seatNumbers: ["A1", "A2"] },
@@ -445,19 +476,16 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
     });
 
     // The bus was prepaid with eSewa: one payment allocated to that item only.
-    await tx.payment.create({
-      data: {
-        tripId: trip1.id,
-        gateway: "esewa",
-        status: "SUCCEEDED",
-        amountMinor: busCharges.totalMinor,
-        gatewayTransactionId: "SAMPLE-ESEWA-0001",
-        completedAt: new Date(),
-        allocations: {
-          create: [{ bookingItemId: busItem.id, amountMinor: busCharges.totalMinor }],
-        },
-      },
+    await recordSamplePayment(tx, {
+      tripId: trip1.id,
+      itemId: busItem.id,
+      gateway: "esewa",
+      amountMinor: busCharges.totalMinor,
+      gatewayTransactionId: "SAMPLE-ESEWA-0001",
     });
+    // The homestay is paid at the property, so its commission is invoiced to the provider
+    // (same function the trip-confirm flow uses, ADR 0007).
+    await issueCommissionInvoices(tx, trip1.id, new Date());
     await tx.notification.create({
       data: {
         userId: customer.id,
@@ -499,7 +527,7 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         startDate: date("2026-10-01"),
         endDate: date("2026-10-06"),
         ...itemMoney(guideCharges),
-        paymentStatus: "PAID",
+        paymentStatus: "UNPAID", // PAID below, once the payment is allocated
         commissionStatus: "PAID",
         payoutStatus: "PAID",
         completedAt: new Date(),
@@ -512,6 +540,13 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
           })),
         },
       },
+    });
+    await recordSamplePayment(tx, {
+      tripId: trip2.id,
+      itemId: guideItem.id,
+      gateway: "khalti",
+      amountMinor: guideCharges.totalMinor,
+      gatewayTransactionId: "SAMPLE-KHALTI-0001",
     });
     await tx.review.create({
       data: {

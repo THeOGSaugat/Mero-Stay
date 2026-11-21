@@ -18,6 +18,9 @@ generator client {
   provider            = "prisma-client"
   output              = "../src/generated/prisma"
   moduleFormat        = "esm"
+  // Partial unique indexes (ADR 0007): "one open charge per trip", "one live invoice per trip and
+  // provider". Declared here so the drift check covers them.
+  previewFeatures     = ["partialIndexes"]
   // Emit `.js` import specifiers so `tsc` output runs on Node's native ESM loader.
   importFileExtension = "js"
 }
@@ -568,6 +571,7 @@ model Trip {
   customer      User           @relation(fields: [customerId], references: [id])
   items         BookingItem[]
   payments      Payment[]
+  invoices      ProviderInvoice[]
   notifications Notification[]
 
   @@index([customerId])
@@ -587,10 +591,16 @@ enum BookingItemStatus {
   @@map("booking_item_status")
 }
 
+/// Per-item payment state. The payment method is encoded here (ADR 0005): PAY_AT_PROPERTY and
+/// PAID_AT_PROPERTY are the pay-at-property states; every other value is an online item.
 enum PaymentStatus {
   UNPAID
+  /// Online item with some, but not all, of its total allocated from succeeded payments (ADR 0007).
+  PARTIALLY_PAID
   PAID
   PAY_AT_PROPERTY
+  /// The provider confirmed the customer paid at the property (no money through MeroStay).
+  PAID_AT_PROPERTY
   PARTIALLY_REFUNDED
   REFUNDED
 
@@ -728,6 +738,8 @@ enum PaymentTransactionStatus {
 }
 
 /// One money movement with a gateway (eSewa, Khalti, ...). Gateway is text so adding one needs no migration.
+/// A CHARGE starts as an open intent (INITIATED) for the trip's online items and is allocated to
+/// them only when it SUCCEEDS (ADR 0007). At most one open charge per trip (partial unique index).
 model Payment {
   id                   String                   @id @default(uuid()) @db.Uuid
   tripId               String                   @map("trip_id") @db.Uuid
@@ -735,7 +747,12 @@ model Payment {
   gateway              String
   status               PaymentTransactionStatus @default(INITIATED)
   currency             String                   @default("NPR") @db.Char(3)
+  /// Amount requested from the gateway (the amount due when the intent was created).
   amountMinor          BigInt                   @map("amount_minor")
+  /// Amount the gateway actually captured: 0 until SUCCEEDED, then 1..amount_minor (CHECK).
+  capturedMinor        BigInt                   @default(0) @map("captured_minor")
+  /// SHA-256 of the items and amounts this intent covers; an identical request reuses the intent.
+  intentFingerprint    String?                  @map("intent_fingerprint") @db.Char(64)
   gatewayTransactionId String?                  @map("gateway_transaction_id")
   /// Raw verification response (no secrets) for reconciliation.
   gatewayResponse      Json?                    @map("gateway_response")
@@ -747,6 +764,7 @@ model Payment {
   allocations PaymentAllocation[]
 
   @@unique([gateway, gatewayTransactionId])
+  @@unique([tripId], map: "payments_one_open_charge_per_trip", where: raw("kind = 'CHARGE' AND (status = 'INITIATED' OR status = 'PENDING')"))
   @@index([tripId])
   @@map("payments")
 }
@@ -805,10 +823,15 @@ enum InvoiceStatus {
 }
 
 /// Commission owed by a provider for pay-at-property items (the provider collected the money).
+/// Created when a trip is confirmed: one per trip and provider, DRAFT → ISSUED in the same
+/// transaction; a trigger checks the amount equals the linked items' commission (ADR 0007).
 model ProviderInvoice {
   id          String        @id @default(uuid()) @db.Uuid
   number      String        @unique
   providerId  String        @map("provider_id") @db.Uuid
+  /// The trip whose pay-at-property items this invoice covers. NULL is reserved for future
+  /// period (e.g. monthly) invoices spanning several trips.
+  tripId      String?       @map("trip_id") @db.Uuid
   status      InvoiceStatus @default(DRAFT)
   currency    String        @default("NPR") @db.Char(3)
   amountMinor BigInt        @map("amount_minor")
@@ -818,9 +841,12 @@ model ProviderInvoice {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
   provider     Provider      @relation(fields: [providerId], references: [id])
+  trip         Trip?         @relation(fields: [tripId], references: [id], onDelete: Restrict)
   bookingItems BookingItem[]
 
+  @@unique([tripId, providerId], map: "provider_invoices_one_live_per_trip_provider", where: raw("trip_id IS NOT NULL AND status <> 'VOID'"))
   @@index([providerId])
+  @@index([tripId])
   @@map("provider_invoices")
 }
 

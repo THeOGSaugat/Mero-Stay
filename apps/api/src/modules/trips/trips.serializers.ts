@@ -21,6 +21,11 @@ import type { TripQuote } from "./trips.service.js";
 
 type Item = TripWithItems["items"][number];
 
+/** Paid online towards an item so far (sum of allocations from succeeded charges). */
+function paidMinor(item: Item): bigint {
+  return item.allocations.reduce((sum, allocation) => sum + allocation.amountMinor, 0n);
+}
+
 function serializeMoney(priced: Omit<PricedItem, "lines" | "currency" | "quantity">) {
   return {
     subtotalMinor: minorToString(priced.subtotalMinor),
@@ -79,6 +84,7 @@ export function serializeItem(item: Item) {
     })),
     money: {
       ...serializeMoney(item),
+      paidMinor: minorToString(paidMinor(item)),
       refundedMinor: minorToString(item.refundedMinor),
     },
     cancellationPolicy: toJsonSafe(item.cancellationPolicySnapshot),
@@ -97,6 +103,7 @@ export function serializeTrip(trip: TripWithItems) {
     trip.currency,
     active.map((item) => ({ ...item, paymentMethod: paymentMethodOf(item.paymentStatus) })),
   );
+  const paidOnline = active.reduce((sum, item) => sum + paidMinor(item), 0n);
   return {
     data: {
       id: trip.id,
@@ -111,6 +118,11 @@ export function serializeTrip(trip: TripWithItems) {
         serviceChargeMinor: minorToString(trip.serviceChargeMinor),
         taxMinor: minorToString(trip.taxMinor),
         totalMinor: minorToString(trip.totalMinor),
+      },
+      // Online money received so far, and what is still to pay online (ADR 0007).
+      onlinePayment: {
+        paidMinor: minorToString(paidOnline),
+        dueMinor: minorToString(split.payOnlineMinor - paidOnline),
       },
       items: trip.items.map(serializeItem),
       expiresAt: trip.expiresAt?.toISOString() ?? null,
