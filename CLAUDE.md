@@ -350,5 +350,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 1, Project foundation & dev environment:** complete, merged, tagged `v0.1.0`.
 - **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
 - **Phase 3, Search & booking API:** merged to `main`, tagged `v0.3.0`.
-- **Phase 4, Authentication & ownership:** complete on branch `phase/04-authentication`, awaiting owner review.
+- **Phase 4, Authentication & ownership:** merged to `main`, tagged `v0.4.0`.
 - **Next:** Phase 5, Provider onboarding & verification (awaiting approval).
