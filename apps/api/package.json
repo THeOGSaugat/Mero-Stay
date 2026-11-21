@@ -19,7 +19,9 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:seed": "prisma db seed",
-    "db:check": "tsx src/scripts/db-check.ts"
+    "db:check": "tsx src/scripts/db-check.ts",
+    "jobs:hold-release": "tsx src/scripts/hold-release.ts",
+    "jobs:hold-release:watch": "tsx src/scripts/hold-release.ts --watch"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

@@ -50,6 +50,11 @@ const envSchema = z
      * online payments are unavailable (payment endpoints return 503). Explicit opt-in everywhere.
      */
     PAYMENT_GATEWAY: z.preprocess(emptyAsUndefined, z.enum(["simulated"]).optional()),
+    /** How often the hold-release worker runs in --watch mode (default 60 s). */
+    HOLD_RELEASE_INTERVAL_SECONDS: z.preprocess(
+      emptyAsUndefined,
+      z.coerce.number().int().min(5).max(3600).default(60),
+    ),
   })
   .superRefine((env, ctx) => {
     // Neon only accepts TLS connections. In production, refuse to start without it
