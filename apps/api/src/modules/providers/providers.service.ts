@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { toDbDate } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
+import { missingRequirements, requirementGroups } from "../../domain/verification.js";
 import { AppError } from "../../lib/errors.js";
 import { withIdempotency, type IdempotentResult } from "../../lib/idempotency.js";
 import { skipTake, type Page } from "../../lib/pagination.js";
@@ -84,6 +85,50 @@ async function lockProvider(tx: Prisma.TransactionClient, id: string): Promise<v
   if (rows.length !== 1) throw providerNotFound();
 }
 
+/**
+ * 409 REQUIRED_DOCUMENTS_MISSING unless every requirement group of the provider type has a PENDING
+ * or APPROVED document (ADR 0009). The requirements are data (provider_type_required_documents).
+ */
+async function assertRequiredDocuments(
+  tx: Prisma.TransactionClient,
+  providerId: string,
+  providerTypeCode: string,
+): Promise<void> {
+  // Sequential on purpose: one transaction = one connection, so no parallel queries on it.
+  const rows = await tx.providerTypeRequiredDocument.findMany({
+    where: { providerTypeCode },
+    select: { requirement: true, documentType: true },
+  });
+  const documents = await tx.providerDocument.findMany({
+    where: { providerId },
+    select: { documentType: true, status: true },
+  });
+  const missing = missingRequirements(rows, documents);
+  if (missing.length > 0) {
+    throw new AppError(
+      409,
+      "REQUIRED_DOCUMENTS_MISSING",
+      "Some required verification documents are missing.",
+      { missing },
+    );
+  }
+}
+
+/** Provider types offered at onboarding, with their required document groups (public). */
+export async function listOfferedProviderTypes(prisma: PrismaClient) {
+  const types = await prisma.providerType.findMany({
+    where: { isActive: true },
+    orderBy: { code: "asc" },
+    include: { requiredDocuments: { select: { requirement: true, documentType: true } } },
+  });
+  return types.map((type) => ({
+    code: type.code,
+    name: type.name,
+    description: type.description,
+    requiredDocuments: requirementGroups(type.requiredDocuments),
+  }));
+}
+
 export function createProvidersService({ prisma, now }: { prisma: PrismaClient; now: () => Date }) {
   async function getProfile(providerId: string): Promise<ProviderProfile> {
     const provider = await prisma.provider.findUnique({
@@ -117,6 +162,14 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
           throw new AppError(422, "UNKNOWN_PROVIDER_TYPE", "Unknown provider type.", {
             providerTypeCode: input.providerTypeCode,
           });
+        }
+        if (!type.isActive) {
+          throw new AppError(
+            422,
+            "PROVIDER_TYPE_NOT_OFFERED",
+            "This provider type is not offered yet.",
+            { providerTypeCode: input.providerTypeCode },
+          );
         }
         const provider = await tx.provider.create({
           data: { ...input, ownerUserId: ctx.actorUserId, status: "DRAFT" },
@@ -293,6 +346,7 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
           "Submit at least one verification document first.",
         );
       }
+      await assertRequiredDocuments(tx, providerId, provider.providerTypeCode);
       await tx.provider.update({
         where: { id: providerId },
         data: { status: "PENDING_VERIFICATION", rejectionReason: null },
@@ -373,6 +427,8 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
       const at = now();
       const pendingIds = provider.documents.map((d) => d.id);
       if (decision === "approve") {
+        // Checked again here: an incomplete provider can never be approved (ADR 0009).
+        await assertRequiredDocuments(tx, providerId, provider.providerTypeCode);
         await tx.provider.update({
           where: { id: providerId },
           data: { status: "VERIFIED", verifiedAt: at, rejectionReason: null },

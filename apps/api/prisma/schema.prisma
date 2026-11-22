@@ -140,11 +140,30 @@ model ProviderType {
   code        String   @id
   name        String
   description String?
+  /// Offered at onboarding (ADR 0009). FALSE hides the type (e.g. a vertical not offered yet)
+  /// without removing it from the schema; existing providers of the type are unaffected.
+  isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  providers Provider[]
+  providers         Provider[]
+  requiredDocuments ProviderTypeRequiredDocument[]
 
   @@map("provider_types")
+}
+
+/// Verification documents a provider type must have (ADR 0009, requirements §6.2). Rows with the
+/// same `requirement` form one group: ANY ONE of its document types satisfies it (e.g. business
+/// registration OR local-government registration). Data, not code: changed by migration.
+model ProviderTypeRequiredDocument {
+  providerTypeCode String               @map("provider_type_code")
+  /// Group key, e.g. "identity", "registration", "tax", "licence".
+  requirement      String
+  documentType     ProviderDocumentType @map("document_type")
+
+  providerType ProviderType @relation(fields: [providerTypeCode], references: [code], onDelete: Cascade)
+
+  @@id([providerTypeCode, requirement, documentType])
+  @@map("provider_type_required_documents")
 }
 
 enum ProviderStatus {

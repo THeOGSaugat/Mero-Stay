@@ -46,6 +46,7 @@ export const PROVIDER_BOOKING_INCLUDE = {
     select: { amountMinor: true },
   },
   commissionInvoice: { select: { id: true, number: true, status: true } },
+  paymentSettledBy: { select: { id: true, fullName: true, role: true } },
 } satisfies Prisma.BookingItemInclude;
 
 export type ProviderBooking = Prisma.BookingItemGetPayload<{

@@ -118,3 +118,39 @@ export async function findActiveItems(tx: Prisma.TransactionClient, tripId: stri
 export async function findItemInTrip(tx: Prisma.TransactionClient, tripId: string, itemId: string) {
   return tx.bookingItem.findFirst({ where: { id: itemId, tripId }, include: { slots: true } });
 }
+
+/** The summary shown in a trip list: stored totals and the items' listing titles. */
+export const TRIP_SUMMARY_INCLUDE = {
+  items: {
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      listing: { select: { title: true, listingTypeCode: true } },
+    },
+  },
+} satisfies Prisma.TripInclude;
+
+export type TripSummary = Prisma.TripGetPayload<{ include: typeof TRIP_SUMMARY_INCLUDE }>;
+
+/** The OWNER's trips only (customer_id = the session user), newest first. */
+export async function findTripsOfCustomer(
+  db: Db,
+  customerId: string,
+  filter: { status?: TripSummary["status"]; skip: number; take: number },
+): Promise<{ trips: TripSummary[]; total: number }> {
+  const where = { customerId, ...(filter.status ? { status: filter.status } : {}) };
+  const [trips, total] = await Promise.all([
+    db.trip.findMany({
+      where,
+      include: TRIP_SUMMARY_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: filter.skip,
+      take: filter.take,
+    }),
+    db.trip.count({ where }),
+  ]);
+  return { trips, total };
+}

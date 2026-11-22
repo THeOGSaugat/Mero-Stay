@@ -6,7 +6,7 @@ import {
   type PricedItem,
   type TripQuoteTotals,
 } from "./trip-pricing.js";
-import { ACTIVE_ITEM_STATUSES, type TripWithItems } from "./trips.repository.js";
+import { ACTIVE_ITEM_STATUSES, type TripSummary, type TripWithItems } from "./trips.repository.js";
 import type { TripQuote } from "./trips.service.js";
 
 /**
@@ -156,6 +156,46 @@ export function serializeQuote(quote: TripQuote) {
       })),
       totals: serializeTotals(quote.totals),
       allAvailable: quote.lines.every((line) => line.available),
+    },
+  };
+}
+
+/** GET /api/v1/trips: customer view summaries (no commission/payout), money as strings. */
+export function serializeTripList(result: {
+  trips: TripSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}) {
+  return {
+    data: result.trips.map((trip) => ({
+      id: trip.id,
+      reference: trip.reference,
+      status: trip.status,
+      ...currencyInfo(trip.currency),
+      totals: {
+        subtotalMinor: minorToString(trip.subtotalMinor),
+        serviceChargeMinor: minorToString(trip.serviceChargeMinor),
+        taxMinor: minorToString(trip.taxMinor),
+        totalMinor: minorToString(trip.totalMinor),
+      },
+      items: trip.items.map((item) => ({
+        id: item.id,
+        status: item.status,
+        title: item.listing.title,
+        listingType: item.listing.listingTypeCode,
+        startDate: fromDbDate(item.startDate),
+        endDate: item.endDate ? fromDbDate(item.endDate) : null,
+      })),
+      expiresAt: trip.expiresAt?.toISOString() ?? null,
+      confirmedAt: trip.confirmedAt?.toISOString() ?? null,
+      createdAt: trip.createdAt.toISOString(),
+    })),
+    pagination: {
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.total,
+      totalPages: Math.ceil(result.total / result.pageSize),
     },
   };
 }

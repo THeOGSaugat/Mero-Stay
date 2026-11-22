@@ -19,6 +19,7 @@ export function createTripsRouter({ service, auth }: TripsRouterDeps): Router {
 
   router.use("/trips", auth.loadSession, auth.requireAuth, auth.requireCsrf);
 
+  router.get("/trips", controller.list);
   router.post("/trips", controller.create);
   router.get("/trips/:id", controller.get);
   router.post("/trips/:id/items", controller.addItem);

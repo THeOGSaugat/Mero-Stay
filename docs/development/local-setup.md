@@ -170,6 +170,17 @@ Creating a migration: see [data-model.md → Working with migrations](../archite
 
 Playwright HTML report: `npx playwright show-report`.
 
+### End-to-end tests (Playwright)
+
+| Command | What runs | Database |
+|---|---|---|
+| `npm run test:e2e` | Phase 1 home and health checks | The API's `apps/api/.env` (dev), read-only |
+| `E2E_DATABASE_URL="postgresql://…" npm run test:e2e:booking` | The above + the customer booking journey (desktop and mobile Chromium) | **A disposable database only.** Migrated and seeded with a fresh test world; the seed refuses the dev database |
+
+The booking run builds the web app for an API on port **4100** and starts the API (4100) and web app
+(3100) itself, so it never touches a running `npm run dev`. Afterwards, run `npm run build` again
+before `npm start`. Details: [frontend.md](../architecture/frontend.md#tests).
+
 ## 7. Health endpoints
 
 | Endpoint | Meaning | Status codes |

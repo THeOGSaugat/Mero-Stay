@@ -9,7 +9,7 @@ Data model: [data-model.md](data-model.md).
 
 | Area | Access |
 |---|---|
-| `/api/health…`, `/api/v1/listing-types`, `/api/v1/listings…` | **Public** (browsing needs no account) |
+| `/api/health…`, `/api/v1/listing-types`, `/api/v1/listings…`, `/api/v1/provider-types`, `/api/v1/locations` | **Public** (browsing needs no account) |
 | `/api/v1/auth/register`, `/api/v1/auth/login` | Public, rate-limited, JSON only |
 | `/api/v1/auth/me`, `/api/v1/auth/logout` | Session required |
 | `/api/v1/trips…` (including `/trips/:id/payments…`) | **Session required, owner only.** Writes also need `X-CSRF-Token` |
@@ -83,10 +83,10 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
 | 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `LOCATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE` | Well-formed, but breaks a business rule |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
 | 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
@@ -106,6 +106,7 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | GET | `/api/v1/listing-types` | All verticals and whether they are active/bookable |
 | GET | `/api/v1/listings` | Search bookable listings |
 | GET | `/api/v1/listings/:id` | Listing details + availability calendar |
+| GET | `/api/v1/trips` | The caller's own trips, newest first (Phase 7) |
 | POST | `/api/v1/trips` | Create a draft trip |
 | GET | `/api/v1/trips/:id` | Trip with items, money and statuses |
 | POST | `/api/v1/trips/:id/items` | Add a booking item (holds inventory) |
@@ -118,6 +119,8 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | GET | `/api/v1/trips/:id/payments` | The trip's payments and their allocations |
 | POST | `/api/v1/admin/trips/:id/payments/at-property/settle` | ADMIN: record that pay-at-property items were paid on arrival |
 | GET | `/api/v1/admin/trips/:id/invoices` | ADMIN: the trip's commission invoices |
+| GET | `/api/v1/provider-types` | Provider types offered at onboarding, with required documents (ADR 0009) |
+| GET | `/api/v1/locations` | The location tree, one level per request (Phase 7 Track B, ADR 0011) |
 | POST | `/api/v1/partner/onboarding` | Create a provider; the customer becomes a partner |
 | GET / PATCH | `/api/v1/partner/profile` | Own provider: profile, status, masked payout account |
 | POST | `/api/v1/partner/verification/submit` | Ask for verification (DRAFT/REJECTED → PENDING_VERIFICATION) |
@@ -230,6 +233,23 @@ or `null`. 404 for inactive verticals, drafts and unverified providers.
   "calendar": { "from": "…", "to": "…", "currency": "NPR", "currencyExponent": 2,
                 "slots": [{ "date": "2027-01-10", "status": "OPEN", "available": 33, "unitPriceMinor": "180000" }] }
 } }
+```
+
+### GET /api/v1/trips → 200 (Phase 7)
+
+The caller's **own** trips only (owner-scoped in the query: another user's trips are never listed),
+newest first. Query: `status` (e.g. `DRAFT` to find the current draft), `page`, `pageSize` (≤ 50).
+Customer view: no commission or payout data.
+
+```json
+{ "data": [ { "id": "…", "reference": "MS-7K3F9QXR", "status": "PENDING", "currency": "NPR",
+  "currencyExponent": 2,
+  "totals": { "subtotalMinor": "2030000", "serviceChargeMinor": "77000", "taxMinor": "110110",
+              "totalMinor": "2217110" },
+  "items": [ { "id": "…", "status": "CONFIRMED", "title": "Double room", "listingType": "hotel_room",
+               "startDate": "2027-01-10", "endDate": "2027-01-12" } ],
+  "expiresAt": "…", "confirmedAt": null, "createdAt": "…" } ],
+  "pagination": { "page": 1, "pageSize": 20, "total": 3, "totalPages": 1 } }
 ```
 
 ### POST /api/v1/trips → 201
@@ -478,13 +498,45 @@ PROVIDER_IDENTITY_LOCKED`), and `payoutAccount: { bankName, branch?, accountName
 a new account becomes the default **unverified** (re-verification) and is audited; the same account
 again changes nothing.
 
+### GET /api/v1/provider-types → 200 (public, ADR 0009)
+
+Only types with `is_active = true` (a type not offered yet, e.g. airline while flights are not
+built, is absent). Each lists its **required document groups**: one document of any listed type
+satisfies a group.
+
+```json
+{ "data": [ { "code": "hotel", "name": "Hotel / accommodation", "description": "…",
+  "requiredDocuments": [
+    { "requirement": "identity", "acceptedDocumentTypes": ["OWNER_ID"] },
+    { "requirement": "registration",
+      "acceptedDocumentTypes": ["BUSINESS_REGISTRATION", "LOCAL_GOVERNMENT_REGISTRATION"] } ] } ] }
+```
+
+Onboarding with a type that is not offered → `422 PROVIDER_TYPE_NOT_OFFERED`.
+
+### GET /api/v1/locations → 200 (public, Phase 7 Track B)
+
+Province → District → City/Area, **one level per request** (small responses on mobile data).
+Without `parentId`: the top level (locations without a parent, e.g. `Nepal`). With
+`?parentId=<uuid>`: that location's direct children, by name. An unknown parent →
+`404 LOCATION_NOT_FOUND`; any other parameter → `400`. Used by the partner listing forms (bus
+origin/destination, a listing's place); customer search still takes a slug (gap 20).
+
+```json
+{ "data": [ { "id": "…", "parentId": "…", "kind": "DISTRICT", "name": "Kaski", "slug": "kaski",
+  "hasChildren": true } ] }
+```
+
 ### Verification documents
 
 `POST /partner/verification-documents` → 201 `{ documentType, storageKey, mimeType
 (application/pdf | image/jpeg | image/png | image/webp), sizeBytes (≤ 10 MB), documentNumber?,
 expiresOn? }`. `storageKey` is an opaque key in MeroStay's private storage; URLs are refused (no
 public links). Status `PENDING` until an admin decides. Audited. `GET` lists them.
-`POST /partner/verification/submit` (body `{}`) → `{ data: { changed, provider } }`.
+`POST /partner/verification/submit` (body `{}`) → `{ data: { changed, provider } }`. Every required
+group of the provider type must have a PENDING or APPROVED document, otherwise `409
+REQUIRED_DOCUMENTS_MISSING` with `details.missing: [ { requirement, acceptedDocumentTypes } ]`. The
+same check runs again when an admin approves.
 
 ### Listings
 
@@ -523,7 +575,8 @@ masked. Includes the money snapshot with commission and payout (this is MeroStay
   "money": { "subtotalMinor": "700000", "serviceChargeMinor": "70000", "taxMinor": "100100",
     "totalMinor": "870100", "commissionRateBps": 1500, "commissionMinor": "105000",
     "providerPayoutMinor": "765100", "paidOnlineMinor": "0", "refundedMinor": "0" },
-  "commissionInvoice": { "id": "…", "number": "INV-…", "status": "ISSUED" }, "settledAt": null } }
+  "commissionInvoice": { "id": "…", "number": "INV-…", "status": "ISSUED" },
+  "settledAt": null, "settledBy": null } }
 ```
 
 The detail adds `lines`, `cancellationPolicy` (the frozen snapshot) and `attributes`.
@@ -531,7 +584,9 @@ The detail adds `lines`, `cancellationPolicy` (the frozen snapshot) and `attribu
 ### POST /partner/bookings/:itemId/settle-at-property → 200
 
 Header `Idempotency-Key` **required**; body `{}`. `PAY_AT_PROPERTY → PAID_AT_PROPERTY`, records who
-and when (`settledAt`), commission stays `INVOICED`, no money moves. Retries (also concurrent) apply
+and when, commission stays `INVOICED`, no money moves. Bookings show them as `settledAt` and
+`settledBy: { role, name }` (Phase 7 Track B): the partner's own name, or `{ "role": "ADMIN",
+"name": "MeroStay" }` when MeroStay staff recorded it (staff names are not shared). Retries (also concurrent) apply
 once; an already settled item is returned unchanged. Audited once. `{ data: { replayed, booking } }`.
 Errors: `404 BOOKING_NOT_FOUND`, `422 ITEM_NOT_PAY_AT_PROPERTY`, `409 ITEM_NOT_CONFIRMED`.
 

@@ -1,15 +1,26 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. PLACEHOLDER values until the owner's design references are
- * supplied (docs/design/). Change colours here, not in components.
+ * Design tokens. Colour palette from the owner's reference (docs/design/README.md); ONLY the
+ * colours were taken from it. Change colours here, not in components.
+ *
+ * Contrast: navy and ink are for text and buttons (≥ 7:1 on white). Teal and mint are accents
+ * (borders, highlights, large shapes), never small text on white (teal is below 4.5:1 there).
  */
 @theme {
-  --color-brand-50: #f0fdfa;
-  --color-brand-100: #ccfbf1;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
-  --color-brand-900: #134e4a;
+  --color-navy: #0f3b64; /* Deep Blue: primary, headings, buttons */
+  --color-navy-dark: #0b2e4f; /* hover/pressed state of navy (derived) */
+  --color-teal: #14b8a6; /* Teal Green: accent */
+  --color-mint: #a7d8d1; /* Soft Mint: soft accent, highlights */
+  --color-mist: #e8f1f5; /* Light Gray: surfaces, page sections */
+  --color-ink: #2d3748; /* Charcoal: body text */
+
+  /* Aliases kept for existing components (Phase 1). */
+  --color-brand-50: #e8f1f5;
+  --color-brand-100: #a7d8d1;
+  --color-brand-600: #14b8a6;
+  --color-brand-700: #0f3b64;
+  --color-brand-900: #0f3b64;
 
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
@@ -18,5 +29,5 @@
 
 body {
   background-color: var(--color-white);
-  color: var(--color-slate-900);
+  color: var(--color-ink);
 }

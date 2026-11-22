@@ -74,6 +74,7 @@ describe("migrations", () => {
         "provider_documents",
         "provider_invoices",
         "provider_payout_accounts",
+        "provider_type_required_documents",
         "provider_types",
         "providers",
         "reviews",
