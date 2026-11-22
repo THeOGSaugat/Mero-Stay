@@ -25,8 +25,8 @@ migrations in `apps/api/prisma/migrations/`. Design rationale: [ADR 0004](decisi
 | `users` | Customers, partners, admins (shape only; auth later) | `email` / `phone` (at least one), `full_name`, `role` |
 | `provider_types` | Lookup: hotel, bus_operator, airline, guide, tour_operator, activity_operator | `code` PK |
 | `providers` | A business or person supplying items | `provider_type_code`, `owner_user_id`, `status`, PAN/VAT/registration numbers, `commission_rate_bps` override, `integration_type`, `external_ref` |
-| `provider_documents` | Verification files (private) | `document_type`, `storage_key`, `status`, reviewer |
-| `provider_payout_accounts` | Bank accounts for payouts | bank, account name/number, `is_default` |
+| `provider_documents` | Verification files (private) | `document_type`, `storage_key` (opaque private key; no URLs), `status`, reviewer |
+| `provider_payout_accounts` | Bank accounts for payouts | bank, account name/number (only ever returned masked), `is_default` (one per provider, partial unique index), `verified_at` (NULL after a change) |
 | `locations` | Province → District → Municipality/Area → Point of interest | `parent_id`, `kind`, `slug` |
 
 ### What is sold
@@ -61,12 +61,14 @@ Listing types in the MVP:
 | Table | Purpose | Key fields |
 |---|---|---|
 | `trips` | One customer order | `reference`, `customer_id`, `status`, `currency`, stored totals: subtotal, service charge, tax, total, `commission_total_minor` |
-| `booking_items` | One line of a trip | `listing_id`, `provider_id`, `listing_type_code`, `status`, dates, `quantity`, money snapshot (below), `payment_status`, `commission_status`, `payout_status`, `cancellation_policy_id` + snapshot, `attributes`, `external_booking_ref` |
+| `booking_items` | One line of a trip | `listing_id`, `provider_id`, `listing_type_code`, `status`, dates, `quantity`, money snapshot (below), `payment_status`, `commission_status`, `payout_status`, `cancellation_policy_id` + snapshot, `attributes`, `external_booking_ref`, `payment_settled_at`/`payment_settled_by_id` (who recorded a pay-at-property payment; set exactly when `PAID_AT_PROPERTY`, CHECK) |
 | `booking_item_slots` | Per-date lines of an item | `inventory_slot_id`, `service_date`, `units`, `unit_price_minor`, `amount_minor` |
 | `payments` | A gateway charge (intent → succeeded/failed/cancelled) or refund (ADR 0007) | `gateway` (text), `kind`, `status`, `amount_minor` (requested), `captured_minor`, `intent_fingerprint`, `gateway_transaction_id` (unique per gateway); at most one open charge per trip |
 | `payment_allocations` | How a succeeded payment splits across items (ADR 0007) | `payment_id`, `booking_item_id`, `amount_minor`; immutable; Σ ≤ captured and Σ per item ≤ item total (triggers) |
 | `payouts` | Transfer to a provider for online-paid items (shape) | provider, period, amount, status |
 | `provider_invoices` | Commission owed for pay-at-property items, one per trip and provider (ADR 0007) | number, provider, `trip_id`, amount = Σ linked items' commission (checked at issue), status DRAFT → ISSUED → PAID / VOID |
+| `audit_log` | Append-only record of admin writes and sensitive partner writes (ADR 0008) | actor user + role, `action`, `entity_type`/`entity_id`, `before`/`after` (no secrets: CHECK), `ip`, `request_id`; UPDATE/DELETE refused by a trigger |
+| `idempotency_keys` | Remembered `Idempotency-Key`s so a retried write returns the first result (ADR 0008) | user, key (unique per user), scope, request fingerprint, resource id, status |
 | `reviews` | One review per completed booking item (shape) | `booking_item_id` (unique), `rating` 1–5, provider reply |
 | `notifications` | SMS/email records (shape) | `channel`, `provider` (text), recipient, template, status |
 

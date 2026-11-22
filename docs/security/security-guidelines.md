@@ -30,7 +30,13 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 
 - Every protected route declares its allowed roles.
 - Every resource access checks **ownership** (partner ↔ property, customer ↔ booking).
-- Admin actions are recorded in an audit log (who, what, when).
+- Admin writes and sensitive partner writes are recorded in the append-only `audit_log` (who, role,
+  what, which entity, before/after, IP, request id, when), in the same transaction as the change
+  (ADR 0008). Payloads go through `redactForAudit` (no passwords, hashes, tokens, secrets; account
+  numbers masked) and a database CHECK refuses secret-looking keys.
+- Roles are checked before any data is read (wrong role → 403 for every URL in the area); within a
+  role, another owner's data is a 404. Partners act for one owned provider per request
+  (`X-Provider-Id` when they own several).
 - IDs in URLs are not secrets. Never rely on an ID being unguessable for access control.
 - Trips are owner-scoped in the query itself; another user's trip is a 404 (no existence leak).
 
@@ -78,6 +84,9 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Commit `package-lock.json` for reproducible installs.
 
 ## 9. Sensitive data in the database
+
+- Bank account numbers are never returned in full by any endpoint (partner or admin): only
+  `accountNumberMasked` (last 4). Partners see customers by name only; email and phone are masked.
 
 - `provider_payout_accounts.account_number`, `providers.pan_number` and verification documents are
   sensitive. Only admins and the owning partner may read them; never include them in logs, list

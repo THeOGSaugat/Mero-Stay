@@ -3,7 +3,8 @@
 Base path: `/api/v1`. JSON in, JSON out. Design decisions:
 [ADR 0005](decisions/0005-search-and-booking-api-conventions.md) (search/booking conventions),
 [ADR 0006](decisions/0006-authentication.md) (authentication),
-[ADR 0007](decisions/0007-payments-and-invoices.md) (payments, invoices, hold-release job).
+[ADR 0007](decisions/0007-payments-and-invoices.md) (payments, invoices, hold-release job),
+[ADR 0008](decisions/0008-partner-admin-and-audit.md) (partner/admin backend, audit log, idempotency keys).
 Data model: [data-model.md](data-model.md).
 
 | Area | Access |
@@ -12,7 +13,9 @@ Data model: [data-model.md](data-model.md).
 | `/api/v1/auth/register`, `/api/v1/auth/login` | Public, rate-limited, JSON only |
 | `/api/v1/auth/me`, `/api/v1/auth/logout` | Session required |
 | `/api/v1/trips…` (including `/trips/:id/payments…`) | **Session required, owner only.** Writes also need `X-CSRF-Token` |
-| `/api/v1/admin…` | **Session with role `ADMIN`** (403 for everyone else). Writes also need `X-CSRF-Token` |
+| `/api/v1/partner/onboarding` | Session with role `CUSTOMER` or `PARTNER`. Needs `X-CSRF-Token` |
+| `/api/v1/partner…` (everything else) | **Session with role `PARTNER`**; scoped to the partner's own provider (another provider's data → 404). Writes also need `X-CSRF-Token` |
+| `/api/v1/admin…` | **Session with role `ADMIN`** (403 for everyone else). Writes also need `X-CSRF-Token` and are audited |
 
 ## Conventions
 
@@ -28,11 +31,32 @@ Data model: [data-model.md](data-model.md).
   `404 TRIP_NOT_FOUND`, exactly as for a trip that does not exist (existence never leaks).
 - **No password data is ever returned** (no hash, no password, no session token in any body).
 
+### 403 or 404?
+
+| Situation | Answer |
+|---|---|
+| Wrong role for a whole area (customer on `/partner` or `/admin`, admin on `/partner`) | `403 FORBIDDEN`, checked **before any data is read**, same for every URL |
+| Right role, but the resource belongs to someone else (another user's trip, another provider's listing, booking, invoice) | `404`, **identical to a resource that does not exist** |
+
+### Pagination (partner and admin lists)
+
+`?page=1&pageSize=20` (`pageSize` ≤ 100). Responses: `{ "data": [ … ], "page": { "page": 1, "pageSize": 20, "total": 57 } }`.
+
+### Idempotency keys (ADR 0008)
+
+Send `Idempotency-Key: <8–128 of A–Z a–z 0–9 _ ->` on a write to make retries safe: a retry with
+the same key returns the first result (same status, header `Idempotent-Replayed: true`) without
+applying again, also when requests race. **Required** on
+`POST /partner/bookings/:itemId/settle-at-property`; optional on `POST /partner/onboarding`,
+`POST /partner/verification-documents`, `POST /partner/listings`. The same key with a different
+request → `422 IDEMPOTENCY_KEY_REUSED`. Only successful results are remembered.
+
 ### Money
 
 | Rule | Example |
 |---|---|
 | Every money field ends in `Minor` and is a **string of digits** in minor units | `"totalMinor": "957110"` = Rs 9,571.10 |
+| An optional amount that does not exist is `null` (never `0`, never a number) | `"priceOverrideMinor": null` = no date-specific price |
 | Every money-bearing object has `currency` and `currencyExponent` | `"currency": "NPR", "currencyExponent": 2` |
 | Rates are JSON numbers in basis points | `"commissionRateBps": 1500` = 15% |
 | Money inputs use the same digit-string format | `GET /listings?minPrice=180000` |
@@ -57,11 +81,12 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Malformed request; `details` lists `{ path, message }` |
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
-| 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / not an admin |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED` | Conflicts with current state, availability or an existing account |
+| 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
+| 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED` | Well-formed, but breaks a business rule |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
 | 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
@@ -93,6 +118,22 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | GET | `/api/v1/trips/:id/payments` | The trip's payments and their allocations |
 | POST | `/api/v1/admin/trips/:id/payments/at-property/settle` | ADMIN: record that pay-at-property items were paid on arrival |
 | GET | `/api/v1/admin/trips/:id/invoices` | ADMIN: the trip's commission invoices |
+| POST | `/api/v1/partner/onboarding` | Create a provider; the customer becomes a partner |
+| GET / PATCH | `/api/v1/partner/profile` | Own provider: profile, status, masked payout account |
+| POST | `/api/v1/partner/verification/submit` | Ask for verification (DRAFT/REJECTED → PENDING_VERIFICATION) |
+| GET / POST | `/api/v1/partner/verification-documents` | Own verification documents (metadata + private storage key) |
+| GET / POST | `/api/v1/partner/listings` | Own listings (all statuses) / create a listing |
+| GET / PATCH | `/api/v1/partner/listings/:id` | One own listing / update it |
+| GET / POST / PATCH | `/api/v1/partner/listings/:id/slots` | Own inventory: list a range / create a range / update a range |
+| GET | `/api/v1/partner/bookings`, `/api/v1/partner/bookings/:itemId` | Own bookings (submitted trips) |
+| POST | `/api/v1/partner/bookings/:itemId/settle-at-property` | Record payment on arrival (Idempotency-Key required) |
+| GET | `/api/v1/partner/invoices` | Own commission invoices |
+| GET | `/api/v1/partner/payouts` | Own payout summary (read-only, nothing executed) |
+| GET | `/api/v1/admin/providers`, `/api/v1/admin/providers/:id` | ADMIN: providers, verification status, documents |
+| POST | `/api/v1/admin/providers/:id/verification/:decision` | ADMIN: `approve` or `reject` (with a reason); audited |
+| GET | `/api/v1/admin/invoices` | ADMIN: all commission invoices (filter provider/status/date) |
+| GET | `/api/v1/admin/payouts` | ADMIN: payout summary across providers (read-only) |
+| GET | `/api/v1/admin/audit-log` | ADMIN: the audit log (filter actor/action/entity/date) |
 
 ### POST /api/v1/auth/register → 201 (+ session cookie)
 
@@ -403,6 +444,138 @@ partner dashboards). One invoice per provider with pay-at-property items:
 
 `amountMinor` always equals the sum of its items' `commissionMinor` (checked by the database when
 the invoice is issued).
+
+## Partner endpoints (ADR 0008)
+
+Role `PARTNER`. Each request acts for **one provider the user owns**: the only one, or the one in
+`X-Provider-Id` when the user owns several (`400 PROVIDER_ID_REQUIRED` without it; a provider
+that is not yours → `404 PROVIDER_NOT_FOUND`). Everything returned belongs to that provider; any
+other provider's id in a URL is a `404`.
+
+### POST /api/v1/partner/onboarding → 201
+
+Any logged-in customer (or partner adding a business). Body: `{ providerTypeCode, legalName,
+displayName, description?, contactEmail?, contactPhone? (+977…), addressLine?, panNumber? (9 digits),
+vatNumber?, businessRegistrationNo? }`. Creates the provider as `DRAFT`; the user's role becomes
+`PARTNER`. Audited. Optional Idempotency-Key. Response: the profile (below).
+
+### GET /api/v1/partner/profile → 200, PATCH → 200
+
+```json
+{ "data": { "id": "…", "providerType": { "code": "hotel", "name": "Hotel / accommodation" },
+  "legalName": "…", "displayName": "…", "status": "PENDING_VERIFICATION", "verifiedAt": null,
+  "rejectionReason": null, "contact": { "email": null, "phone": "+9779800000001", "addressLine": null },
+  "tax": { "panNumber": "123456789", "vatNumber": null, "businessRegistrationNo": null },
+  "payoutAccount": { "id": "…", "bankName": "Nabil Bank", "branch": null, "accountName": "…",
+    "accountNumberMasked": "••••9012", "verified": false, "verifiedAt": null },
+  "documents": { "PENDING": 1, "APPROVED": 0, "REJECTED": 0 },
+  "commissionRateBps": null, "createdAt": "…", "updatedAt": "…" } }
+```
+
+**Bank account numbers are never returned in full** (partner or admin). PATCH accepts contact
+fields at any time, legal/tax fields only while `DRAFT`/`REJECTED` (`409
+PROVIDER_IDENTITY_LOCKED`), and `payoutAccount: { bankName, branch?, accountName, accountNumber }`:
+a new account becomes the default **unverified** (re-verification) and is audited; the same account
+again changes nothing.
+
+### Verification documents
+
+`POST /partner/verification-documents` → 201 `{ documentType, storageKey, mimeType
+(application/pdf | image/jpeg | image/png | image/webp), sizeBytes (≤ 10 MB), documentNumber?,
+expiresOn? }`. `storageKey` is an opaque key in MeroStay's private storage; URLs are refused (no
+public links). Status `PENDING` until an admin decides. Audited. `GET` lists them.
+`POST /partner/verification/submit` (body `{}`) → `{ data: { changed, provider } }`.
+
+### Listings
+
+`POST /partner/listings` → 201: `{ listingTypeCode, title, description?, parentId? (own listing),
+locationId?, currency, basePriceMinor ("350000"), serviceChargeRateBps?, taxRateBps?,
+defaultCancellationPolicyId?, addressLine?, attributes?, details? }`. `details` holds the type's
+fields (e.g. `hotel_room`: `maxAdults`, `bedType`, …; `bus_ticket`: route, departure, seats);
+types without a detail table (e.g. `activity`) use `attributes` only. `providerId` and
+`commissionRateBps` are rejected (400). New listings are `DRAFT`; PATCH may set `status` to
+`PENDING_REVIEW`, `ARCHIVED` or (from archived) `DRAFT`. Approval is an admin action. List:
+`?status=&listingType=&page=&pageSize=`.
+
+### Inventory: /partner/listings/:id/slots
+
+- `GET ?startDate=&endDate=` → `{ data: { listingId, currency, currencyExponent, basePriceMinor,
+  slots: [ { id, date, status, capacityTotal, capacityBooked, available, priceOverrideMinor
+  (string or null), effectivePriceMinor } ] } }`.
+- `POST { startDate, endDate, capacityTotal, priceOverrideMinor?, status? }` → 201 (`created`,
+  `unchanged` counts). Identical existing slots are left alone; different ones → `409 SLOT_EXISTS`.
+- `PATCH { startDate, endDate, capacityTotal?, priceOverrideMinor?, status? }` → `updated`,
+  `missingDates`. Capacity below booked → `409 CAPACITY_BELOW_BOOKED`.
+- Ranges are `[startDate, endDate)`, ≤ 366 days. Container listings (a hotel property) → 422.
+
+### Bookings
+
+`GET /partner/bookings?status=&from=&to=&page=` and `GET /partner/bookings/:itemId`: booking items
+of **submitted** trips for the partner's provider. Customer shown by **name only**; email and phone
+masked. Includes the money snapshot with commission and payout (this is MeroStay ↔ provider data):
+
+```json
+{ "data": { "id": "…", "tripReference": "MS-…", "status": "CONFIRMED", "listing": { … },
+  "startDate": "…", "endDate": "…", "quantity": 1,
+  "customer": { "name": "Sita Sharma", "emailMasked": "s•••@e•••.com", "phoneMasked": "+977••••••5678" },
+  "paymentMethod": "pay_at_property", "paymentStatus": "PAY_AT_PROPERTY", "commissionStatus": "INVOICED",
+  "payoutStatus": "NOT_APPLICABLE", "currency": "NPR", "currencyExponent": 2,
+  "money": { "subtotalMinor": "700000", "serviceChargeMinor": "70000", "taxMinor": "100100",
+    "totalMinor": "870100", "commissionRateBps": 1500, "commissionMinor": "105000",
+    "providerPayoutMinor": "765100", "paidOnlineMinor": "0", "refundedMinor": "0" },
+  "commissionInvoice": { "id": "…", "number": "INV-…", "status": "ISSUED" }, "settledAt": null } }
+```
+
+The detail adds `lines`, `cancellationPolicy` (the frozen snapshot) and `attributes`.
+
+### POST /partner/bookings/:itemId/settle-at-property → 200
+
+Header `Idempotency-Key` **required**; body `{}`. `PAY_AT_PROPERTY → PAID_AT_PROPERTY`, records who
+and when (`settledAt`), commission stays `INVOICED`, no money moves. Retries (also concurrent) apply
+once; an already settled item is returned unchanged. Audited once. `{ data: { replayed, booking } }`.
+Errors: `404 BOOKING_NOT_FOUND`, `422 ITEM_NOT_PAY_AT_PROPERTY`, `409 ITEM_NOT_CONFIRMED`.
+
+### Invoices and payouts
+
+- `GET /partner/invoices?status=&from=&to=&page=`: own commission invoices (same shape as the admin
+  invoice view, ADR 0007).
+- `GET /partner/payouts?from=&to=&page=`: read-only summary of online-paid items whose payout is
+  pending, per **service month** and currency:
+
+```json
+{ "data": [ { "provider": { "id": "…", "name": "…" }, "period": "2026-12", "currency": "NPR",
+  "currencyExponent": 2, "items": 1, "subtotalMinor": "350000", "serviceChargeMinor": "35000",
+  "taxMinor": "50050", "totalMinor": "435050", "commissionMinor": "52500",
+  "providerPayoutMinor": "382550", "payoutStatus": "PENDING", "executed": false } ],
+  "page": { "page": 1, "pageSize": 20, "total": 1 } }
+```
+
+`providerPayoutMinor` = Σ (total − commission) per item (Phase 2 formula; commission = 15% of the
+subtotal). Nothing is paid out in this phase.
+
+## Admin endpoints for providers, finance and audit (ADR 0008)
+
+- `GET /admin/providers?status=&providerType=&page=` and `GET /admin/providers/:id`: providers
+  with owner contact, verification status, document counts (detail: document list), payout account
+  **masked**.
+- `POST /admin/providers/:id/verification/approve|reject` body `{ reason? }` (required to reject) →
+  the provider. Only from `PENDING_VERIFICATION` (else `409 PROVIDER_NOT_PENDING`); approve also
+  approves pending documents and verifies the payout account. One audit row per decision.
+- `GET /admin/invoices?providerId=&status=&from=&to=&page=`, `GET /admin/payouts?providerId=&from=&to=&page=`.
+- `GET /admin/audit-log?actorUserId=&action=&entityType=&entityId=&from=&to=&page=`, newest first:
+
+```json
+{ "data": [ { "id": "…", "actor": { "userId": "…", "role": "ADMIN" },
+  "action": "provider.verification.approve", "entity": { "type": "provider", "id": "…" },
+  "before": { "status": "PENDING_VERIFICATION", "pendingDocumentIds": ["…"] },
+  "after": { "status": "VERIFIED", "documentStatus": "APPROVED", "reason": null },
+  "ip": "…", "requestId": "…", "createdAt": "…" } ], "page": { … } }
+```
+
+Audit payloads never contain passwords, hashes, tokens, secrets or full bank numbers (redacted in
+code; refused by a database CHECK). Actions recorded: `provider.create`,
+`provider.payout_account.change`, `provider.document.submit`, `provider.verification.submit`,
+`provider.verification.approve|reject`, `booking_item.settle_at_property`, `trip.settle_at_property`.
 
 ## Why the API is vertical-agnostic
 
