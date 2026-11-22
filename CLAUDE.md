@@ -199,6 +199,11 @@ mero-stay/
 - **Payments (ADR 0007):** amounts are computed on the server; one open intent per trip; confirmation is idempotent;
   database guard triggers keep allocations ≤ captured and ≤ item total, item payment status = allocations, and
   invoice amount = linked commission. The simulated gateway is refused in production. `/admin…` requires role ADMIN.
+- **Partners and admins (ADR 0008):** `/partner…` needs role PARTNER and acts for one owned provider (`X-Provider-Id`
+  when several); another provider's data is a 404. Wrong role for an area is 403 before any data is read. Admin writes
+  and sensitive partner writes call `recordAudit` inside their transaction (append-only, secrets redacted). Bank
+  account numbers are only ever returned masked; partners see customers by name only. Retryable writes use
+  `Idempotency-Key` (`lib/idempotency.ts`).
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -357,4 +362,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 4, Authentication & ownership:** merged to `main`, tagged `v0.4.0`.
 - **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
-- **Next:** Phase 6 (awaiting approval; roadmap suggests Provider onboarding & verification).
+- **Phase 6, Partner & admin backend:** complete on branch `phase/06-partner-admin`, awaiting owner review.
+- **Next:** Phase 7 (awaiting approval; roadmap suggests Admin approvals & moderation).
