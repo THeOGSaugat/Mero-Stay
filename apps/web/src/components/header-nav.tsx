@@ -39,6 +39,11 @@ export function HeaderNav() {
           <Link href="/trips" className={link}>
             Trips
           </Link>
+          {state.user.role === "PARTNER" ? (
+            <Link href="/partner" className={link}>
+              Partner
+            </Link>
+          ) : null}
           <span className="hidden px-2 text-sm text-slate-600 sm:inline" data-testid="signed-in-as">
             {state.user.fullName}
           </span>

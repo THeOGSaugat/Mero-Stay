@@ -26,6 +26,11 @@ export interface ApiRequest {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   csrfToken?: string | null;
+  /**
+   * Extra request headers (e.g. `X-Provider-Id`, `Idempotency-Key`). They cannot replace the ones
+   * this client sets itself (Accept, Content-Type, X-CSRF-Token).
+   */
+  headers?: Record<string, string>;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
 }
@@ -44,7 +49,7 @@ function isErrorBody(body: unknown): body is ApiErrorBody {
 /** Calls the API on the same origin. Resolves with the parsed body; throws ApiError otherwise. */
 export async function apiRequest<T>(path: string, request: ApiRequest = {}): Promise<T> {
   const { method = "GET", body, csrfToken, fetchImpl = fetch } = request;
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { ...request.headers, Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET" && csrfToken) headers["X-CSRF-Token"] = csrfToken;
 
