@@ -368,6 +368,7 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
-- **Phase 7, Web frontend:** Track A (customer) complete on branch `phase/07-web-frontend`, awaiting owner review;
-  Tracks B (partner) and C (admin) follow after approval. Gaps 18–19 closed (ADR 0009).
-- **Next:** Phase 7 Track B, after Track A approval.
+- **Phase 7, Web frontend:** on branch `phase/07-web-frontend`. Track A (customer) approved; Track B (partner
+  dashboard, ADR 0011) complete, awaiting owner review; Track C (admin) follows after approval. Gaps 18–19 closed
+  (ADR 0009).
+- **Next:** Phase 7 Track C, after Track B approval.
