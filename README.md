@@ -59,6 +59,11 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
   refused there; payment endpoints answer 503). Live eSewa/Khalti come in a later phase.
 - **Admins** are users with role `ADMIN`, set directly in the database by an operator (no endpoint
   grants it): `UPDATE users SET role = 'ADMIN' WHERE email = '…';`. Use it sparingly.
+- **Web app (`apps/web`):** set `API_URL` (the API's base URL) for **both** `npm run build` and
+  `npm start`. Browsers call `/api/v1/*` on the web origin and Next.js proxies it to `API_URL`; the
+  proxy target is fixed at build time (ADR 0010). Behind this proxy all requests reach the API from
+  the web server's IP, so forward the client IP before relying on per-IP rate limits (operational
+  gap 5).
 - Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
 - Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
 - Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).

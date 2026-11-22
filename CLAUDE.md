@@ -204,6 +204,10 @@ mero-stay/
   and sensitive partner writes call `recordAudit` inside their transaction (append-only, secrets redacted). Bank
   account numbers are only ever returned masked; partners see customers by name only. Retryable writes use
   `Idempotency-Key` (`lib/idempotency.ts`).
+- **Web app (ADR 0010):** browsers call only `/api/v1/*` on the web origin, rewritten to the API (`API_URL`, baked in
+  at build time), so the session cookie is first-party. Auth state (user + CSRF token) lives in memory, never in
+  localStorage. Public pages are Server Components inside `<Suspense>`; account pages are Client Components. Money is
+  formatted from the API's strings with string operations only (`apps/web/src/lib/money.ts`); the UI computes no totals.
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -345,7 +349,8 @@ npm run lint
 npm run typecheck            # api + web (runs next typegen) + e2e
 npm test                     # unit tests (no DB needed)
 npm run test:integration     # integration tests: WIPES + migrates the TEST database
-npm run test:e2e             # build + Playwright (needs DB)
+npm run test:e2e             # build + Playwright: Phase 1 checks (uses the dev API read-only)
+E2E_DATABASE_URL=… npm run test:e2e:booking   # + booking journey on a DISPOSABLE database (never dev)
 npm run jobs:hold-release    # release abandoned inventory holds once (cron); :watch = every 60 s (dev runs it)
 ```
 
@@ -363,4 +368,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
-- **Next:** Phase 7 (awaiting approval; roadmap suggests Admin approvals & moderation).
+- **Phase 7, Web frontend:** Track A (customer) complete on branch `phase/07-web-frontend`, awaiting owner review;
+  Tracks B (partner) and C (admin) follow after approval. Gaps 18–19 closed (ADR 0009).
+- **Next:** Phase 7 Track B, after Track A approval.

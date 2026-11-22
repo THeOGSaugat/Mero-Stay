@@ -6,6 +6,7 @@
 | [architecture/overview.md](architecture/overview.md) | System architecture and component responsibilities |
 | [architecture/data-model.md](architecture/data-model.md) | Multi-vertical data model, money formulas, adding a vertical |
 | [architecture/api.md](architecture/api.md) | API v1: endpoints, request/response shapes, money format, errors |
+| [architecture/frontend.md](architecture/frontend.md) | Web app: routes, API proxy, auth/CSRF, money display, tests (Phase 7) |
 | [architecture/decisions/](architecture/decisions/) | Architecture Decision Records (ADRs) |
 | [development/local-setup.md](development/local-setup.md) | **Install, configure, run, test, troubleshoot** |
 | [development/roadmap.md](development/roadmap.md) | Phase-by-phase development plan |
