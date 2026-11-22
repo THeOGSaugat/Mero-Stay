@@ -690,6 +690,12 @@ describe("overbooking, partner bookings and settlement", () => {
       "BOOKING_NOT_FOUND",
     ]);
 
+    type Settled = { settledAt: string | null; settledBy: { role: string; name: string } | null };
+    const before = dataOf<Settled>(
+      await call(partnerA, "get", `/api/v1/partner/bookings/${papItem}`),
+    );
+    expect([before.settledAt, before.settledBy]).toEqual([null, null]);
+
     const idem = key();
     const results = await Promise.all(
       [1, 2, 3].map(() => call(partnerA, "post", url, {}, { "Idempotency-Key": idem })),
@@ -703,6 +709,10 @@ describe("overbooking, partner bookings and settlement", () => {
     }
     const other = await call(partnerA, "post", url, {}, { "Idempotency-Key": key() });
     expect(other.status).toBe(200); // already settled: unchanged
+    // Who and when are shown to the partner (Phase 7 Track B): their own account's name.
+    const settled = dataOf<{ booking: Settled }>(other).booking;
+    expect(settled.settledBy).toEqual({ role: "PARTNER", name: "partner-a Person" });
+    expect(settled.settledAt).toBe(dataOf<{ booking: Settled }>(results[0]!).booking.settledAt);
 
     const item = await prisma.bookingItem.findUniqueOrThrow({ where: { id: papItem } });
     expect([item.paymentStatus, item.paymentSettledById, item.commissionStatus]).toEqual([
@@ -946,6 +956,11 @@ describe("audit log", () => {
     expect((await auditRows("trip", stay.tripId)).map((r) => [r.action, r.actorUserId])).toEqual([
       ["trip.settle_at_property", admin.userId],
     ]);
+    // The partner sees that MeroStay recorded it, without the staff member's name.
+    const seen = dataOf<{ settledBy: unknown }>(
+      await call(partnerA, "get", `/api/v1/partner/bookings/${stay.itemId}`),
+    );
+    expect(seen.settledBy).toEqual({ role: "ADMIN", name: "MeroStay" });
   });
 });
 

@@ -20,6 +20,18 @@ function customerOf(item: ProviderBooking) {
   };
 }
 
+/**
+ * Who recorded a pay-at-property settlement. A partner sees their own account's name; a
+ * settlement recorded by MeroStay staff shows as "MeroStay" (staff names are not shared).
+ */
+function settledByOf(item: ProviderBooking) {
+  const by = item.paymentSettledBy;
+  if (!by) return null;
+  return by.role === "ADMIN"
+    ? { role: "ADMIN" as const, name: "MeroStay" }
+    : { role: by.role, name: by.fullName };
+}
+
 export function serializeProviderBooking(item: ProviderBooking) {
   const paid = item.allocations.reduce((sum, a) => sum + a.amountMinor, 0n);
   return {
@@ -54,6 +66,7 @@ export function serializeProviderBooking(item: ProviderBooking) {
     },
     commissionInvoice: item.commissionInvoice,
     settledAt: item.paymentSettledAt?.toISOString() ?? null,
+    settledBy: settledByOf(item),
     confirmedAt: item.confirmedAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),
   };
