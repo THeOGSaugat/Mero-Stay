@@ -21,6 +21,7 @@ import { createFinanceService } from "./modules/finance/finance.service.js";
 import { createInventoryService } from "./modules/inventory/inventory.service.js";
 import { createListingManagementService } from "./modules/listings/listing-management.service.js";
 import { createPartnerRouter } from "./modules/partner/partner.routes.js";
+import { createProviderTypesRouter } from "./modules/providers/provider-types.routes.js";
 import { createProvidersService } from "./modules/providers/providers.service.js";
 import { NO_PAYMENTS, type PaymentsConfig } from "./modules/payments/payments.config.js";
 import { createPaymentsRouter } from "./modules/payments/payments.routes.js";
@@ -86,6 +87,7 @@ export function createApp(deps: AppDependencies): Express {
     const v1 = Router();
     // Public: browsing and search need no account.
     v1.use(createListingsRouter({ prisma: deps.prisma, now }));
+    v1.use(createProviderTypesRouter({ prisma: deps.prisma }));
     // Accounts and sessions.
     v1.use(
       createAuthRouter({
