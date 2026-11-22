@@ -22,6 +22,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:integration": "npm run test:integration -w @merostay/api",
     "test:e2e": "npm run build && playwright test",
+    "test:e2e:booking": "API_URL=http://localhost:4100 npm run build && playwright test",
     "test:e2e:install": "playwright install chromium",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

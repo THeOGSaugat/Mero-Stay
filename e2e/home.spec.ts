@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+// Same port choice as playwright.config.ts (booking mode runs the API on 4100).
+const API_BASE = `http://localhost:${process.env.E2E_DATABASE_URL ? 4100 : 4000}`;
+
 test.describe("home page (Phase 1 health check)", () => {
   test("renders the MeroStay landing content", async ({ page }) => {
     await page.goto("/");
@@ -33,11 +36,11 @@ test.describe("home page (Phase 1 health check)", () => {
 
 test.describe("API health endpoints", () => {
   test("liveness and readiness respond", async ({ request }) => {
-    const live = await request.get("http://localhost:4000/api/health");
+    const live = await request.get(`${API_BASE}/api/health`);
     expect(live.status()).toBe(200);
     expect(await live.json()).toMatchObject({ status: "ok", service: "merostay-api" });
 
-    const ready = await request.get("http://localhost:4000/api/health/ready");
+    const ready = await request.get(`${API_BASE}/api/health/ready`);
     expect(ready.status()).toBe(200);
     expect(await ready.json()).toMatchObject({ checks: { database: "up" } });
   });
