@@ -1,6 +1,7 @@
 import { fromDbDate } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
-import type { ProviderProfile } from "./providers.service.js";
+import { pageInfo, type Page } from "../../lib/pagination.js";
+import type { AdminProvider, ProviderProfile } from "./providers.service.js";
 
 /**
  * Provider responses. Bank account numbers are ONLY ever returned masked (`accountNumberMasked`,
@@ -79,5 +80,29 @@ export function serializeProfile(provider: ProviderProfile) {
       ...profileFields(provider),
       commissionRateBps: provider.commissionRateBps,
     },
+  };
+}
+
+export function serializeAdminProvider(provider: AdminProvider) {
+  return {
+    ...profileFields(provider),
+    commissionRateBps: provider.commissionRateBps,
+    owner: {
+      id: provider.owner.id,
+      fullName: provider.owner.fullName,
+      email: provider.owner.email,
+      phone: provider.owner.phone,
+    },
+    documentList: provider.documents.map(serializeDocument),
+  };
+}
+
+export function serializeAdminProviderList(providers: AdminProvider[], total: number, page: Page) {
+  return {
+    data: providers.map((p) => {
+      const { documentList: _omitted, ...summary } = serializeAdminProvider(p);
+      return summary;
+    }),
+    page: pageInfo(page, total),
   };
 }

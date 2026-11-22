@@ -4,9 +4,11 @@ import { toDbDate } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
 import { AppError } from "../../lib/errors.js";
 import { withIdempotency, type IdempotentResult } from "../../lib/idempotency.js";
+import { skipTake, type Page } from "../../lib/pagination.js";
 import { recordAudit, type AuditContext } from "../audit/audit.js";
 import { assertProviderWritable } from "../partner/partner-context.js";
 import type {
+  adminProvidersQuerySchema,
   documentBodySchema,
   onboardingBodySchema,
   payoutAccountSchema,
@@ -14,11 +16,13 @@ import type {
 } from "./providers.schemas.js";
 
 /**
- * Provider (partner) onboarding, profile, payout account and verification documents (ADR 0008).
+ * Provider (partner) onboarding, profile, payout account, verification documents, and the admin
+ * verification decision (ADR 0008).
  *
  * Writes lock the provider row (SELECT ... FOR UPDATE), so concurrent requests for one provider run
- * one after another. Sensitive writes (onboarding, bank-account change, document submission,
- * verification submit) are audited in the same transaction.
+ * one after another and an admin decision is applied exactly once. Sensitive writes (onboarding,
+ * bank-account change, document submission, verification submit/decision) are audited in the same
+ * transaction.
  */
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
@@ -32,6 +36,13 @@ export const PROVIDER_PROFILE_INCLUDE = {
 export type ProviderProfile = Prisma.ProviderGetPayload<{
   include: typeof PROVIDER_PROFILE_INCLUDE;
 }>;
+
+export const ADMIN_PROVIDER_INCLUDE = {
+  ...PROVIDER_PROFILE_INCLUDE,
+  owner: { select: { id: true, fullName: true, email: true, phone: true } },
+} satisfies Prisma.ProviderInclude;
+
+export type AdminProvider = Prisma.ProviderGetPayload<{ include: typeof ADMIN_PROVIDER_INCLUDE }>;
 
 type PayoutAccountInput = z.infer<typeof payoutAccountSchema>;
 
@@ -73,7 +84,7 @@ async function lockProvider(tx: Prisma.TransactionClient, id: string): Promise<v
   if (rows.length !== 1) throw providerNotFound();
 }
 
-export function createProvidersService({ prisma }: { prisma: PrismaClient; now: () => Date }) {
+export function createProvidersService({ prisma, now }: { prisma: PrismaClient; now: () => Date }) {
   async function getProfile(providerId: string): Promise<ProviderProfile> {
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
@@ -298,6 +309,112 @@ export function createProvidersService({ prisma }: { prisma: PrismaClient; now: 
     return { provider: await getProfile(providerId), changed };
   }
 
+  // ------------------------------------------------------------------------------- admin
+
+  async function adminListProviders(
+    filters: z.infer<typeof adminProvidersQuerySchema>,
+  ): Promise<{ providers: AdminProvider[]; total: number; page: Page }> {
+    const where: Prisma.ProviderWhereInput = {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.providerType ? { providerTypeCode: filters.providerType } : {}),
+    };
+    const [providers, total] = await Promise.all([
+      prisma.provider.findMany({
+        where,
+        include: ADMIN_PROVIDER_INCLUDE,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        ...skipTake(filters),
+      }),
+      prisma.provider.count({ where }),
+    ]);
+    return { providers, total, page: filters };
+  }
+
+  async function adminGetProvider(id: string): Promise<AdminProvider> {
+    const provider = await prisma.provider.findUnique({
+      where: { id },
+      include: ADMIN_PROVIDER_INCLUDE,
+    });
+    if (!provider) throw providerNotFound();
+    return provider;
+  }
+
+  /**
+   * ADMIN: approve or reject a provider that asked for verification. Applied once: the provider
+   * must be PENDING_VERIFICATION (a repeat is 409 and writes no second audit row).
+   * - approve → VERIFIED; pending documents → APPROVED; the default payout account is verified.
+   * - reject  → REJECTED with a reason; pending documents → REJECTED with the same reason.
+   */
+  async function adminDecide(
+    ctx: AuditContext,
+    providerId: string,
+    decision: "approve" | "reject",
+    reason: string | undefined,
+  ): Promise<AdminProvider> {
+    if (decision === "reject" && !reason) {
+      throw new AppError(400, "VALIDATION_ERROR", "A reason is required to reject.", [
+        { path: "reason", message: "is required when rejecting" },
+      ]);
+    }
+    await prisma.$transaction(async (tx) => {
+      await lockProvider(tx, providerId);
+      const provider = await tx.provider.findUniqueOrThrow({
+        where: { id: providerId },
+        include: { documents: { where: { status: "PENDING" }, select: { id: true } } },
+      });
+      if (provider.status !== "PENDING_VERIFICATION") {
+        throw new AppError(
+          409,
+          "PROVIDER_NOT_PENDING",
+          `Provider is ${provider.status}; only PENDING_VERIFICATION can be decided.`,
+          { status: provider.status },
+        );
+      }
+      const at = now();
+      const pendingIds = provider.documents.map((d) => d.id);
+      if (decision === "approve") {
+        await tx.provider.update({
+          where: { id: providerId },
+          data: { status: "VERIFIED", verifiedAt: at, rejectionReason: null },
+        });
+        await tx.providerDocument.updateMany({
+          where: { id: { in: pendingIds } },
+          data: { status: "APPROVED", reviewedById: ctx.actorUserId, reviewedAt: at },
+        });
+        await tx.providerPayoutAccount.updateMany({
+          where: { providerId, isDefault: true, verifiedAt: null },
+          data: { verifiedAt: at },
+        });
+      } else {
+        await tx.provider.update({
+          where: { id: providerId },
+          data: { status: "REJECTED", rejectionReason: reason ?? null },
+        });
+        await tx.providerDocument.updateMany({
+          where: { id: { in: pendingIds } },
+          data: {
+            status: "REJECTED",
+            reviewedById: ctx.actorUserId,
+            reviewedAt: at,
+            rejectionReason: reason ?? null,
+          },
+        });
+      }
+      await recordAudit(tx, ctx, {
+        action: `provider.verification.${decision}`,
+        entityType: "provider",
+        entityId: providerId,
+        before: { status: provider.status, pendingDocumentIds: pendingIds },
+        after: {
+          status: decision === "approve" ? "VERIFIED" : "REJECTED",
+          documentStatus: decision === "approve" ? "APPROVED" : "REJECTED",
+          reason: reason ?? null,
+        },
+      });
+    }, TX_OPTIONS);
+    return adminGetProvider(providerId);
+  }
+
   return {
     getProfile,
     onboard,
@@ -306,6 +423,9 @@ export function createProvidersService({ prisma }: { prisma: PrismaClient; now: 
     getDocument,
     listDocuments,
     submitForVerification,
+    adminListProviders,
+    adminGetProvider,
+    adminDecide,
   };
 }
 

@@ -15,6 +15,7 @@ import { createListingsRouter } from "./modules/listings/listings.routes.js";
 import { createTripsRouter } from "./modules/trips/trips.routes.js";
 import { createTripsService } from "./modules/trips/trips.service.js";
 import { createAdminRouter } from "./modules/admin/admin.routes.js";
+import { createAuditLogService } from "./modules/audit/audit-log.service.js";
 import { createProviderBookingsService } from "./modules/bookings/provider-bookings.service.js";
 import { createFinanceService } from "./modules/finance/finance.service.js";
 import { createInventoryService } from "./modules/inventory/inventory.service.js";
@@ -122,8 +123,16 @@ export function createApp(deps: AppDependencies): Express {
         finance: financeService,
       }),
     );
-    // MeroStay staff only: role ADMIN on the session user.
-    v1.use(createAdminRouter({ payments: paymentsService, auth: authMiddleware }));
+    // MeroStay staff only: role ADMIN on the session user; writes audited.
+    v1.use(
+      createAdminRouter({
+        auth: authMiddleware,
+        payments: paymentsService,
+        providers: providersService,
+        finance: financeService,
+        auditLog: createAuditLogService({ prisma: deps.prisma }),
+      }),
+    );
     app.use("/api/v1", v1);
   }
 
