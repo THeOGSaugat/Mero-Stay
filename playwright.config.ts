@@ -6,7 +6,8 @@ const isCI = Boolean(process.env.CI);
 /**
  * Booking journey mode (Phase 7): set E2E_DATABASE_URL to a DISPOSABLE database (never dev).
  * The API then runs against it with a throwaway session secret, a seeded test world is created
- * (e2e/global-setup.ts) and e2e/booking.spec.ts runs. Servers are never reused in this mode, so a
+ * (e2e/global-setup.ts) and the journeys run: e2e/booking.spec.ts (customer, Track A) and
+ * e2e/partner.spec.ts (partner dashboard, Track B). Servers are never reused in this mode, so a
  * developer's API already running against the dev database cannot be picked up by mistake.
  */
 const bookingDatabase = process.env.E2E_DATABASE_URL;
@@ -23,6 +24,9 @@ const apiEnv: Record<string, string> = bookingDatabase
       MEROSTAY_SKIP_ENV_FILE: "1",
       DATABASE_URL: bookingDatabase,
       SESSION_SECRET: randomBytes(48).toString("base64"),
+      // Test-mode gateway (refused in production) so the partner journey has an online-paid
+      // booking for the payout summary. The customer UI still offers no online payment.
+      PAYMENT_GATEWAY: "simulated",
     }
   : { NODE_ENV: "production", PORT: String(API_PORT), LOG_LEVEL: "warn" };
 
