@@ -53,6 +53,7 @@ describe("migrations", () => {
       WHERE table_schema = 'public' AND table_name <> '_prisma_migrations'`;
     expect(rows.map((r) => r.table_name).sort()).toEqual(
       [
+        "audit_log",
         "booking_item_slots",
         "booking_items",
         "bus_route_details",
@@ -61,6 +62,7 @@ describe("migrations", () => {
         "guide_service_details",
         "hotel_details",
         "hotel_room_details",
+        "idempotency_keys",
         "inventory_slots",
         "listing_types",
         "listings",

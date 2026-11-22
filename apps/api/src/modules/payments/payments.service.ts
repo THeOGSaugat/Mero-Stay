@@ -1,10 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
-import {
-  assertItemTransition,
-  assertPaymentTransition,
-  isPayAtProperty,
-} from "../../domain/booking-item-status.js";
+import { assertItemTransition, assertPaymentTransition } from "../../domain/booking-item-status.js";
 import {
   dueLines,
   intentFingerprint,
@@ -15,6 +11,7 @@ import {
 } from "../../domain/payments.js";
 import { AppError } from "../../lib/errors.js";
 import { INVOICE_INCLUDE, type InvoiceWithItems } from "../finance/invoices.service.js";
+import { recordAudit, type AuditContext } from "../audit/audit.js";
 import { lockTrip } from "../trips/trips.repository.js";
 import type { PaymentsConfig } from "./payments.config.js";
 import {
@@ -27,6 +24,7 @@ import {
   type PaymentWithAllocations,
 } from "./payments.repository.js";
 import type { ConfirmPaymentInput } from "./payments.schemas.js";
+import { settleItemAtProperty, type SettlementResult } from "./settlement.js";
 
 /**
  * Online payments and pay-at-property settlement (ADR 0007).
@@ -39,9 +37,6 @@ import type { ConfirmPaymentInput } from "./payments.schemas.js";
  */
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
-
-/** Item statuses in which a pay-at-property booking can be settled. */
-const SETTLEABLE_ITEM_STATUSES = new Set(["CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
 
 export interface PaymentsServiceDeps {
   prisma: PrismaClient;
@@ -63,13 +58,7 @@ export interface PaymentConfirmation {
   replayed: boolean;
 }
 
-export interface SettledItem {
-  id: string;
-  status: string;
-  paymentStatus: string;
-  /** false when the item was already settled (idempotent). */
-  changed: boolean;
-}
+export type SettledItem = SettlementResult;
 
 const tripNotFound = () => new AppError(404, "TRIP_NOT_FOUND", "Trip not found.");
 const paymentNotFound = () => new AppError(404, "PAYMENT_NOT_FOUND", "Payment not found.");
@@ -290,10 +279,14 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
 
   /**
    * ADMIN ONLY (the route enforces the role): records that the customer paid the provider at the
-   * property for these items. PAY_AT_PROPERTY → PAID_AT_PROPERTY; no money moves through MeroStay
-   * and the commission stays INVOICED (the provider still owes it). Idempotent per item.
+   * property for these items (shared rule: settlement.ts). Idempotent per item. Writes one audit
+   * row per call when something changed (ADR 0008).
    */
-  async function settleAtProperty(tripId: string, itemIds: readonly string[]) {
+  async function settleAtProperty(
+    ctx: AuditContext,
+    tripId: string,
+    itemIds: readonly string[],
+  ): Promise<SettledItem[]> {
     return prisma.$transaction(async (tx) => {
       if (!(await lockTrip(tx, tripId))) throw tripNotFound();
       const items = await tx.bookingItem.findMany({
@@ -307,35 +300,27 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
         });
       }
 
+      const at = now();
       const settled: SettledItem[] = [];
       for (const id of itemIds) {
         const item = items.find((candidate) => candidate.id === id);
         if (!item) throw new Error("unreachable");
-        if (!isPayAtProperty(item.paymentStatus)) {
-          throw new AppError(
-            422,
-            "ITEM_NOT_PAY_AT_PROPERTY",
-            "Only pay-at-property items can be settled at the property.",
-            { itemId: id },
-          );
-        }
-        if (item.paymentStatus === "PAID_AT_PROPERTY") {
-          settled.push({ ...item, changed: false });
-          continue;
-        }
-        if (!SETTLEABLE_ITEM_STATUSES.has(item.status)) {
-          throw new AppError(409, "ITEM_NOT_CONFIRMED", `Item is ${item.status}.`, {
-            itemId: id,
-            status: item.status,
-          });
-        }
-        assertPaymentTransition(item.paymentStatus, "PAID_AT_PROPERTY");
-        const updated = await tx.bookingItem.update({
-          where: { id },
-          data: { paymentStatus: "PAID_AT_PROPERTY" },
-          select: { id: true, status: true, paymentStatus: true },
+        settled.push(await settleItemAtProperty(tx, item, ctx.actorUserId, at));
+      }
+      const changed = settled.filter((item) => item.changed);
+      if (changed.length > 0) {
+        await recordAudit(tx, ctx, {
+          action: "trip.settle_at_property",
+          entityType: "trip",
+          entityId: tripId,
+          before: {
+            items: changed.map((item) => ({ id: item.id, paymentStatus: "PAY_AT_PROPERTY" })),
+          },
+          after: {
+            items: changed.map((item) => ({ id: item.id, paymentStatus: item.paymentStatus })),
+            settledAt: at.toISOString(),
+          },
         });
-        settled.push({ ...updated, changed: true });
       }
       return settled;
     }, TX_OPTIONS);

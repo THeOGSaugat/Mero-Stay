@@ -1,0 +1,265 @@
+import { Router, type RequestHandler, type Response } from "express";
+import { z } from "zod";
+import type { PrismaClient } from "../../generated/prisma/client.js";
+import { idempotencyKeyOf, type IdempotentResult } from "../../lib/idempotency.js";
+import { idParamsSchema, uuidSchema } from "../../lib/validation.js";
+import { auditContextOf } from "../audit/audit.js";
+import { currentUser } from "../auth/auth-context.js";
+import type { AuthMiddleware } from "../auth/auth.middleware.js";
+import {
+  providerBookingsQuerySchema,
+  type ProviderBookingsService,
+} from "../bookings/provider-bookings.service.js";
+import {
+  serializeProviderBooking,
+  serializeProviderBookingDetail,
+  serializeProviderBookingList,
+} from "../bookings/provider-bookings.serializers.js";
+import { serializeInvoicePage, serializePayoutSummary } from "../finance/finance.serializers.js";
+import {
+  invoicesQuerySchema,
+  payoutsQuerySchema,
+  type FinanceService,
+} from "../finance/finance.service.js";
+import {
+  createSlotsBodySchema,
+  slotsQuerySchema,
+  updateSlotsBodySchema,
+  type InventoryService,
+} from "../inventory/inventory.service.js";
+import { serializeSlots } from "../inventory/inventory.serializers.js";
+import {
+  createListingBodySchema,
+  listListingsQuerySchema,
+  updateListingBodySchema,
+} from "../listings/listing-management.schemas.js";
+import {
+  serializeManagedListing,
+  serializeManagedListingList,
+} from "../listings/listing-management.serializers.js";
+import type { ListingManagementService } from "../listings/listing-management.service.js";
+import {
+  documentBodySchema,
+  onboardingBodySchema,
+  profilePatchSchema,
+} from "../providers/providers.schemas.js";
+import { serializeDocument, serializeProfile } from "../providers/providers.serializers.js";
+import type { ProvidersService } from "../providers/providers.service.js";
+import { createPartnerContext, currentPartner } from "./partner-context.js";
+
+export interface PartnerRouterDeps {
+  prisma: PrismaClient;
+  auth: AuthMiddleware;
+  providers: ProvidersService;
+  listings: ListingManagementService;
+  inventory: InventoryService;
+  bookings: ProviderBookingsService;
+  finance: FinanceService;
+}
+
+const itemParamsSchema = z.object({ itemId: uuidSchema }).strict();
+
+/** Marks a retried write answered from the first result (Idempotency-Key). */
+function markReplay(res: Response, result: IdempotentResult): void {
+  if (result.replayed) res.setHeader("Idempotent-Replayed", "true");
+}
+
+/**
+ * Partner endpoints, mounted under /api/v1 (ADR 0008).
+ *
+ * - Every /partner URL needs a session (401) and, for writes, the CSRF token (403).
+ * - Onboarding is open to customers (that is how one becomes a partner).
+ * - Everything else needs role PARTNER (403 before any data is read) and acts for the partner's
+ *   provider (partner-context.ts); another provider's data is a 404.
+ */
+export function createPartnerRouter(deps: PartnerRouterDeps): Router {
+  const { auth, providers, listings, inventory, bookings, finance } = deps;
+  const router = Router();
+  router.use("/partner", auth.loadSession, auth.requireAuth, auth.requireCsrf);
+
+  // -------------------------------------------------------------- onboarding (customers)
+  const onboard: RequestHandler = async (req, res) => {
+    const body = onboardingBodySchema.parse(req.body ?? {});
+    const result = await providers.onboard(auditContextOf(req), body, idempotencyKeyOf(req, false));
+    markReplay(res, result);
+    const profile = await providers.getProfile(result.resourceId);
+    res.status(result.status).location("/api/v1/partner/profile").json(serializeProfile(profile));
+  };
+  router.post("/partner/onboarding", auth.requireRole("CUSTOMER", "PARTNER"), onboard);
+
+  // -------------------------------------------------------------- partner only
+  router.use("/partner", auth.requireRole("PARTNER"), createPartnerContext(deps.prisma));
+
+  router.get("/partner/profile", async (req, res) => {
+    res.json(serializeProfile(await providers.getProfile(currentPartner(req).providerId)));
+  });
+
+  router.patch("/partner/profile", async (req, res) => {
+    const patch = profilePatchSchema.parse(req.body ?? {});
+    const profile = await providers.updateProfile(
+      auditContextOf(req),
+      currentPartner(req).providerId,
+      patch,
+    );
+    res.json(serializeProfile(profile));
+  });
+
+  router.post("/partner/verification/submit", async (req, res) => {
+    z.object({})
+      .strict()
+      .parse(req.body ?? {});
+    const { provider, changed } = await providers.submitForVerification(
+      auditContextOf(req),
+      currentPartner(req).providerId,
+    );
+    res.json({ data: { changed, provider: serializeProfile(provider).data } });
+  });
+
+  router.get("/partner/verification-documents", async (req, res) => {
+    const docs = await providers.listDocuments(currentPartner(req).providerId);
+    res.json({ data: docs.map(serializeDocument) });
+  });
+
+  router.post("/partner/verification-documents", async (req, res) => {
+    const body = documentBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const result = await providers.submitDocument(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      body,
+      idempotencyKeyOf(req, false),
+    );
+    markReplay(res, result);
+    const doc = await providers.getDocument(partner.providerId, result.resourceId);
+    res.status(result.status).json({ data: serializeDocument(doc) });
+  });
+
+  // -------------------------------------------------------------- listings and inventory
+  router.get("/partner/listings", async (req, res) => {
+    const query = listListingsQuerySchema.parse(req.query);
+    const { listings: rows, total } = await listings.list(currentPartner(req).providerId, query);
+    res.json(serializeManagedListingList(rows, total, query));
+  });
+
+  router.post("/partner/listings", async (req, res) => {
+    const body = createListingBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const result = await listings.create(
+      partner,
+      currentUser(req).id,
+      body,
+      idempotencyKeyOf(req, false),
+    );
+    markReplay(res, result);
+    const listing = await listings.get(partner.providerId, result.resourceId);
+    res
+      .status(result.status)
+      .location(`/api/v1/partner/listings/${listing.id}`)
+      .json({ data: serializeManagedListing(listing) });
+  });
+
+  router.get("/partner/listings/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    res.json({
+      data: serializeManagedListing(await listings.get(currentPartner(req).providerId, id)),
+    });
+  });
+
+  router.patch("/partner/listings/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const patch = updateListingBodySchema.parse(req.body ?? {});
+    res.json({
+      data: serializeManagedListing(await listings.update(currentPartner(req), id, patch)),
+    });
+  });
+
+  router.get("/partner/listings/:id/slots", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { startDate, endDate } = slotsQuerySchema.parse(req.query);
+    const { listing, slots } = await inventory.list(
+      currentPartner(req).providerId,
+      id,
+      startDate,
+      endDate,
+    );
+    res.json(serializeSlots(listing, slots));
+  });
+
+  router.post("/partner/listings/:id/slots", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const body = createSlotsBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const counts = await inventory.create(partner, id, body);
+    const { listing, slots } = await inventory.list(
+      partner.providerId,
+      id,
+      body.startDate,
+      body.endDate,
+    );
+    const out = serializeSlots(listing, slots);
+    res.status(counts.created > 0 ? 201 : 200).json({ data: { ...out.data, ...counts } });
+  });
+
+  router.patch("/partner/listings/:id/slots", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const body = updateSlotsBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const counts = await inventory.update(partner, id, body);
+    const { listing, slots } = await inventory.list(
+      partner.providerId,
+      id,
+      body.startDate,
+      body.endDate,
+    );
+    const out = serializeSlots(listing, slots);
+    res.json({ data: { ...out.data, ...counts } });
+  });
+
+  // -------------------------------------------------------------- bookings, invoices, payouts
+  router.get("/partner/bookings", async (req, res) => {
+    const query = providerBookingsQuerySchema.parse(req.query);
+    const { items, total } = await bookings.list(currentPartner(req).providerId, query);
+    res.json(serializeProviderBookingList(items, total, query));
+  });
+
+  router.get("/partner/bookings/:itemId", async (req, res) => {
+    const { itemId } = itemParamsSchema.parse(req.params);
+    res.json(
+      serializeProviderBookingDetail(await bookings.get(currentPartner(req).providerId, itemId)),
+    );
+  });
+
+  router.post("/partner/bookings/:itemId/settle-at-property", async (req, res) => {
+    const { itemId } = itemParamsSchema.parse(req.params);
+    z.object({})
+      .strict()
+      .parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const result = await bookings.settleAtProperty(
+      auditContextOf(req),
+      partner,
+      itemId,
+      idempotencyKeyOf(req, true) as string,
+    );
+    markReplay(res, result);
+    const item = await bookings.get(partner.providerId, itemId);
+    res.status(result.status).json({
+      data: { replayed: result.replayed, booking: serializeProviderBooking(item) },
+    });
+  });
+
+  router.get("/partner/invoices", async (req, res) => {
+    const query = invoicesQuerySchema.parse(req.query);
+    const { invoices, total } = await finance.listInvoices(query, currentPartner(req).providerId);
+    res.json(serializeInvoicePage(invoices, total, query));
+  });
+
+  router.get("/partner/payouts", async (req, res) => {
+    const query = payoutsQuerySchema.parse(req.query);
+    const { rows, total } = await finance.payoutSummary(query, currentPartner(req).providerId);
+    res.json(serializePayoutSummary(rows, total, query));
+  });
+
+  return router;
+}

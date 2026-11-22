@@ -1,6 +1,7 @@
 /**
  * Walks a parsed JSON response and returns every money-boundary violation:
- * - a field ending in "Minor" that is not a digit string (e.g. a JSON number), or
+ * - a field ending in "Minor" that is not a digit string (e.g. a JSON number); `null` is allowed
+ *   for an optional amount that does not exist (e.g. no date-specific price), or
  * - a money-bearing object (one with *Minor fields) without `currency`/`currencyExponent`
  *   on itself or an ancestor.
  */
@@ -20,7 +21,7 @@ export function moneyBoundaryViolations(value: unknown, path = "$", hasCurrency 
   const problems: string[] = [];
   for (const [key, inner] of Object.entries(record)) {
     if (key.endsWith("Minor")) {
-      if (typeof inner !== "string" || !/^\d+$/.test(inner)) {
+      if (inner !== null && (typeof inner !== "string" || !/^\d+$/.test(inner))) {
         problems.push(`${path}.${key} is ${JSON.stringify(inner)} (must be a digit string)`);
       }
       if (!currencyHere) problems.push(`${path}.${key} has no currency/currencyExponent in scope`);

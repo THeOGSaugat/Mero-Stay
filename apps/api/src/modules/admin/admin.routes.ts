@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { idParamsSchema } from "../../lib/validation.js";
+import { auditContextOf } from "../audit/audit.js";
 import { currentUser } from "../auth/auth-context.js";
 import type { AuthMiddleware } from "../auth/auth.middleware.js";
 import { settleAtPropertyBodySchema } from "../payments/payments.schemas.js";
@@ -33,7 +34,7 @@ export function createAdminRouter({ payments, auth }: AdminRouterDeps): Router {
   const settleAtProperty: RequestHandler = async (req, res) => {
     const { id } = idParamsSchema.parse(req.params);
     const { itemIds } = settleAtPropertyBodySchema.parse(req.body ?? {});
-    const items = await payments.settleAtProperty(id, itemIds);
+    const items = await payments.settleAtProperty(auditContextOf(req), id, itemIds);
     req.log.info(
       {
         audit: "admin.settle_at_property",

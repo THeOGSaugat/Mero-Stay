@@ -15,6 +15,12 @@ import { createListingsRouter } from "./modules/listings/listings.routes.js";
 import { createTripsRouter } from "./modules/trips/trips.routes.js";
 import { createTripsService } from "./modules/trips/trips.service.js";
 import { createAdminRouter } from "./modules/admin/admin.routes.js";
+import { createProviderBookingsService } from "./modules/bookings/provider-bookings.service.js";
+import { createFinanceService } from "./modules/finance/finance.service.js";
+import { createInventoryService } from "./modules/inventory/inventory.service.js";
+import { createListingManagementService } from "./modules/listings/listing-management.service.js";
+import { createPartnerRouter } from "./modules/partner/partner.routes.js";
+import { createProvidersService } from "./modules/providers/providers.service.js";
 import { NO_PAYMENTS, type PaymentsConfig } from "./modules/payments/payments.config.js";
 import { createPaymentsRouter } from "./modules/payments/payments.routes.js";
 import { createPaymentsService } from "./modules/payments/payments.service.js";
@@ -102,6 +108,20 @@ export function createApp(deps: AppDependencies): Express {
     });
     // Always authenticated; owner-scoped (ADR 0007).
     v1.use(createPaymentsRouter({ service: paymentsService, auth: authMiddleware }));
+    const providersService = createProvidersService({ prisma: deps.prisma, now });
+    const financeService = createFinanceService({ prisma: deps.prisma });
+    // Partners: role PARTNER, scoped to their own provider (ADR 0008). Onboarding: any logged-in customer.
+    v1.use(
+      createPartnerRouter({
+        prisma: deps.prisma,
+        auth: authMiddleware,
+        providers: providersService,
+        listings: createListingManagementService({ prisma: deps.prisma }),
+        inventory: createInventoryService({ prisma: deps.prisma }),
+        bookings: createProviderBookingsService({ prisma: deps.prisma, now }),
+        finance: financeService,
+      }),
+    );
     // MeroStay staff only: role ADMIN on the session user.
     v1.use(createAdminRouter({ payments: paymentsService, auth: authMiddleware }));
     app.use("/api/v1", v1);

@@ -70,6 +70,9 @@ model User {
   notifications     Notification[]
   reviewedDocuments ProviderDocument[] @relation("DocumentReviewer")
   sessions          Session[]
+  settledItems      BookingItem[]      @relation("PaymentSettledBy")
+  auditEntries      AuditLog[]
+  idempotencyKeys   IdempotencyKey[]
 
   @@map("users")
 }
@@ -260,11 +263,13 @@ model ProviderPayoutAccount {
   accountName   String    @map("account_name")
   accountNumber String    @map("account_number")
   isDefault     Boolean   @default(false) @map("is_default")
+  /// NULL = not yet verified by MeroStay. A changed account starts unverified (ADR 0008).
   verifiedAt    DateTime? @map("verified_at") @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   provider Provider @relation(fields: [providerId], references: [id])
 
+  @@unique([providerId], map: "provider_payout_accounts_one_default_per_provider", where: raw("is_default"))
   @@index([providerId])
   @@map("provider_payout_accounts")
 }
@@ -568,7 +573,7 @@ model Trip {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  customer      User           @relation(fields: [customerId], references: [id])
+  customer      User              @relation(fields: [customerId], references: [id])
   items         BookingItem[]
   payments      Payment[]
   invoices      ProviderInvoice[]
@@ -671,6 +676,10 @@ model BookingItem {
   externalBookingRef         String?           @map("external_booking_ref")
   payoutId                   String?           @map("payout_id") @db.Uuid
   commissionInvoiceId        String?           @map("commission_invoice_id") @db.Uuid
+  /// Who recorded that a pay-at-property item was paid on arrival, and when (ADR 0008).
+  /// Set exactly when payment_status = PAID_AT_PROPERTY (CHECK).
+  paymentSettledAt           DateTime?         @map("payment_settled_at") @db.Timestamptz(3)
+  paymentSettledById         String?           @map("payment_settled_by_id") @db.Uuid
   confirmedAt                DateTime?         @map("confirmed_at") @db.Timestamptz(3)
   completedAt                DateTime?         @map("completed_at") @db.Timestamptz(3)
   cancelledAt                DateTime?         @map("cancelled_at") @db.Timestamptz(3)
@@ -683,6 +692,7 @@ model BookingItem {
   cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
   payout             Payout?             @relation(fields: [payoutId], references: [id])
   commissionInvoice  ProviderInvoice?    @relation(fields: [commissionInvoiceId], references: [id])
+  paymentSettledBy   User?               @relation("PaymentSettledBy", fields: [paymentSettledById], references: [id], onDelete: Restrict)
 
   slots       BookingItemSlot[]
   allocations PaymentAllocation[]
@@ -926,4 +936,58 @@ model Notification {
   @@index([tripId])
   @@index([status])
   @@map("notifications")
+}
+
+// ============================================================================
+// Audit log and idempotency keys (Phase 6, ADR 0008)
+// ============================================================================
+
+/// Append-only record of admin writes and sensitive partner writes. Written in the same transaction
+/// as the change. `before`/`after` never contain secrets (redacted in code; a CHECK refuses
+/// secret-looking keys); UPDATE and DELETE are refused by a trigger.
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// NULL only for system actions (no user).
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  actorRole   UserRole? @map("actor_role")
+  /// Dotted name, e.g. "provider.verification.approve".
+  action      String
+  entityType  String    @map("entity_type")
+  entityId    String    @map("entity_id")
+  before      Json?
+  after       Json?
+  /// Client IP as Express sees it (see the trust-proxy gap).
+  ip          String?
+  requestId   String?   @map("request_id")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("audit_log")
+}
+
+/// A client-supplied Idempotency-Key, remembered per user, so a retried write returns the first
+/// result instead of applying twice (ADR 0008). Only successful results are stored.
+model IdempotencyKey {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @map("user_id") @db.Uuid
+  key                String
+  /// Which operation the key was used for, e.g. "partner.settle_at_property".
+  scope              String
+  /// SHA-256 of the scope + request; the same key with a different request is refused.
+  requestFingerprint String   @map("request_fingerprint") @db.Char(64)
+  /// The resource the first request created or changed; a replay re-reads it.
+  resourceId         String   @map("resource_id")
+  responseStatus     Int      @map("response_status")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }
