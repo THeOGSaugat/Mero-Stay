@@ -25,6 +25,8 @@ reused.
 | 15 | **Listings cannot be approved through the API.** Partners can create listings and submit them (`PENDING_REVIEW`); there is no admin approval endpoint yet. | Partner-created listings never become public without an operator update in SQL. | Admin approvals & moderation (Phase 7): listing review queue with approve/reject, audited. |
 | 16 | **Payouts are not executed.** Partners and admins see a read-only payout summary (Phase 6); no `payouts` rows, transfers or payout statements are created. | MeroStay holds online payments with no way to pay providers through the system. | Commission & payouts (Phase 12), after the owner decides the payout schedule. |
 | 17 | **Bank account numbers are stored in plain text.** They are never returned in full (masked in every response and audit row, Phase 6), but the column is not encrypted at application level. | A database leak would expose account numbers (Neon encrypts at rest). | Before launch (Hardening, Phase 16): decide and apply application-level encryption (security guidelines §9). |
+| 18 | **No required-documents checklist per provider type** (owner decision A, recorded after Phase 6: YES, data-driven). Today a partner can submit for verification with any one pending document, and the admin judges completeness. | An incomplete provider could be approved by mistake. | Phase 7 (partner verification / onboarding completion): a `provider_type → required document types` mapping in data (migration seed or config), enforced at `POST /partner/verification/submit`, and checked again before an admin can approve. Follows requirements §6.2. |
+| 19 | **The `airline` provider type is offered at onboarding** (owner decision B, recorded after Phase 6: YES, hide it until flights are enabled). Flights are modelled with `listing_types.is_active = false`, and listing creation already refuses `flight_ticket`. | An airline provider can be onboarded but cannot list anything. No booking is possible. | Phase 7 (onboarding completion): data-driven. Either an `is_active` flag on `provider_types` (new migration), or offer only provider types that have an active listing type. Not done as a hard-coded `"airline"` check, which would break the vertical-agnostic design (ADR 0004). The type stays in the schema. |
 
 ## Owner decisions on invoicing (recorded 2026-11-21, after Phase 5)
 
@@ -34,6 +36,23 @@ reused.
 | Payment terms | **Default Net 15** (due 15 days after issue). This is a placeholder until finance confirms it. | Not applied yet: `due_on` stays empty until the finance phase |
 | Invoice cadence | **One invoice per trip** (per provider within the trip), as built in Phase 5. | Done (ADR 0007) |
 | Payout schedule | **Deferred to the payouts phase.** | Open (Commission & payouts, Phase 12) |
+
+## Development and verification constraints
+
+Not launch gaps, but limits on how the project is verified today.
+
+- **Neon integration runs need a stable connection and an awake machine.** The suite is
+  latency-bound: every API call is several sequential round trips to Neon (about 100–300 ms each).
+  A clean full run takes about **25–28 minutes** (Phase 6: 1,548.77 s for 179 tests). If the
+  connection drops or the Mac sleeps, setup fails with `P1001 Can't reach database server`, or tests
+  crawl and fail. Phase 6 needed four runs for this reason; the code passed on the clean run
+  (see the Phase 6 report).
+- **How to run it reliably:** on mains power, lid open, stable Wi-Fi, with someone at the machine:
+  `caffeinate -i npm run test:integration`. `caffeinate -i` keeps macOS awake only while that
+  command runs. Stop the run if the connection drops rather than letting it crawl.
+- **CI is not affected:** it uses a local PostgreSQL service container (fast, no network).
+- **Future speedup (owner's note, not scheduled):** seed test setup directly with Prisma where the
+  setup itself is not under test, and run the full Neon suite only on release tags.
 
 ## Closed
 
