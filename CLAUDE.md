@@ -362,5 +362,5 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 4, Authentication & ownership:** merged to `main`, tagged `v0.4.0`.
 - **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
-- **Phase 6, Partner & admin backend:** complete on branch `phase/06-partner-admin`, awaiting owner review.
+- **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
 - **Next:** Phase 7 (awaiting approval; roadmap suggests Admin approvals & moderation).
