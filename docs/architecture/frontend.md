@@ -2,7 +2,8 @@
 
 Next.js 16 (App Router, Cache Components, Turbopack), React 19, Tailwind 4. Decisions:
 [ADR 0010](decisions/0010-web-frontend-architecture.md) (architecture, customer site) and
-[ADR 0011](decisions/0011-partner-dashboard.md) (partner dashboard). Design tokens: `src/app/globals.css`
+[ADR 0011](decisions/0011-partner-dashboard.md) (partner dashboard) and
+[ADR 0012](decisions/0012-admin-console.md) (admin console). Design tokens: `src/app/globals.css`
 (palette from the owner's reference, [docs/design](../design/README.md)).
 
 ## Routes (Phase 7, Track A: customer)
@@ -39,8 +40,9 @@ customers use it to become partners.
 
 Components: `components/partner/` (`partner-context.tsx`, `partner-ui.tsx` and one view file per
 area). Logic: `lib/partner-access.ts`, `lib/partner-display.ts`, `lib/settle-state.ts`,
-`lib/listing-forms.ts`, types in `lib/partner-types.ts`. The admin dashboard (Track C) follows after
-its approval.
+`lib/listing-forms.ts`, types in `lib/partner-types.ts`. Generic display pieces shared with the
+admin console (`SectionNav`, `Panel`, `Facts`, `Pager`, table classes) live in
+`components/ui/data.tsx`.
 
 ## Partner scoping, masking and idempotency in the UI
 
@@ -77,6 +79,39 @@ browser ──/api/v1/*──▶ Next.js (same origin) ──rewrite──▶ AP
 - Owner scoping is the API's job: the UI shows "Trip not found" for a 404 and never assumes that
   hiding something is security.
 
+## Routes (Phase 7, Track C: admin console)
+
+All under `app/admin/`, client-rendered behind `RequireAuth` → `AdminGate` (layout), `noindex`.
+Every call goes to `/api/v1/admin…` with the session cookie and, on writes, `X-CSRF-Token`.
+
+| Route | What | API |
+|---|---|---|
+| `/admin` | Providers waiting for verification (count), links | `GET /admin/providers?status=PENDING_VERIFICATION` |
+| `/admin/providers` | Every provider; filters: type, verification status (incl. suspended); paging | `GET /admin/providers` |
+| `/admin/providers/[id]` | Profile, owner, payout account (**masked**), required-document groups with provided/missing, documents; **approve** (blocked while a group is missing) or **reject with a reason**; audit confirmation | `GET /admin/providers/:id`, `GET /provider-types`, `POST …/verification/approve\|reject`, `GET /admin/audit-log` |
+| `/admin/invoices` | All commission invoices; filters: provider, status, issued date | `GET /admin/invoices` |
+| `/admin/payouts` | Read-only summary across providers: total, commission, payout (= total − commission), "Pending · not executed" | `GET /admin/payouts` |
+| `/admin/audit-log` | Newest first; filters: actor, action, entity, date; before/after per field | `GET /admin/audit-log` |
+
+Components: `components/admin/` (`admin-ui.tsx`: gate, nav, `useAdminData`; one view file per
+area). Logic: `lib/admin-access.ts`, `lib/audit-display.ts`, types in `lib/admin-types.ts`.
+
+## Admin guard and audit handling in the UI
+
+- **Guard = navigation.** `adminAccess()`: a visitor goes to login. A logged-in customer or
+  partner sees "Page not found", the same as any unknown URL; there is no "Admin" link for them.
+  The API answers 403 to them for every `/admin` call, and that is the security. An API 404 or 403
+  inside the console also reads as "not found".
+- **Approval block.** The review page shows the type's required groups against the provider's
+  documents (the same `requirementChecklist` and rule as the API). With a group missing it shows
+  "Approval is blocked: no document for …" and disables Approve. The API refuses a forced approval
+  with `409 REQUIRED_DOCUMENTS_MISSING`, shown the same way.
+- **Audit confirmation.** After approve or reject, the page reads the newest matching audit entry
+  back from the API and shows its time and action, with a link to the filtered log.
+- **Audit rendering.** `auditRows()` flattens `before`/`after` into string rows that React renders
+  as text: never HTML. No file uses `dangerouslySetInnerHTML`, which a unit test checks. As a
+  backstop, secret-looking keys show `[hidden]` and account numbers are re-masked.
+
 ## Money
 
 Every amount arrives as a digit string with `currency` and `currencyExponent`. `lib/money.ts`
@@ -105,8 +140,8 @@ Forms use native inputs and `FormData`.
 
 | Kind | Where | Covers |
 |---|---|---|
-| Unit (Vitest) | `src/lib/*.test.ts` | Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
-| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/home.spec.ts` | The customer booking journey and the partner dashboard journey on desktop and mobile Chromium; protected pages redirect to login; Phase 1 home and health checks |
+| Unit (Vitest) | `src/lib/*.test.ts` | Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
+| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks |
 
 Run the booking journey against a **disposable** database (never dev):
 
@@ -116,7 +151,8 @@ E2E_DATABASE_URL="postgresql://…/scratch" npm run test:e2e:booking
 
 It builds the web app for an API on port 4100, starts the API (4100, with the simulated payment
 gateway) and web app (3100) fresh, seeds a test world (`apps/api/src/testing/e2e-world.ts`, which
-refuses the dev database; it includes a partner with a random password), and runs all E2E tests.
+refuses the dev database; it includes a partner, an admin and a customer with random passwords,
+and pending providers for the admin journey), and runs all E2E tests.
 The partner journey books through the API first (one night at the property, one paid online),
 then checks the dashboard. It simulates a lost settle response and asserts the retry sends the
 same key and is recorded once. Without `E2E_DATABASE_URL`, `npm run test:e2e` runs only the Phase 1 checks. After a

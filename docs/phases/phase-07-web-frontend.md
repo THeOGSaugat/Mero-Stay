@@ -1,9 +1,10 @@
 # Phase 07: Web Frontend
 
-- **Status:** Track A (customer) approved. Track B (partner dashboard) complete, awaiting review.
-  Track C (admin) not started; it needs the owner's approval.
+- **Status:** complete, awaiting owner review before merge and tag `v0.7.0`. Track A (customer)
+  and Track B (partner) approved; Track C (admin console) complete.
 - **Branch:** `phase/07-web-frontend`
-- **Date (Track A):** 2026-11-23 · **Date (Track B):** 2026-11-22
+- **Dates:** Track A 2026-11-23 · Track B 2026-11-22 · Track C 2026-11-22 (Track A's date was
+  recorded as the machine showed it then).
 
 ## Scope (as approved)
 
@@ -25,6 +26,43 @@ Frontend only, in `apps/web`, plus the gap 18/19 backend fix.
 instruction). Navy `#0F3B64`, teal `#14B8A6`, mint `#A7D8D1`, mist `#E8F1F5` and ink `#2D3748`
 are in `globals.css` and `docs/design/README.md`. No logo, name, typography or layout was taken
 from it.
+
+## Phase 7 overall summary
+
+| Track | Built | ADR |
+|---|---|---|
+| A, customer | Register/login/logout, search (active, bookable types only), listing details with a priced calendar, trip builder (add/edit/remove, quote, confirm), trip history | 0010 |
+| B, partner | Onboarding, profile with masked bank account, verification checklist and documents (metadata), listings with type-specific forms and a place picker, availability and date prices, bookings with frozen money, idempotent settle-at-property with who/when, invoices, payout summary | 0011 |
+| C, admin | Provider list (type/status filters), verification review with the required-document block, approve or reject with audit confirmation, all invoices, read-only payouts across providers, audit-log viewer (text-only before/after) | 0012 |
+
+- **Across all three:**
+  - money is a string end to end (one formatter, no float math, no totals in the UI);
+  - first-party session cookie and in-memory CSRF token, nothing in `localStorage`;
+  - the API is the only authority on roles, ownership and scoping: the UI shows its 404 as "not
+    found", and a non-admin sees "Page not found";
+  - bank numbers are the API's mask, with a UI backstop;
+  - one design system (Track A primitives, `components/ui/data.tsx`, palette tokens);
+  - no secrets in the web app (only `API_URL`).
+- **Backend changes (all owner approved), with no applied migration edited:**
+  - migration `20261123090000_provider_type_requirements` (gaps 18/19);
+  - `GET /trips`;
+  - `GET /locations`;
+  - `settledBy` on partner bookings.
+- **Gaps:**
+  - closed: 18 and 19;
+  - narrowed: 20 (the endpoint exists; the customer picker remains);
+  - extended: 5 and 14;
+  - added: 20, 21, 22, 23, 24 and 25;
+  - open: 22 in total (1–10, 12–17, 20–25).
+- **Launch blockers:**
+  - **gap 5:** behind the web proxy, the per-IP limits become one global limit (Hardening,
+    Phase 16, or earlier if the site goes public);
+  - **gap 22:** listing types aren't restricted by provider type (Phase 8, data-driven, after the
+    owner's mapping).
+- **Not built in Phase 7 (confirmed):** a live payment gateway (the simulated gateway is used only
+  in tests and E2E, and is refused in production), refunds, payout execution, reviews,
+  notifications, OAuth, 2FA, and email verification or password reset. Phase 8 has not been
+  started.
 
 ## Backend changes in this phase
 
@@ -263,11 +301,138 @@ Track B's integration results are from the local PostgreSQL 17 database.
 - **Rebuild after the E2E run:** the booking build targets port 4100, so run `npm run build`
   before `npm start`.
 
+## Track C: admin console
+
+### Routes
+
+| Route | What |
+|---|---|
+| `/admin` | Count of providers waiting for verification, links |
+| `/admin/providers` | Every provider; filters: type and verification status (incl. suspended; the API has no separate active flag); paging |
+| `/admin/providers/[id]` | Profile, owner, payout account (**masked**), required-document groups (provided/missing), documents; approve / reject with a reason; audit confirmation |
+| `/admin/invoices` | All commission invoices; filters: provider, status, issued date |
+| `/admin/payouts` | Read-only summary across providers: total, commission, payout (= total − commission), "Pending · not executed" |
+| `/admin/audit-log` | Newest first; filters: actor, action, entity, date; before/after per field |
+
+No backend change was needed for Track C.
+
+### Admin guard and audit handling
+
+- **Guard:** visitors go to `/login?next=…`. A logged-in customer or partner sees "Page not
+  found", the same as any unknown URL, with no "Admin" link; pages are `noindex`. The API's 403 is
+  the security, and the E2E checks both the page and the 403.
+- **Audit confirmation:** after approve or reject, the page reads the newest matching entry back
+  from `GET /admin/audit-log` and shows "Audit entry recorded <time> (<action>)" with a link to
+  the filtered log.
+- **Audit rendering:** before/after are flattened into text rows that React renders as text
+  nodes, never HTML. A unit test scans every source file for `dangerouslySetInnerHTML`; there is
+  none. As a backstop, secret-looking keys show `[hidden]` and account numbers are re-masked.
+
+### How the incomplete-provider block is surfaced
+
+- **Before anyone clicks:** the review page checks the type's required groups against the
+  documents (the same rule as the API). If a group is missing:
+  - its row shows **Missing**;
+  - a red alert reads "Approval is blocked: no document for Business registration. Ask the
+    provider to add it, or reject with a reason.";
+  - **Approve is disabled**, with a note explaining why.
+- **The API enforces it anyway.** A forced approval through the API returns
+  `409 REQUIRED_DOCUMENTS_MISSING`; the UI shows that refusal the same way ("… Nothing was
+  changed."). The E2E sends that request and checks the status is unchanged.
+
+## Verification, Track C (real results)
+
+| Check | Result |
+|---|---|
+| `format:check`, `lint`, `typecheck` (API, web, e2e), `build` | Pass |
+| API unit | **214/214** |
+| Web unit | **74/74** (63 from Tracks A/B + 11 new in `admin-logic.test.ts`) |
+| API integration (PostgreSQL 17, disposable) | **183/183** |
+| **E2E (Playwright), booking mode** | **20/20**, desktop and mobile Chromium: Phase 1 checks, Track A, Track B, Track C |
+| `npm audit` | 0 vulnerabilities |
+
+**E2E attempts, honestly:**
+
+1. **First full run:** 20/20.
+2. **Mutation run:** I made the admin guard let customers through, and the non-admin test failed
+   (as it should). The guard was restored.
+3. **Third run:** 19/20. The admin journey failed because of a **bug in my test**: it assumed the
+   seeded providers were all on the last page of the oldest-first list, but this time the desktop
+   pair was on the page before. The test now finds each provider's page through the API, then
+   checks the UI's list.
+4. **After the fix:** two consecutive full runs, both 20/20.
+
+### E2E coverage (admin journey, both profiles)
+
+1. A customer pays one night online through the API, so a payout is pending. Each project uses its
+   own night.
+2. The admin logs in at `/login?next=/admin` and sees the pending count and the header's "Admin"
+   link.
+3. **Providers:** both seeded providers appear in the list, and the status filter works.
+4. **Approve a complete provider:**
+   - both groups are "Provided" and the bank number shows "••••1234" (the full number appears
+     nowhere);
+   - Approve shows "Approved: the provider is verified. Audit entry recorded …
+     (provider.verification.approve)";
+   - the link opens the audit log, where the entry shows `status` PENDING_VERIFICATION → VERIFIED.
+5. **Incomplete provider:**
+   - registration shows "Missing", "Approval is blocked" is shown, and Approve is disabled;
+   - a forced API approval returns 409 `REQUIRED_DOCUMENTS_MISSING`, and the status is unchanged
+     after a reload;
+   - reject with a reason shows "Rejected" with `provider.verification.reject`.
+6. **Invoices:** the amount shown equals the API's `amountMinor`, and the status filter works.
+7. **Payouts:** this project's night shows "Rs 4,350.50" total, "Rs 525.00" commission,
+   "Rs 3,825.50" payout, and "Pending · not executed".
+8. **Non-admins:**
+   - a visitor on `/admin/providers` goes to login;
+   - a customer sees "Page not found" on `/admin` and on a provider page, with no Admin link;
+   - the API answers 403 for providers and the audit log.
+
+## Full Neon integration run (end of Phase 7)
+
+The command was `caffeinate -i npm run test:integration`, on committed code `5fdf5c0` with
+nothing changed, against the Neon `test` branch from `apps/api/.env.test`.
+
+| Attempt | Started (UTC) | Result |
+|---|---|---|
+| 1 | 16:55:23 | **Did not run.** The global setup failed after 3 s with `28P01 password authentication failed for user 'neondb_owner'` (Prisma P2010) on the test branch, before any test file ran |
+
+- **Diagnosis, without printing any secret:**
+  - the dev database connects (`npm run db:check`: pooled and direct ✔), so the network and Neon
+    are up;
+  - `.env.test` holds the same password as the dev URL (compared by hash only);
+  - the test endpoint `ep-dry-pine-bea684w0` exists but rejects that password. Its role password
+    now differs, for example after a reset or rotation in Neon.
+- **No retry was made, and no credential was changed.**
+- **Owner action:** reset or copy the `neondb_owner` password of the Neon `test` branch into
+  `apps/api/.env.test` (`TEST_DATABASE_URL` and `TEST_DATABASE_URL_UNPOOLED`), then ask for the
+  run. It takes about 25–28 minutes.
+- **In the meantime:** the same 183 integration tests pass on a disposable PostgreSQL 17, and CI
+  runs them on its PostgreSQL service on every push.
+
+## Operational gaps (Track C)
+
+- **Gap 22** is marked a **launch blocker**, targeted at Phase 8. The data-driven approach: a
+  migration-seeded `provider_type_listing_types` table, enforced at listing create and before
+  listing approval, and exposed in `GET /provider-types`. It needs the owner's mapping first.
+- **New gap 25:** admin lists have no search; providers are listed oldest first; the provider
+  picker shows the first 100; audit actors appear as user ids (Phase 8).
+- Nothing was closed in Track C.
+
+## Commits (Track C)
+
+| Hash | Message |
+|---|---|
+| `d933279` | feat(web): admin console (Phase 7 Track C) |
+| `5fdf5c0` | test(e2e): admin console journey on the disposable database |
+| (this commit) | docs: document Phase 7 Track C admin console, ADR 0012 and the Neon attempt |
+
 ## How to review
 
 1. `npm run dev`, then open http://localhost:3000. You need data in your **dev** database to
    search, for example `npm run db:seed`. For the partner area: sign up, then "List your
-   business" in the footer (`/partner/onboarding`).
+   business" in the footer (`/partner/onboarding`). The admin console needs an `ADMIN` user, which an
+   operator sets in the database (gap 9).
 2. Or run the journey yourself:
    `E2E_DATABASE_URL="postgresql://…disposable…" npm run test:e2e:booking`.
 3. Read [ADR 0010](../architecture/decisions/0010-web-frontend-architecture.md) and
