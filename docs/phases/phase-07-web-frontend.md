@@ -390,12 +390,16 @@ No backend change was needed for Track C.
 
 ## Full Neon integration run (end of Phase 7)
 
-The command was `caffeinate -i npm run test:integration`, on committed code `5fdf5c0` with
-nothing changed, against the Neon `test` branch from `apps/api/.env.test`.
+The command was `caffeinate -i npm run test:integration`, against the Neon `test` branch from
+`apps/api/.env.test`. Both attempts ran committed code identical to `5fdf5c0`: attempt 2 ran at
+`d402052`, which changes only docs.
+
+**Result: 183/183 passed on Neon (11 files) in 1,543.48 s (about 25.7 minutes), attempt 2.**
 
 | Attempt | Started (UTC) | Result |
 |---|---|---|
 | 1 | 16:55:23 | **Did not run.** The global setup failed after 3 s with `28P01 password authentication failed for user 'neondb_owner'` (Prisma P2010) on the test branch, before any test file ran |
+| 2 | 17:03:37 | **183/183 passed**, 11/11 files, 1,543.48 s; ended 17:29:21. Run after the owner reset the test branch's password in `.env.test`. No P1001, no timeouts, no retries inside the run |
 
 - **Diagnosis, without printing any secret:**
   - the dev database connects (`npm run db:check`: pooled and direct ✔), so the network and Neon
@@ -403,12 +407,11 @@ nothing changed, against the Neon `test` branch from `apps/api/.env.test`.
   - `.env.test` holds the same password as the dev URL (compared by hash only);
   - the test endpoint `ep-dry-pine-bea684w0` exists but rejects that password. Its role password
     now differs, for example after a reset or rotation in Neon.
-- **No retry was made, and no credential was changed.**
-- **Owner action:** reset or copy the `neondb_owner` password of the Neon `test` branch into
-  `apps/api/.env.test` (`TEST_DATABASE_URL` and `TEST_DATABASE_URL_UNPOOLED`), then ask for the
-  run. It takes about 25–28 minutes.
-- **In the meantime:** the same 183 integration tests pass on a disposable PostgreSQL 17, and CI
-  runs them on its PostgreSQL service on every push.
+- **What happened next:** I didn't retry or change any credential after attempt 1. The owner
+  updated the test branch's password in `apps/api/.env.test` and asked for the run; attempt 2 is
+  the result above.
+- **Same results elsewhere:** the 183 tests also pass on a disposable PostgreSQL 17, and CI runs
+  them on its PostgreSQL service on every push.
 
 ## Operational gaps (Track C)
 

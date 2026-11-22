@@ -370,6 +370,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
 - **Phase 7, Web frontend:** complete on branch `phase/07-web-frontend`, awaiting owner review before merge and
   tag `v0.7.0`. Tracks A (customer, ADR 0010) and B (partner, ADR 0011) approved; Track C (admin console, ADR 0012)
-  complete. Gaps 18–19 closed (ADR 0009). Launch blockers recorded: gaps 5 and 22. The end-of-phase Neon
-  integration run is still owed: its first attempt was refused by the Neon test branch's credentials (28P01).
+  complete. Gaps 18–19 closed (ADR 0009). Launch blockers recorded: gaps 5 and 22. End-of-phase Neon integration
+  run: 183/183 (attempt 2; attempt 1 was refused by stale test-branch credentials before any test ran).
 - **Next:** owner review of Phase 7, then merge + tag `v0.7.0`. Phase 8 only after approval.
