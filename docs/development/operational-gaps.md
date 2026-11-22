@@ -19,6 +19,7 @@ onboarding at the owner's request).
 | 9 | **No persistent admin audit log; admins are created by SQL.** | Admin actions (pay-at-property settlement) are only in structured logs with the admin's user id. An operator grants `ADMIN` with an `UPDATE` statement. | Admin phase (Phase 7): audit-log table, admin user management. |
 | 10 | **Invoice numbering and payment terms are not implemented yet** (owner decisions recorded below). Numbers are still `INV-YYYYMMDD-<random>`; `due_on` is empty. | Invoices exist and are correct, but may not meet Nepal's tax-invoice rules (sequential numbers) and have no due date. | Commission & payouts phase (Phase 12): implement the decisions below after the tax advisor confirms the numbering rules. |
 | 11 | **Only admins can record a pay-at-property settlement.** | Providers cannot mark "paid on arrival" themselves. | With partner accounts (Provider onboarding, Phase 6) or the partner dashboard (Phase 13). |
+| 12 | **`db:seed` relies on the caller to target the right database.** It inserts sample data into whatever `DATABASE_URL` points at, with no check. | A mistaken invocation could write sample data into a real or non-empty database (a near-miss in Phase 5: `npm run db:seed --dry-run` does not stop the script; the auto-mode guard blocked it). | A later phase (Hardening, Phase 16 at the latest): refuse to run against a non-empty or non-test database unless an explicit flag is given. |
 
 ## Owner decisions on invoicing (recorded 2026-11-21, after Phase 5)
 

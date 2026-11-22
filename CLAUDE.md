@@ -355,6 +355,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 2, Multi-vertical data model:** complete, merged, tagged `v0.2.0`.
 - **Phase 3, Search & booking API:** merged to `main`, tagged `v0.3.0`.
 - **Phase 4, Authentication & ownership:** merged to `main`, tagged `v0.4.0`.
-- **Phase 5, Payments, invoices & hold-release job:** complete on branch `phase/05-payments-invoices`, awaiting owner review.
+- **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
 - **Next:** Phase 6 (awaiting approval; roadmap suggests Provider onboarding & verification).

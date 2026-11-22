@@ -149,9 +149,10 @@ Phase 2 design decisions confirmed by the owner (2026-11-19):
 | MVP scope | Hotels, buses, guides/tours (activities if trivial); flights modelled, not built |
 | Test database | A separate Neon branch, wiped and rebuilt on every integration test run |
 
+*Invoicing decisions* (numbering, payment terms, cadence, payout schedule) are recorded in one
+place: [operational-gaps.md → Owner decisions on invoicing](../development/operational-gaps.md#owner-decisions-on-invoicing-recorded-2026-11-21-after-phase-5).
+
 *Still to confirm in the phase that needs them (do not assume):*
-- Commission invoice cadence for pay-at-property items (e.g. monthly) and payment terms.
-- Payout schedule for online-paid items (e.g. weekly, after the service date).
 - Whether each provider may disable pay-at-property for their listings.
 - Cancellation policy presets to offer partners (the seed contains *sample* templates only).
 - VAT/service-charge handling per vertical (hotels: 10% service charge then 13% VAT is
