@@ -5,6 +5,7 @@ import { parseEnv } from "node:util";
 import { randomBytes } from "node:crypto";
 import { toDbDate } from "../domain/dates.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import type { ProviderDocumentType } from "../generated/prisma/enums.js";
 import { createPrismaClient } from "../lib/prisma.js";
 import { hashPassword } from "../modules/auth/password.js";
 import { createWorld, type World } from "./fixtures.js";
@@ -118,6 +119,95 @@ async function createPartnerWorld(prisma: PrismaClient, world: World) {
   };
 }
 
+/**
+ * The admin console's world (Phase 7 Track C): an admin and a customer who can log in (random
+ * passwords; disposable database), and for EACH Playwright project (desktop, mobile) one hotel
+ * provider waiting for verification with every required document, and one missing the
+ * registration document. Each project decides on its own pair, so the projects never collide.
+ */
+async function createAdminWorld(prisma: PrismaClient, world: World) {
+  const s = world.suffix;
+  const adminPassword = randomBytes(18).toString("base64url");
+  const customerPassword = randomBytes(18).toString("base64url");
+  const admin = await prisma.user.create({
+    data: {
+      email: `admin-${s}@test.local`,
+      fullName: `Anita Admin ${s}`,
+      role: "ADMIN",
+      passwordHash: await hashPassword(adminPassword),
+    },
+  });
+  const customer = await prisma.user.create({
+    data: {
+      email: `customer-${s}@test.local`,
+      fullName: `Hari Traveller ${s}`,
+      passwordHash: await hashPassword(customerPassword),
+    },
+  });
+
+  const pendingProvider = async (name: string, documentTypes: ProviderDocumentType[]) => {
+    const owner = await prisma.user.create({
+      data: {
+        email: `${name.toLowerCase().replace(/\W+/g, "-")}@test.local`,
+        fullName: `Owner of ${name}`,
+        role: "PARTNER",
+      },
+    });
+    const provider = await prisma.provider.create({
+      data: {
+        providerTypeCode: "hotel",
+        ownerUserId: owner.id,
+        legalName: `${name} Pvt. Ltd.`,
+        displayName: name,
+        status: "PENDING_VERIFICATION",
+      },
+    });
+    for (const documentType of documentTypes) {
+      await prisma.providerDocument.create({
+        data: {
+          providerId: provider.id,
+          documentType,
+          storageKey: `not-uploaded/e2e-${provider.id}-${documentType.toLowerCase()}`,
+          mimeType: "application/pdf",
+          sizeBytes: 90_000,
+        },
+      });
+    }
+    await prisma.providerPayoutAccount.create({
+      data: {
+        providerId: provider.id,
+        bankName: "Global IME Bank",
+        accountName: name,
+        accountNumber: "99887766551234",
+        isDefault: true,
+      },
+    });
+    return { id: provider.id, name };
+  };
+
+  const pairs: Record<
+    string,
+    { complete: { id: string; name: string }; incomplete: { id: string; name: string } }
+  > = {};
+  for (const label of ["desktop", "mobile"]) {
+    pairs[label] = {
+      complete: await pendingProvider(`Complete Lodge ${label} ${s}`, [
+        "OWNER_ID",
+        "BUSINESS_REGISTRATION",
+      ]),
+      incomplete: await pendingProvider(`Incomplete Inn ${label} ${s}`, ["OWNER_ID"]),
+    };
+  }
+  return {
+    adminEmail: admin.email!,
+    adminPassword,
+    customerEmail: customer.email!,
+    customerPassword,
+    hotelProviderId: world.providers.hotelProvider.id,
+    adminProviders: pairs,
+  };
+}
+
 async function main(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is not set.");
@@ -142,9 +232,11 @@ async function main(): Promise<void> {
   try {
     const world = await createWorld(prisma);
     const partnerWorld = await createPartnerWorld(prisma, world);
+    const adminWorld = await createAdminWorld(prisma, world);
     console.log(
       JSON.stringify({
         ...partnerWorld,
+        ...adminWorld,
         provinceSlug: world.locations.province.slug,
         roomId: world.listings.room.id,
         roomTitle: world.listings.room.title,

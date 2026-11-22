@@ -7,7 +7,7 @@ const isCI = Boolean(process.env.CI);
  * Booking journey mode (Phase 7): set E2E_DATABASE_URL to a DISPOSABLE database (never dev).
  * The API then runs against it with a throwaway session secret, a seeded test world is created
  * (e2e/global-setup.ts) and the journeys run: e2e/booking.spec.ts (customer, Track A) and
- * e2e/partner.spec.ts (partner dashboard, Track B). Servers are never reused in this mode, so a
+ * e2e/partner.spec.ts (partner dashboard, Track B) and e2e/admin.spec.ts (admin console, Track C). Servers are never reused in this mode, so a
  * developer's API already running against the dev database cannot be picked up by mistake.
  */
 const bookingDatabase = process.env.E2E_DATABASE_URL;
