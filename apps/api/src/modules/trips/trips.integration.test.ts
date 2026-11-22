@@ -700,6 +700,45 @@ describe("ownership: a trip is visible and editable only by its owner (ADR 0006)
     },
   );
 
+  it("GET /trips lists only the caller's own trips (newest first), with filters and pagination", async () => {
+    const mine = await call("get", "/api/v1/trips?pageSize=50");
+    expect(mine.status).toBe(200);
+    const body = mine.body as {
+      data: {
+        id: string;
+        status: string;
+        items: { title: string }[];
+        totals: Record<string, string>;
+      }[];
+      pagination: { page: number; pageSize: number; total: number; totalPages: number };
+    };
+    const ownIds = await prisma.trip.findMany({
+      where: { customerId: me.userId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true },
+    });
+    expect(body.data.map((t) => t.id)).toEqual(ownIds.map((t) => t.id).slice(0, 50));
+    expect(body.pagination.total).toBe(ownIds.length);
+    expect(body.data.find((t) => t.id === tripId)?.items.map((i) => i.title)).toEqual([
+      "Test Morning Bus",
+    ]);
+
+    // The stranger never sees the owner's trips, only their own.
+    const theirs = await call("get", "/api/v1/trips", undefined, stranger);
+    const theirIds = (theirs.body as { data: { id: string }[] }).data.map((t) => t.id);
+    expect(theirIds).not.toContain(tripId);
+    const strangerOwn = await prisma.trip.count({ where: { customerId: stranger.userId } });
+    expect(theirIds).toHaveLength(strangerOwn);
+
+    const drafts = await call("get", "/api/v1/trips?status=DRAFT&pageSize=1&page=1");
+    const draftBody = drafts.body as typeof body;
+    expect(draftBody.data.every((t) => t.status === "DRAFT")).toBe(true);
+    expect(draftBody.data).toHaveLength(1);
+    expect(draftBody.pagination.pageSize).toBe(1);
+    expect((await call("get", "/api/v1/trips?userId=x")).status).toBe(400);
+    expect((await request(app).get("/api/v1/trips")).status).toBe(401);
+  });
+
   it("the stranger's attempts changed nothing", async () => {
     const trip = tripOf(await call("get", `/api/v1/trips/${tripId}`));
     expect(trip.status).toBe("DRAFT");

@@ -106,6 +106,7 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | GET | `/api/v1/listing-types` | All verticals and whether they are active/bookable |
 | GET | `/api/v1/listings` | Search bookable listings |
 | GET | `/api/v1/listings/:id` | Listing details + availability calendar |
+| GET | `/api/v1/trips` | The caller's own trips, newest first (Phase 7) |
 | POST | `/api/v1/trips` | Create a draft trip |
 | GET | `/api/v1/trips/:id` | Trip with items, money and statuses |
 | POST | `/api/v1/trips/:id/items` | Add a booking item (holds inventory) |
@@ -231,6 +232,23 @@ or `null`. 404 for inactive verticals, drafts and unverified providers.
   "calendar": { "from": "…", "to": "…", "currency": "NPR", "currencyExponent": 2,
                 "slots": [{ "date": "2027-01-10", "status": "OPEN", "available": 33, "unitPriceMinor": "180000" }] }
 } }
+```
+
+### GET /api/v1/trips → 200 (Phase 7)
+
+The caller's **own** trips only (owner-scoped in the query: another user's trips are never listed),
+newest first. Query: `status` (e.g. `DRAFT` to find the current draft), `page`, `pageSize` (≤ 50).
+Customer view: no commission or payout data.
+
+```json
+{ "data": [ { "id": "…", "reference": "MS-7K3F9QXR", "status": "PENDING", "currency": "NPR",
+  "currencyExponent": 2,
+  "totals": { "subtotalMinor": "2030000", "serviceChargeMinor": "77000", "taxMinor": "110110",
+              "totalMinor": "2217110" },
+  "items": [ { "id": "…", "status": "CONFIRMED", "title": "Double room", "listingType": "hotel_room",
+               "startDate": "2027-01-10", "endDate": "2027-01-12" } ],
+  "expiresAt": "…", "confirmedAt": null, "createdAt": "…" } ],
+  "pagination": { "page": 1, "pageSize": 20, "total": 3, "totalPages": 1 } }
 ```
 
 ### POST /api/v1/trips → 201

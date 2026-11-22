@@ -4,11 +4,12 @@ import { currentUser } from "../auth/auth-context.js";
 import {
   addItemBodySchema,
   createTripBodySchema,
+  listTripsQuerySchema,
   quoteBodySchema,
   tripItemParamsSchema,
   updateItemBodySchema,
 } from "./trips.schemas.js";
-import { serializeQuote, serializeTrip } from "./trips.serializers.js";
+import { serializeQuote, serializeTrip, serializeTripList } from "./trips.serializers.js";
 import type { TripsService } from "./trips.service.js";
 
 /**
@@ -20,6 +21,11 @@ export function createTripsController(service: TripsService) {
     const body = createTripBodySchema.parse(req.body ?? {});
     const trip = await service.createTrip(currentUser(req).id, body);
     res.status(201).location(`/api/v1/trips/${trip.id}`).json(serializeTrip(trip));
+  };
+
+  const list: RequestHandler = async (req, res) => {
+    const query = listTripsQuerySchema.parse(req.query);
+    res.json(serializeTripList(await service.listTrips(currentUser(req).id, query)));
   };
 
   const get: RequestHandler = async (req, res) => {
@@ -56,5 +62,5 @@ export function createTripsController(service: TripsService) {
     res.json(serializeTrip(await service.confirm(id, currentUser(req).id)));
   };
 
-  return { create, get, addItem, updateItem, removeItem, quote, confirm };
+  return { create, list, get, addItem, updateItem, removeItem, quote, confirm };
 }

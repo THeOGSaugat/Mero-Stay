@@ -59,3 +59,15 @@ export const quoteBodySchema = z
   .strict();
 
 export const tripItemParamsSchema = z.object({ id: uuidSchema, itemId: uuidSchema }).strict();
+
+/** GET /api/v1/trips: the caller's own trips, newest first (Phase 7). */
+export const listTripsQuerySchema = z
+  .object({
+    status: z
+      .enum(["DRAFT", "PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"])
+      .optional(),
+    page: z.coerce.number().int().min(1).max(10_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .strict();
+export type ListTripsQuery = z.infer<typeof listTripsQuerySchema>;

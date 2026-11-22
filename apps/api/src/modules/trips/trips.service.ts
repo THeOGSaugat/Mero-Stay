@@ -35,11 +35,12 @@ import {
   findListingForBooking,
   findSlotsForDates,
   findTrip,
+  findTripsOfCustomer,
   lockTrip,
   type BookingListing,
   type TripWithItems,
 } from "./trips.repository.js";
-import type { AddItemInput, UpdateItemInput } from "./trips.schemas.js";
+import type { AddItemInput, ListTripsQuery, UpdateItemInput } from "./trips.schemas.js";
 
 /** How long a draft (or an awaiting-payment trip) holds its inventory. Refreshed on every edit. */
 export const DEFAULT_HOLD_MINUTES = 30;
@@ -722,7 +723,27 @@ export function createTripsService({
     }, TX_OPTIONS);
   }
 
-  return { createTrip, getTrip, addItem, updateItem, removeItem, quote, confirm, expireStaleTrips };
+  /** The caller's own trips (owner-scoped in the query), newest first. */
+  async function listTrips(ownerId: string, query: ListTripsQuery) {
+    const { trips, total } = await findTripsOfCustomer(prisma, ownerId, {
+      status: query.status,
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    });
+    return { trips, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  return {
+    createTrip,
+    getTrip,
+    listTrips,
+    addItem,
+    updateItem,
+    removeItem,
+    quote,
+    confirm,
+    expireStaleTrips,
+  };
 }
 
 export type TripsService = ReturnType<typeof createTripsService>;
