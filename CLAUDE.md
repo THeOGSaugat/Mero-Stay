@@ -368,8 +368,9 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 5, Payments, invoices & hold-release job:** merged to `main`, tagged `v0.5.0`.
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
-- **Phase 7, Web frontend:** complete on branch `phase/07-web-frontend`, awaiting owner review before merge and
-  tag `v0.7.0`. Tracks A (customer, ADR 0010) and B (partner, ADR 0011) approved; Track C (admin console, ADR 0012)
-  complete. Gaps 18–19 closed (ADR 0009). Launch blockers recorded: gaps 5 and 22. End-of-phase Neon integration
-  run: 183/183 (attempt 2; attempt 1 was refused by stale test-branch credentials before any test ran).
-- **Next:** owner review of Phase 7, then merge + tag `v0.7.0`. Phase 8 only after approval.
+- **Phase 7, Web frontend:** merged to `main`, tagged `v0.7.0` (customer, partner and admin; ADRs 0009–0012).
+- **Phase 8, Listing rules & admin lists:** complete on branch `phase/08-listing-rules-admin-search`, awaiting owner
+  review. Gap 22 closed (data-driven provider-type → listing-type rules, ADR 0013) and gap 25 closed (admin search,
+  ordering, paging, actor names). Neon integration run 200/200. 20 gaps open; launch blocker: gap 5. The rest of the old Phase 8 scope (admin
+  moderation: gaps 9, 13, 15) is not yet scheduled.
+- **Next:** owner review of Phase 8. Phase 9 only after approval.

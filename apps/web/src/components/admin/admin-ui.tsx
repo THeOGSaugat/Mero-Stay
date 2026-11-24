@@ -16,6 +16,7 @@ import { Alert, buttonSecondary } from "../ui/primitives";
 const SECTIONS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/providers", label: "Providers" },
+  { href: "/admin/listing-rules", label: "Listing rules" },
   { href: "/admin/invoices", label: "Invoices" },
   { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/audit-log", label: "Audit log" },

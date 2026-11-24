@@ -130,6 +130,7 @@ export function createApp(deps: AppDependencies): Express {
     // MeroStay staff only: role ADMIN on the session user; writes audited.
     v1.use(
       createAdminRouter({
+        prisma: deps.prisma,
         auth: authMiddleware,
         payments: paymentsService,
         providers: providersService,

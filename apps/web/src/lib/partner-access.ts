@@ -66,6 +66,11 @@ export function partnerErrorView(error: unknown): PartnerErrorView {
   return { kind: "message", message: describePartnerError(error) };
 }
 
+function humanizeCode(code: string): string {
+  const text = code.replace(/_/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function listOf(values: string[]): string {
   if (values.length <= 1) return values.join("");
   return `${values.slice(0, -1).join(", ")} and ${values[values.length - 1]}`;
@@ -108,6 +113,16 @@ export function describePartnerError(error: unknown): string {
       return "That kind of business is not offered yet.";
     case "LISTING_TYPE_NOT_OFFERED":
       return "That kind of listing is not offered yet.";
+    case "LISTING_TYPE_NOT_ALLOWED": {
+      const allowed = (error.details as { allowedListingTypes?: unknown } | undefined)
+        ?.allowedListingTypes;
+      const names = Array.isArray(allowed)
+        ? allowed.filter((c): c is string => typeof c === "string").map(humanizeCode)
+        : [];
+      return names.length > 0
+        ? `Your kind of business can't list this type. You can list: ${listOf(names)}.`
+        : "Your kind of business can't create listings yet. Contact MeroStay.";
+    }
     case "LISTING_STATUS_NOT_ALLOWED":
       return "That status change isn't allowed for this listing.";
     case "LISTING_SUSPENDED":

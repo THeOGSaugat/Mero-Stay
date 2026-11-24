@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { apiRequest } from "@/lib/api-client";
-import type { ListingType } from "@/lib/api-types";
 import {
   buildDetails,
   buildListingFields,
@@ -12,6 +10,8 @@ import {
   detailInputName,
   detailValuesFrom,
   type DetailField,
+  listingTypeChoices,
+  parentTypeCodes,
 } from "@/lib/listing-forms";
 import { formatMoney, splitMinor } from "@/lib/money";
 import { describePartnerError } from "@/lib/partner-access";
@@ -195,8 +195,9 @@ function majorText(minor: string, exponent: number): string {
 }
 
 /**
- * Create or edit a listing. The listing types offered come from GET /listing-types (active
- * types only, so flights are absent); the details fields follow the chosen type (lib/listing-forms).
+ * Create or edit a listing. The listing types offered are the ones the API says this business
+ * may list (its profile's `allowedListingTypes`: mapped to its provider type and active, ADR
+ * 0013); the details fields follow the chosen type (lib/listing-forms). The API re-checks both.
  */
 export function ListingForm({
   listing,
@@ -205,10 +206,10 @@ export function ListingForm({
   listing?: ManagedListing;
   onSaved?: (listing: ManagedListing) => void;
 }) {
-  const { request } = usePartner();
+  const { request, profile } = usePartner();
   const router = useRouter();
   const mode = listing ? "edit" : "create";
-  const [types, setTypes] = useState<ListingType[] | null>(null);
+  const types = listingTypeChoices(profile);
   const [typeCode, setTypeCode] = useState(listing?.listingType.code ?? "");
   const [parents, setParents] = useState<ManagedListing[]>([]);
   const [problems, setProblems] = useState<string[]>([]);
@@ -217,29 +218,35 @@ export function ListingForm({
   const [busy, setBusy] = useState(false);
   const [idempotencyKey] = useState(() => `listing-${crypto.randomUUID()}`);
 
+  const parentCodes = parentTypeCodes(types).join(",");
   useEffect(() => {
-    if (listing) return;
+    if (listing || !parentCodes) return;
     let cancelled = false;
-    apiRequest<{ data: ListingType[] }>("/listing-types")
-      .then((body) => !cancelled && setTypes(body.data.filter((t) => t.isActive)))
-      .catch((err: unknown) => !cancelled && setError(describePartnerError(err)));
-    // Own properties that rooms can belong to (any listing that groups others).
-    request<Paged<ManagedListing>>("/listings?pageSize=100")
-      .then((body) => !cancelled && setParents(body.data.filter((l) => !l.listingType.isBookable)))
+    // Own listings that others can belong to (e.g. a property for its rooms), by type.
+    Promise.all(
+      parentCodes
+        .split(",")
+        .map((code) =>
+          request<Paged<ManagedListing>>(
+            `/listings?listingType=${encodeURIComponent(code)}&pageSize=100`,
+          ).then((body) => body.data),
+        ),
+    )
+      .then((lists) => !cancelled && setParents(lists.flat()))
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [listing, request]);
+  }, [listing, parentCodes, request]);
 
   const fields = detailFieldsFor(typeCode);
   const values = detailValuesFrom(listing?.details ?? null);
   const exponent = listing?.currencyExponent ?? 2;
   const bookable = listing
     ? listing.listingType.isBookable
-    : (types?.find((t) => t.code === typeCode)?.isBookable ?? true);
+    : (types.find((t) => t.code === typeCode)?.isBookable ?? true);
   const unit =
-    listing?.listingType.unitLabel ?? types?.find((t) => t.code === typeCode)?.unitLabel ?? "unit";
+    listing?.listingType.unitLabel ?? types.find((t) => t.code === typeCode)?.unitLabel ?? "unit";
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -314,7 +321,15 @@ export function ListingForm({
         </Alert>
       ) : null}
 
-      {!listing ? (
+      {!listing && types.length === 0 ? (
+        <div data-testid="no-listing-types">
+          <Alert>
+            Your kind of business can&apos;t create listings yet (it isn&apos;t offered). Contact
+            MeroStay.
+          </Alert>
+        </div>
+      ) : null}
+      {!listing && types.length > 0 ? (
         <label className={labelClass}>
           Kind of listing
           <select
@@ -325,7 +340,7 @@ export function ListingForm({
             className={inputClass}
           >
             <option value="">Choose…</option>
-            {types?.map((t) => (
+            {types.map((t) => (
               <option key={t.code} value={t.code}>
                 {t.name}
                 {t.isBookable ? "" : " (groups other listings)"}

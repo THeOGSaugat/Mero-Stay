@@ -1,7 +1,11 @@
 import { fromDbDate } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
 import { pageInfo, type Page } from "../../lib/pagination.js";
-import type { AdminProvider, ProviderProfile } from "./providers.service.js";
+import {
+  usableListingTypesOf,
+  type AdminProvider,
+  type ProviderProfile,
+} from "./providers.service.js";
 
 /**
  * Provider responses. Bank account numbers are ONLY ever returned masked (`accountNumberMasked`,
@@ -49,7 +53,13 @@ function documentCounts(docs: readonly Doc[]) {
 function profileFields(provider: ProviderProfile) {
   return {
     id: provider.id,
-    providerType: { code: provider.providerType.code, name: provider.providerType.name },
+    providerType: {
+      code: provider.providerType.code,
+      name: provider.providerType.name,
+      isActive: provider.providerType.isActive,
+      /** What this provider may list now (mapped and active, ADR 0013). */
+      allowedListingTypes: usableListingTypesOf(provider.providerType),
+    },
     legalName: provider.legalName,
     displayName: provider.displayName,
     description: provider.description,

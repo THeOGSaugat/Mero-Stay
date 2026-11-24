@@ -38,6 +38,14 @@ async function post<T>(api: APIRequestContext, path: string, csrf: string, data:
   return (await res.json()) as T;
 }
 
+/** The in-memory CSRF token, read the way the app does (GET /auth/me with the cookie). */
+async function csrfOf(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const res = await fetch("/api/v1/auth/me", { credentials: "include" });
+    return ((await res.json()) as { data: { csrfToken: string } }).data.csrfToken;
+  });
+}
+
 /** Wide tables scroll inside their own box; the page itself never scrolls sideways. */
 async function expectNoHorizontalScroll(page: Page): Promise<void> {
   const overflow = await page.evaluate(
@@ -133,6 +141,20 @@ test.describe("partner dashboard journey", () => {
     await expect(page.getByTestId("partner-listings")).toContainText(w.partnerRoomTitle);
     await expect(page.getByTestId("partner-listings")).toContainText(w.partnerHotelTitle);
     await expect(page.getByTestId("partner-listings")).not.toContainText("Test Double Room");
+
+    // Gap 22: a hotel business may only create its property and rooms; the API refuses others.
+    await page.goto("/partner/listings/new");
+    const kind = page.getByLabel("Kind of listing");
+    await expect(kind.locator("option")).toHaveText(["Choose…", /Hotel \/ property/, "Hotel room"]);
+    const refused = await page.request.post("/api/v1/partner/listings", {
+      data: { listingTypeCode: "bus_ticket", title: "Not ours", basePriceMinor: "100000" },
+      headers: { "X-CSRF-Token": await csrfOf(page) },
+    });
+    expect(refused.status()).toBe(422);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+      "LISTING_TYPE_NOT_ALLOWED",
+    );
+    await page.goBack();
 
     // Add dates with a date price, then try to lower booked dates to zero (overbooking: refused).
     await page.getByRole("link", { name: w.partnerRoomTitle }).click();

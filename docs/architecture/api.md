@@ -40,7 +40,7 @@ Data model: [data-model.md](data-model.md).
 
 ### Pagination (partner and admin lists)
 
-`?page=1&pageSize=20` (`pageSize` ≤ 100). Responses: `{ "data": [ … ], "page": { "page": 1, "pageSize": 20, "total": 57 } }`.
+`?page=1&pageSize=20` (`pageSize` ≤ 100, any page). Responses: `{ "data": [ … ], "page": { "page": 1, "pageSize": 20, "total": 57, "totalPages": 3 } }` (`totalPages` since Phase 8). Every list has a stable order ending in a unique `id`, so pages never overlap or skip rows.
 
 ### Idempotency keys (ADR 0008)
 
@@ -86,7 +86,7 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `LOCATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
 | 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE` | Well-formed, but breaks a business rule |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
 | 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
@@ -136,7 +136,8 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | POST | `/api/v1/admin/providers/:id/verification/:decision` | ADMIN: `approve` or `reject` (with a reason); audited |
 | GET | `/api/v1/admin/invoices` | ADMIN: all commission invoices (filter provider/status/date) |
 | GET | `/api/v1/admin/payouts` | ADMIN: payout summary across providers (read-only) |
-| GET | `/api/v1/admin/audit-log` | ADMIN: the audit log (filter actor/action/entity/date) |
+| GET | `/api/v1/admin/audit-log` | ADMIN: the audit log (filter actor/action/entity/date); actors by name |
+| GET | `/api/v1/admin/provider-types` | ADMIN: every provider type with its listing rules and flags (read-only, ADR 0013) |
 
 ### POST /api/v1/auth/register → 201 (+ session cookie)
 
@@ -509,10 +510,16 @@ satisfies a group.
   "requiredDocuments": [
     { "requirement": "identity", "acceptedDocumentTypes": ["OWNER_ID"] },
     { "requirement": "registration",
-      "acceptedDocumentTypes": ["BUSINESS_REGISTRATION", "LOCAL_GOVERNMENT_REGISTRATION"] } ] } ] }
+      "acceptedDocumentTypes": ["BUSINESS_REGISTRATION", "LOCAL_GOVERNMENT_REGISTRATION"] } ],
+  "allowedListingTypes": [
+    { "code": "hotel", "name": "Hotel / property", "unitLabel": "property", "isBookable": false },
+    { "code": "hotel_room", "name": "Hotel room", "unitLabel": "night", "isBookable": true } ] } ] }
 ```
 
 Onboarding with a type that is not offered → `422 PROVIDER_TYPE_NOT_OFFERED`.
+`allowedListingTypes` (Phase 8, ADR 0013): the listing types this kind of business may create, i.e.
+mapped in `provider_type_listing_types` **and** active. The partner profile carries the same list
+as `providerType.allowedListingTypes`.
 
 ### GET /api/v1/locations → 200 (public, Phase 7 Track B)
 
@@ -548,6 +555,19 @@ types without a detail table (e.g. `activity`) use `attributes` only. `providerI
 `commissionRateBps` are rejected (400). New listings are `DRAFT`; PATCH may set `status` to
 `PENDING_REVIEW`, `ARCHIVED` or (from archived) `DRAFT`. Approval is an admin action. List:
 `?status=&listingType=&page=&pageSize=`.
+
+**Listing-type rule (Phase 8, ADR 0013, gap 22).** A provider may create, or change, only listings
+whose type its provider type is mapped to while **both** types are active:
+
+| Case | Answer |
+|---|---|
+| Unknown or inactive listing type | `422 LISTING_TYPE_NOT_OFFERED` (unchanged) |
+| Not mapped, or the provider type is not offered | `422 LISTING_TYPE_NOT_ALLOWED`, `details: { listingTypeCode, providerTypeCode, reason: "not_mapped" \| "provider_type_not_offered", allowedListingTypes: [...] }` |
+| PATCH of a listing whose type is no longer usable | The same errors; a PATCH of only `{ "status": "ARCHIVED" }` is always accepted |
+| PATCH with `listingTypeCode` | `400 VALIDATION_ERROR` (the type of a listing cannot change) |
+
+Nothing is written when refused. A database trigger (`listings_listing_type_allowed_chk`) refuses
+an unmapped pair on any write path (→ `422 LISTING_TYPE_NOT_ALLOWED`).
 
 ### Inventory: /partner/listings/:id/slots
 
@@ -610,24 +630,33 @@ subtotal). Nothing is paid out in this phase.
 
 ## Admin endpoints for providers, finance and audit (ADR 0008)
 
-- `GET /admin/providers?status=&providerType=&page=` and `GET /admin/providers/:id`: providers
-  with owner contact, verification status, document counts (detail: document list), payout account
-  **masked**.
+- `GET /admin/providers?q=&status=&providerType=&sort=&page=&pageSize=` and `GET /admin/providers/:id`:
+  providers with owner contact, verification status, document counts (detail: document list),
+  payout account **masked**. `q` (Phase 8, gap 25; trimmed, 1–100 characters) matches the display
+  or legal name, the owner's email or the provider type's name (case-insensitive, contains) or the
+  type code; `sort` = `newest` (default), `oldest` or `name`, always with an `id` tie-breaker.
+- `GET /admin/provider-types` (Phase 8, read-only): every provider type, offered or not, with
+  `isActive`, `requiredDocuments`, `listingTypes` (the full mapping, each with its own `isActive`)
+  and `usableListingTypes` (mapped and both active).
 - `POST /admin/providers/:id/verification/approve|reject` body `{ reason? }` (required to reject) →
   the provider. Only from `PENDING_VERIFICATION` (else `409 PROVIDER_NOT_PENDING`); approve also
   approves pending documents and verifies the payout account. One audit row per decision.
-- `GET /admin/invoices?providerId=&status=&from=&to=&page=`, `GET /admin/payouts?providerId=&from=&to=&page=`.
+- `GET /admin/invoices?q=&providerId=&status=&from=&to=&page=` (newest first since Phase 8; `q`
+  matches the invoice number or provider name) and `GET /admin/payouts?q=&providerId=&from=&to=&page=`
+  (`q` matches the provider name; LIKE wildcards in `q` are literal). Partner invoices are newest
+  first as well.
 - `GET /admin/audit-log?actorUserId=&action=&entityType=&entityId=&from=&to=&page=`, newest first:
 
 ```json
-{ "data": [ { "id": "…", "actor": { "userId": "…", "role": "ADMIN" },
+{ "data": [ { "id": "…", "actor": { "userId": "…", "role": "ADMIN", "name": "Anita Sharma" },
   "action": "provider.verification.approve", "entity": { "type": "provider", "id": "…" },
   "before": { "status": "PENDING_VERIFICATION", "pendingDocumentIds": ["…"] },
   "after": { "status": "VERIFIED", "documentStatus": "APPROVED", "reason": null },
   "ip": "…", "requestId": "…", "createdAt": "…" } ], "page": { … } }
 ```
 
-Audit payloads never contain passwords, hashes, tokens, secrets or full bank numbers (redacted in
+`actor.name` (Phase 8) is the user's full name only (no email or phone), loaded once per page;
+`actor` is `null` for a system action. Audit payloads never contain passwords, hashes, tokens, secrets or full bank numbers (redacted in
 code; refused by a database CHECK). Actions recorded: `provider.create`,
 `provider.payout_account.change`, `provider.document.submit`, `provider.verification.submit`,
 `provider.verification.approve|reject`, `booking_item.settle_at_property`, `trip.settle_at_property`.

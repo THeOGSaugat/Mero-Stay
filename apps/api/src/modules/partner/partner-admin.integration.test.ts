@@ -482,10 +482,14 @@ describe("partner listings and inventory", () => {
     expect(
       codeOf(await call(partnerA, "post", "/api/v1/partner/listings", withoutDetails)),
     ).toEqual([422, "DETAILS_REQUIRED"]);
+    // Another provider's listing as the parent is unknown. (Partner B is a tour operator, so it
+    // uses a type it may list: since Phase 8 a hotel room would be refused by the type rule first.)
     expect(
       codeOf(
         await call(partnerB, "post", "/api/v1/partner/listings", {
-          ...roomBody,
+          listingTypeCode: "activity",
+          title: "Lake kayaking",
+          basePriceMinor: "300000",
           parentId: hotelId,
         }),
       ),
@@ -870,7 +874,8 @@ describe("audit log", () => {
       "provider.payout_account.change",
       "provider.create",
     ]);
-    expect(rows[0]?.actor).toEqual({ userId: admin.userId, role: "ADMIN" });
+    // Phase 8 (gap 25): the actor's name is shown next to the id.
+    expect(rows[0]?.actor).toEqual({ userId: admin.userId, role: "ADMIN", name: "admin Person" });
     const page = await call(
       admin,
       "get",
@@ -879,7 +884,10 @@ describe("audit log", () => {
     expect([
       dataOf<{ action: string }[]>(page).map((r) => r.action),
       (page.body as { page: unknown }).page,
-    ]).toEqual([["provider.verification.submit"], { page: 2, pageSize: 1, total: 4 }]);
+    ]).toEqual([
+      ["provider.verification.submit"],
+      { page: 2, pageSize: 1, total: 4, totalPages: 4 },
+    ]);
     const byActor = await call(
       admin,
       "get",

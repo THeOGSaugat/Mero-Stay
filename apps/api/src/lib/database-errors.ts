@@ -63,6 +63,8 @@ export function inspectDatabaseError(err: unknown): DatabaseErrorInfo | null {
 }
 
 const OVERBOOKING_CONSTRAINT = "inventory_slots_no_overbooking_chk";
+/** Gap 22 guard (ADR 0013): the listing's type is not mapped to its provider's type. */
+const LISTING_TYPE_RULE_CONSTRAINT = "listings_listing_type_allowed_chk";
 /** Payment, allocation and invoice guards (ADR 0007). Checked before the generic money prefixes. */
 const PAYMENT_CONSTRAINT_PREFIXES = [
   "payments_",
@@ -85,6 +87,13 @@ export function mapDatabaseError(err: unknown): AppError | null {
       409,
       "INSUFFICIENT_AVAILABILITY",
       "Not enough availability for the requested dates and quantity.",
+    );
+  }
+  if (sqlState === "23514" && constraint === LISTING_TYPE_RULE_CONSTRAINT) {
+    return new AppError(
+      422,
+      "LISTING_TYPE_NOT_ALLOWED",
+      "This kind of business cannot list this type.",
     );
   }
   if (

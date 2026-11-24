@@ -25,7 +25,7 @@ export const auditLogQuerySchema = z
   })
   .strict();
 
-type AuditRow = Prisma.AuditLogGetPayload<object>;
+type AuditRow = Prisma.AuditLogGetPayload<{ include: { actor: { select: { fullName: true } } } }>;
 
 export function createAuditLogService({ prisma }: { prisma: PrismaClient }) {
   async function list(query: z.infer<typeof auditLogQuerySchema>) {
@@ -46,6 +46,8 @@ export function createAuditLogService({ prisma }: { prisma: PrismaClient }) {
     const [rows, total] = await Promise.all([
       prisma.auditLog.findMany({
         where,
+        // The actor's name in the same query batch (one extra SQL query, not one per row).
+        include: { actor: { select: { fullName: true } } },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         ...skipTake(query),
       }),
@@ -60,7 +62,10 @@ export function serializeAuditLog(rows: AuditRow[], total: number, page: Page) {
   return {
     data: rows.map((row) => ({
       id: row.id,
-      actor: row.actorUserId ? { userId: row.actorUserId, role: row.actorRole } : null,
+      // Name only (no email/phone). No user = a system action (e.g. a scheduled job).
+      actor: row.actorUserId
+        ? { userId: row.actorUserId, role: row.actorRole, name: row.actor?.fullName ?? null }
+        : null,
       action: row.action,
       entity: { type: row.entityType, id: row.entityId },
       before: row.before,

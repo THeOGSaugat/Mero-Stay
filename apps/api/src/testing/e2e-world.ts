@@ -201,6 +201,7 @@ async function createAdminWorld(prisma: PrismaClient, world: World) {
   return {
     adminEmail: admin.email!,
     adminPassword,
+    adminName: admin.fullName,
     customerEmail: customer.email!,
     customerPassword,
     hotelProviderId: world.providers.hotelProvider.id,
