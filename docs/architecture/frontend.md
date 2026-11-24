@@ -91,10 +91,28 @@ Every call goes to `/api/v1/admin…` with the session cookie and, on writes, `X
 | `/admin/providers/[id]` | Profile, owner, payout account (**masked**), required-document groups with provided/missing, documents; **approve** (blocked while a group is missing) or **reject with a reason**; audit confirmation | `GET /admin/providers/:id`, `GET /provider-types`, `POST …/verification/approve\|reject`, `GET /admin/audit-log` |
 | `/admin/invoices` | All commission invoices; filters: provider, status, issued date | `GET /admin/invoices` |
 | `/admin/payouts` | Read-only summary across providers: total, commission, payout (= total − commission), "Pending · not executed" | `GET /admin/payouts` |
-| `/admin/audit-log` | Newest first; filters: actor, action, entity, date; before/after per field | `GET /admin/audit-log` |
+| `/admin/audit-log` | Newest first; filters: actor, action, entity, date; before/after per field; actor by name | `GET /admin/audit-log` |
+| `/admin/listing-rules` | Read-only listing rules per provider type (Phase 8, ADR 0013) | `GET /admin/provider-types` |
 
 Components: `components/admin/` (`admin-ui.tsx`: gate, nav, `useAdminData`; one view file per
 area). Logic: `lib/admin-access.ts`, `lib/audit-display.ts`, types in `lib/admin-types.ts`.
+
+### Phase 8 additions (gaps 22 and 25)
+
+- **Partner listing form:** the "Kind of listing" choices are the profile's
+  `providerType.allowedListingTypes` (mapped to the business's type and active, ADR 0013), via
+  `listingTypeChoices()`. Parents are loaded per container type the business may list. A business
+  that may list nothing sees a message. The API's `422 LISTING_TYPE_NOT_ALLOWED` names what it may
+  list.
+- **Admin lists** (`lib/admin-lists.ts`): the URL holds the filters (`readListQuery`, `listHref`).
+  - Providers have one search form: `q`, status, kind (including types not offered) and order.
+  - Invoices and payouts replace the 100-provider dropdown with a text search, plus `providerId`
+    links from a provider page.
+  - Pagers use the API's `totalPages`.
+- **Audit log:** actors show as "Name (role)"; a row without a user shows "MeroStay system"
+  (`auditActorLabel`).
+- **`/admin/listing-rules`:** a read-only table of every provider type, whether it is offered, its
+  mapped listing types with flags, and what is usable now.
 
 ## Admin guard and audit handling in the UI
 
