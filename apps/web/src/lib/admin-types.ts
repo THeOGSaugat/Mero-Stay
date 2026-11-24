@@ -1,4 +1,4 @@
-import type { PartnerProfile, VerificationDocument } from "./partner-types";
+import type { PartnerProfile, RequiredDocumentGroup, VerificationDocument } from "./partner-types";
 
 /**
  * Shapes of the admin API responses (docs/architecture/api.md, ADR 0007/0008). Money fields are
@@ -16,9 +16,28 @@ export interface AdminProvider extends AdminProviderSummary {
   documentList: VerificationDocument[];
 }
 
+/** GET /admin/provider-types: every type, offered or not, with its rules (ADR 0009/0013). */
+export interface AdminProviderType {
+  code: string;
+  name: string;
+  isActive: boolean;
+  requiredDocuments: RequiredDocumentGroup[];
+  /** The full mapping, each listing type with its own active flag. */
+  listingTypes: {
+    code: string;
+    name: string;
+    unitLabel: string;
+    isBookable: boolean;
+    isActive: boolean;
+  }[];
+  /** What a provider of this type may list now (mapped and both active). */
+  usableListingTypes: string[];
+}
+
 export interface AuditEntry {
   id: string;
-  actor: { userId: string; role: string | null } | null;
+  /** `name` is the user's full name (no contact data); null actor = a system action. */
+  actor: { userId: string; role: string | null; name: string | null } | null;
   action: string;
   entity: { type: string; id: string };
   before: unknown;

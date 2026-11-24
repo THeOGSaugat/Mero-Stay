@@ -1,4 +1,5 @@
 import { majorInputToMinor } from "./money";
+import type { AllowedListingType, PartnerProfile } from "./partner-types";
 import { percentInputToBps } from "./partner-display";
 
 /**
@@ -326,4 +327,20 @@ export function buildListingFields(
     },
     problems,
   };
+}
+
+/**
+ * The listing types the partner may choose (gap 22, ADR 0013): exactly what the API says this
+ * business may list now (mapped to its provider type, both types active). Convenience only: the
+ * API refuses anything else with 422 LISTING_TYPE_NOT_ALLOWED.
+ */
+export function listingTypeChoices(
+  profile: Pick<PartnerProfile, "providerType">,
+): readonly AllowedListingType[] {
+  return profile.providerType.allowedListingTypes ?? [];
+}
+
+/** Choices that group other listings (e.g. a property), whose listings can be a parent. */
+export function parentTypeCodes(choices: readonly AllowedListingType[]): string[] {
+  return choices.filter((t) => !t.isBookable).map((t) => t.code);
 }

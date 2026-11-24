@@ -96,3 +96,15 @@ export function auditQuery(filters: Readonly<Record<string, string>>, page: numb
   }
   return query.toString();
 }
+
+/**
+ * Who did it, for people (gap 25): the actor's name and role; a row without a user is a system
+ * action. The API returns the name only (no email or phone).
+ */
+export function auditActorLabel(
+  actor: { userId: string; role: string | null; name: string | null } | null,
+): string {
+  if (!actor) return "MeroStay system";
+  const role = actor.role ? actor.role.toLowerCase() : "user";
+  return `${actor.name?.trim() || "Unknown user"} (${role})`;
+}

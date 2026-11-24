@@ -3,7 +3,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import type { AdminProviderSummary } from "@/lib/admin-types";
+import { INVOICE_LIST_KEYS, listHref, PAYOUT_LIST_KEYS, readListQuery } from "@/lib/admin-lists";
 import { formatMoney } from "@/lib/money";
 import {
   formatPeriod,
@@ -17,64 +17,59 @@ import { Pager, tableClass, tdClass, thClass } from "../ui/data";
 import { Alert, buttonSecondary, inputClass, labelClass, StatusPill } from "../ui/primitives";
 import { AdminError, useAdminData } from "./admin-ui";
 
-/** The filters present in the URL, and the query for the API (empty values dropped). */
-function filtersFrom(search: URLSearchParams, keys: readonly string[]) {
-  const values: Record<string, string> = {};
-  const query = new URLSearchParams();
-  for (const key of keys) {
-    const value = (search.get(key) ?? "").trim();
-    values[key] = value;
-    if (value) query.set(key, value);
-  }
-  const page = Math.max(1, Number.parseInt(search.get("page") ?? "1", 10) || 1);
-  query.set("page", String(page));
-  query.set("pageSize", "20");
-  return { values, query, page };
-}
-
-function hrefFor(base: string, values: Record<string, string>, page: number): string {
-  const q = new URLSearchParams();
-  for (const [k, v] of Object.entries(values)) if (v) q.set(k, v);
-  q.set("page", String(page));
-  return `${base}?${q.toString()}`;
-}
-
-/** A provider filter: the first 100 providers by name (the API's page limit). */
-function ProviderSelect({ value }: { value: string }) {
-  const { data } = useAdminData<Paged<AdminProviderSummary>>("/providers?pageSize=100");
+/**
+ * Provider filter: text search (`q`) on the API, no capped dropdown (gap 25). A provider page
+ * links here with `providerId`, kept as a hidden field and shown with a way to clear it.
+ */
+function ProviderFilter({
+  base,
+  values,
+  searchLabel,
+}: {
+  base: string;
+  values: Record<string, string>;
+  searchLabel: string;
+}) {
   return (
-    <label className={labelClass}>
-      Provider
-      <select
-        name="providerId"
-        defaultValue={value}
-        key={`${value}-${data ? "loaded" : "loading"}`}
-        className={inputClass}
-      >
-        <option value="">All providers</option>
-        {data?.data
-          .slice()
-          .sort((a, b) => a.displayName.localeCompare(b.displayName))
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.displayName}
-            </option>
-          ))}
-      </select>
-    </label>
+    <>
+      <label className={labelClass}>
+        {searchLabel}
+        <input
+          name="q"
+          type="search"
+          defaultValue={values.q}
+          maxLength={100}
+          className={inputClass}
+        />
+      </label>
+      {values.providerId ? (
+        <p className="text-sm text-slate-600 sm:col-span-2 lg:col-span-1">
+          <input type="hidden" name="providerId" value={values.providerId} />
+          One provider only ·{" "}
+          <Link
+            href={listHref(base, { ...values, providerId: "" }, 1)}
+            className="text-navy underline"
+          >
+            show all
+          </Link>
+        </p>
+      ) : null}
+    </>
   );
 }
 
-const INVOICE_KEYS = ["providerId", "status", "from", "to"] as const;
-
 /** /admin/invoices: every commission invoice; filters provider / status / issued date. */
 export function AdminInvoiceList() {
-  const { values, query } = filtersFrom(useSearchParams(), INVOICE_KEYS);
-  const { data, error } = useAdminData<Paged<CommissionInvoice>>(`/invoices?${query.toString()}`);
+  const { values, apiQuery } = readListQuery(useSearchParams(), INVOICE_LIST_KEYS);
+  const { data, error } = useAdminData<Paged<CommissionInvoice>>(`/invoices?${apiQuery}`);
   return (
     <div className="space-y-4">
       <Form action="/admin/invoices" className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <ProviderSelect value={values.providerId ?? ""} />
+        <ProviderFilter
+          base="/admin/invoices"
+          values={values}
+          searchLabel="Invoice number or provider"
+        />
         <label className={labelClass}>
           Status
           <select name="status" defaultValue={values.status} className={inputClass}>
@@ -156,13 +151,11 @@ export function AdminInvoiceList() {
         </div>
       ) : null}
       {data ? (
-        <Pager page={data.page} hrefFor={(p) => hrefFor("/admin/invoices", values, p)} />
+        <Pager page={data.page} hrefFor={(p) => listHref("/admin/invoices", values, p)} />
       ) : null}
     </div>
   );
 }
-
-const PAYOUT_KEYS = ["providerId", "from", "to"] as const;
 
 /**
  * /admin/payouts: read-only summary across providers of online-paid items whose payout is
@@ -170,8 +163,8 @@ const PAYOUT_KEYS = ["providerId", "from", "to"] as const;
  * Nothing is executed (gap 16).
  */
 export function AdminPayoutSummary() {
-  const { values, query } = filtersFrom(useSearchParams(), PAYOUT_KEYS);
-  const { data, error } = useAdminData<Paged<PayoutSummaryRow>>(`/payouts?${query.toString()}`);
+  const { values, apiQuery } = readListQuery(useSearchParams(), PAYOUT_LIST_KEYS);
+  const { data, error } = useAdminData<Paged<PayoutSummaryRow>>(`/payouts?${apiQuery}`);
   return (
     <div className="space-y-4">
       <Alert tone="info">
@@ -179,7 +172,7 @@ export function AdminPayoutSummary() {
         total minus MeroStay&apos;s commission.
       </Alert>
       <Form action="/admin/payouts" className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ProviderSelect value={values.providerId ?? ""} />
+        <ProviderFilter base="/admin/payouts" values={values} searchLabel="Provider name" />
         <label className={labelClass}>
           Service from
           <input name="from" type="date" defaultValue={values.from} className={inputClass} />
@@ -245,7 +238,7 @@ export function AdminPayoutSummary() {
         </div>
       ) : null}
       {data ? (
-        <Pager page={data.page} hrefFor={(p) => hrefFor("/admin/payouts", values, p)} />
+        <Pager page={data.page} hrefFor={(p) => listHref("/admin/payouts", values, p)} />
       ) : null}
     </div>
   );

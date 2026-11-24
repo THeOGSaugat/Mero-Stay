@@ -29,11 +29,20 @@ export interface RequiredDocumentGroup {
 }
 
 /** GET /provider-types (public): only types offered at onboarding, with required documents. */
+export interface AllowedListingType {
+  code: string;
+  name: string;
+  unitLabel: string;
+  isBookable: boolean;
+}
+
 export interface ProviderTypeOffer {
   code: string;
   name: string;
   description: string | null;
   requiredDocuments: RequiredDocumentGroup[];
+  /** The listing types this kind of business may create (ADR 0013). */
+  allowedListingTypes: AllowedListingType[];
 }
 
 export interface PayoutAccount {
@@ -49,7 +58,13 @@ export interface PayoutAccount {
 
 export interface PartnerProfile {
   id: string;
-  providerType: { code: string; name: string };
+  providerType: {
+    code: string;
+    name: string;
+    isActive?: boolean;
+    /** What this business may list now: mapped to its type AND active (ADR 0013). */
+    allowedListingTypes: AllowedListingType[];
+  };
   legalName: string;
   displayName: string;
   description: string | null;

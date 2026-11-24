@@ -19,6 +19,7 @@ interface World {
   days: string[];
   adminEmail: string;
   adminPassword: string;
+  adminName: string;
   customerEmail: string;
   customerPassword: string;
   hotelProviderId: string;
@@ -98,32 +99,20 @@ test.describe("admin console journey", () => {
     await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible();
     await expect(page.getByTestId("pending-count")).toHaveText(/^\d+$/);
 
-    // Providers: hotel providers. The API lists oldest first, so the seeded ones are on the last
-    // page or the one before it; find each one's page through the API, then check the UI's list.
-    const listed = async (n: number) =>
-      (await (
-        await page.request.get(`/api/v1/admin/providers?providerType=hotel&page=${n}&pageSize=20`)
-      ).json()) as { data: { id: string }[]; page: { total: number } };
-    const lastPage = Math.max(1, Math.ceil((await listed(1)).page.total / 20));
-    const pageOf = async (id: string) => {
-      for (const n of [lastPage, lastPage - 1].filter((p) => p >= 1)) {
-        if ((await listed(n)).data.some((p) => p.id === id)) return n;
-      }
-      return 0;
-    };
-    const incompletePage = await pageOf(pair.incomplete.id);
-    expect(incompletePage).toBeGreaterThan(0);
-    await page.goto(`/admin/providers?providerType=hotel&page=${incompletePage}`);
+    // Providers: search finds this project's providers by name (gap 25), newest first.
+    await page.goto("/admin/providers");
+    const searchForm = page.getByTestId("provider-search");
+    await searchForm.getByLabel("Search").fill(pair.incomplete.name);
+    await searchForm.getByRole("button", { name: "Search" }).click();
+    await expect(page).toHaveURL(/q=Incomplete/);
+    await expect(page.getByTestId("admin-provider-row")).toHaveCount(1);
     await expect(page.getByTestId("admin-providers")).toContainText(pair.incomplete.name);
-    const completePage = await pageOf(pair.complete.id);
-    expect(completePage).toBeGreaterThan(0);
-    await page.goto(`/admin/providers?providerType=hotel&page=${completePage}`);
-    await expect(page.getByTestId("admin-providers")).toContainText(pair.complete.name);
-    // The status filter narrows the list (a count, then the rows).
-    await page.getByLabel("Verification status").selectOption("PENDING_VERIFICATION");
+    // Search + the status filter: the complete one, waiting for verification.
+    await searchForm.getByLabel("Search").fill(pair.complete.name);
+    await searchForm.getByLabel("Verification status").selectOption("PENDING_VERIFICATION");
+    await searchForm.getByRole("button", { name: "Search" }).click();
     await expect(page).toHaveURL(/status=PENDING_VERIFICATION/);
-    await expect(page.getByTestId("providers-total")).toHaveText(/^\d+ providers$/);
-    await page.goto(`/admin/providers?providerType=hotel&page=${completePage}`);
+    await expect(page.getByTestId("providers-total")).toHaveText("1 providers");
     await page.getByRole("link", { name: pair.complete.name }).click();
     await expect(page.getByRole("heading", { name: pair.complete.name })).toBeVisible();
     const reqs = page.getByTestId("admin-requirements");
@@ -153,6 +142,8 @@ test.describe("admin console journey", () => {
     const status = entry.locator('tr[data-key="status"]');
     await expect(status).toContainText("PENDING_VERIFICATION");
     await expect(status).toContainText("VERIFIED");
+    // The actor is shown by name (gap 25), not by user id.
+    await expect(entry.getByTestId("audit-actor")).toHaveText(`${w.adminName} (admin)`);
 
     // An incomplete provider: the block is shown before clicking, and Approve is disabled.
     await page.goto(`/admin/providers/${pair.incomplete.id}`);
@@ -187,6 +178,16 @@ test.describe("admin console journey", () => {
     await expect(
       page.getByText("The business registration certificate is missing.").first(),
     ).toBeVisible();
+
+    // Listing rules (read-only): hotels may list properties and rooms; flights are not usable.
+    await page.goto("/admin/listing-rules");
+    const rules = page.getByTestId("listing-rules");
+    await expect(rules.locator('[data-provider-type="hotel"] [data-testid="usable"]')).toHaveText(
+      "hotel, hotel_room",
+    );
+    await expect(rules.locator('[data-provider-type="airline"] [data-testid="usable"]')).toHaveText(
+      "None",
+    );
 
     // Invoices: every amount on screen is the API's string; the status filter works.
     await page.goto("/admin/invoices");

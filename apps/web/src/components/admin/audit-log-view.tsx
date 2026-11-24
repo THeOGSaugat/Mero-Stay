@@ -4,7 +4,13 @@ import Form from "next/form";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { AuditEntry } from "@/lib/admin-types";
-import { AUDIT_ACTIONS, auditActionLabel, auditQuery, auditRows } from "@/lib/audit-display";
+import {
+  AUDIT_ACTIONS,
+  auditActionLabel,
+  auditActorLabel,
+  auditQuery,
+  auditRows,
+} from "@/lib/audit-display";
 import { formatTimestamp } from "@/lib/partner-display";
 import type { Paged } from "@/lib/partner-types";
 import { Pager, tableClass, tdClass, thClass } from "../ui/data";
@@ -143,7 +149,7 @@ export function AuditLogView() {
               <div className="text-right text-slate-600">
                 <p>{formatTimestamp(entry.createdAt)}</p>
                 <p>
-                  {entry.actor ? `${entry.actor.role ?? "user"} ${entry.actor.userId}` : "system"}
+                  <span data-testid="audit-actor">{auditActorLabel(entry.actor)}</span>
                   {entry.ip ? ` · ${entry.ip}` : ""}
                 </p>
               </div>

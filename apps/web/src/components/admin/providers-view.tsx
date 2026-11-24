@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import Form from "next/form";
+import { useParams, useSearchParams } from "next/navigation";
+import { useState, type FormEvent } from "react";
 import { describeAdminError } from "@/lib/admin-access";
-import type { AdminProvider, AdminProviderSummary, AuditEntry } from "@/lib/admin-types";
-import { apiRequest } from "@/lib/api-client";
+import type {
+  AdminProvider,
+  AdminProviderSummary,
+  AdminProviderType,
+  AuditEntry,
+} from "@/lib/admin-types";
+import { listHref, PROVIDER_LIST_KEYS, PROVIDER_SORTS, readListQuery } from "@/lib/admin-lists";
 import {
   bpsToPercentText,
   documentStatusLabel,
@@ -17,7 +23,7 @@ import {
   requirementChecklist,
   safeMaskedAccountNumber,
 } from "@/lib/partner-display";
-import type { Paged, ProviderTypeOffer } from "@/lib/partner-types";
+import type { Paged } from "@/lib/partner-types";
 import { providerStatusTone } from "../partner/profile-view";
 import { Facts, Pager, Panel, tableClass, tdClass, thClass } from "../ui/data";
 import {
@@ -32,53 +38,40 @@ import { AdminError, useAdminData, useAdminRequest } from "./admin-ui";
 
 const STATUSES = ["", "PENDING_VERIFICATION", "DRAFT", "VERIFIED", "REJECTED", "SUSPENDED"];
 
-/** Provider types for filters and requirement groups (public: offered types only, ADR 0009). */
-function useProviderTypes(): ProviderTypeOffer[] | null {
-  const [types, setTypes] = useState<ProviderTypeOffer[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    apiRequest<{ data: ProviderTypeOffer[] }>("/provider-types")
-      .then((body) => !cancelled && setTypes(body.data))
-      .catch(() => !cancelled && setTypes([]));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return types;
+/** Every provider type with its required documents and listing rules (admin, incl. inactive). */
+function useProviderTypes(): AdminProviderType[] | null {
+  const { data, error } = useAdminData<{ data: AdminProviderType[] }>("/provider-types");
+  if (error) return [];
+  return data?.data ?? null;
 }
 
 /** /admin/providers: every provider, filtered by type and verification status, paginated. */
 export function ProviderList() {
-  const search = useSearchParams();
-  const router = useRouter();
   const types = useProviderTypes();
-  const page = Math.max(1, Number.parseInt(search.get("page") ?? "1", 10) || 1);
-  const status = search.get("status") ?? "";
-  const providerType = search.get("providerType") ?? "";
-  const query = new URLSearchParams({ page: String(page), pageSize: "20" });
-  if (status) query.set("status", status);
-  if (providerType) query.set("providerType", providerType);
-  const { data, error } = useAdminData<Paged<AdminProviderSummary>>(
-    `/providers?${query.toString()}`,
-  );
-
-  const hrefWith = (next: Record<string, string>) => {
-    const q = new URLSearchParams({ status, providerType, ...next });
-    for (const [k, v] of [...q.entries()]) if (!v) q.delete(k);
-    const text = q.toString();
-    return text ? `/admin/providers?${text}` : "/admin/providers";
-  };
+  const { values, page, apiQuery } = readListQuery(useSearchParams(), PROVIDER_LIST_KEYS);
+  const { data, error } = useAdminData<Paged<AdminProviderSummary>>(`/providers?${apiQuery}`);
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-2xl">
+      <Form
+        action="/admin/providers"
+        className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        data-testid="provider-search"
+      >
+        <label className={`${labelClass} lg:col-span-2`}>
+          Search
+          <input
+            name="q"
+            type="search"
+            defaultValue={values.q}
+            maxLength={100}
+            placeholder="Name, owner email or kind of business"
+            className={inputClass}
+          />
+        </label>
         <label className={labelClass}>
           Verification status
-          <select
-            className={inputClass}
-            value={status}
-            onChange={(e) => router.push(hrefWith({ status: e.target.value, page: "" }))}
-          >
+          <select name="status" defaultValue={values.status} className={inputClass}>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s ? providerStatusLabel(s) : "All"}
@@ -89,19 +82,34 @@ export function ProviderList() {
         <label className={labelClass}>
           Kind of business
           <select
+            name="providerType"
+            defaultValue={values.providerType}
+            key={types ? "loaded" : "loading"}
             className={inputClass}
-            value={providerType}
-            onChange={(e) => router.push(hrefWith({ providerType: e.target.value, page: "" }))}
           >
             <option value="">All</option>
             {types?.map((t) => (
               <option key={t.code} value={t.code}>
                 {t.name}
+                {t.isActive ? "" : " (not offered)"}
               </option>
             ))}
           </select>
         </label>
-      </div>
+        <label className={labelClass}>
+          Order
+          <select name="sort" defaultValue={values.sort || "newest"} className={inputClass}>
+            {PROVIDER_SORTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" className={buttonSecondary}>
+          Search
+        </button>
+      </Form>
       {error ? <AdminError view={error} /> : null}
       {!data && !error ? <p className="text-sm text-slate-600">Loading providers…</p> : null}
       {data ? (
@@ -152,7 +160,14 @@ export function ProviderList() {
           </table>
         </div>
       ) : null}
-      {data ? <Pager page={data.page} hrefFor={(p) => hrefWith({ page: String(p) })} /> : null}
+      {data ? (
+        <Pager page={data.page} hrefFor={(p) => listHref("/admin/providers", values, p)} />
+      ) : null}
+      {data && page > 1 && data.data.length === 0 ? (
+        <Link href={listHref("/admin/providers", values, 1)} className={buttonSecondary}>
+          Back to the first page
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -343,6 +358,31 @@ export function ProviderReview() {
             ...(p.rejectionReason ? [{ label: "Rejection reason", value: p.rejectionReason }] : []),
           ]}
         />
+      </Panel>
+
+      <Panel title="Listing rules">
+        <p className="text-sm text-ink" data-testid="provider-listing-rules">
+          {p.providerType.allowedListingTypes.length > 0
+            ? `May list: ${p.providerType.allowedListingTypes.map((t) => t.name).join(", ")}`
+            : "May list nothing right now (its kind of business, or its listing types, are not offered)."}
+        </p>
+        <p className="mt-2 flex flex-wrap gap-3 text-sm">
+          <Link
+            href={`/admin/invoices?providerId=${p.id}`}
+            className="font-semibold text-navy underline"
+          >
+            This provider&apos;s invoices
+          </Link>
+          <Link
+            href={`/admin/payouts?providerId=${p.id}`}
+            className="font-semibold text-navy underline"
+          >
+            This provider&apos;s payouts
+          </Link>
+          <Link href="/admin/listing-rules" className="font-semibold text-navy underline">
+            All listing rules
+          </Link>
+        </p>
       </Panel>
 
       <Panel title="Payout account">
