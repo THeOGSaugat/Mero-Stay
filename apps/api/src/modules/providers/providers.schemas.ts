@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { paginationShape } from "../../lib/pagination.js";
+import { paginationShape, searchShape, sortShape } from "../../lib/pagination.js";
 import { isoDateSchema, uuidSchema } from "../../lib/validation.js";
 
 /** Input contracts for partner onboarding/profile/documents and admin verification (ADR 0008). */
@@ -122,6 +122,9 @@ export const documentBodySchema = z
 export const adminProvidersQuerySchema = z
   .object({
     ...paginationShape,
+    /** Display or legal name, owner email, or provider type (gap 25). */
+    ...searchShape,
+    ...sortShape,
     status: z
       .enum(["DRAFT", "PENDING_VERIFICATION", "VERIFIED", "REJECTED", "SUSPENDED"])
       .optional(),

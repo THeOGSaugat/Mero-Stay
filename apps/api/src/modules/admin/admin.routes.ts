@@ -25,9 +25,11 @@ import {
   serializeAdminProvider,
   serializeAdminProviderList,
 } from "../providers/providers.serializers.js";
-import type { ProvidersService } from "../providers/providers.service.js";
+import { listAllProviderTypeRules, type ProvidersService } from "../providers/providers.service.js";
+import type { PrismaClient } from "../../generated/prisma/client.js";
 
 export interface AdminRouterDeps {
+  prisma: PrismaClient;
   auth: AuthMiddleware;
   payments: PaymentsService;
   providers: ProvidersService;
@@ -45,6 +47,7 @@ export interface AdminRouterDeps {
  * (settlement, verification decisions) each write one audit row in the same transaction.
  */
 export function createAdminRouter({
+  prisma,
   auth,
   payments,
   providers,
@@ -71,6 +74,11 @@ export function createAdminRouter({
   router.get("/admin/trips/:id/invoices", async (req, res) => {
     const { id } = idParamsSchema.parse(req.params);
     res.json(serializeInvoices(await payments.listTripInvoices(id)));
+  });
+
+  // ------------------------------------------------------------------ provider types (read-only)
+  router.get("/admin/provider-types", async (_req, res) => {
+    res.json({ data: await listAllProviderTypeRules(prisma) });
   });
 
   // ------------------------------------------------------------------ providers

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
 import { toDbDate } from "../../domain/dates.js";
-import { paginationShape, skipTake } from "../../lib/pagination.js";
+import { paginationShape, skipTake, likePattern, searchShape } from "../../lib/pagination.js";
 import { isoDateSchema, uuidSchema } from "../../lib/validation.js";
 import { INVOICE_INCLUDE } from "./invoices.service.js";
 
@@ -30,6 +30,8 @@ export const invoicesQuerySchema = z
 
 export const adminInvoicesQuerySchema = invoicesQuerySchema.extend({
   providerId: uuidSchema.optional(),
+  /** Invoice number or provider name (gap 25). */
+  ...searchShape,
 });
 
 export const payoutsQuerySchema = z
@@ -43,6 +45,8 @@ export const payoutsQuerySchema = z
 
 export const adminPayoutsQuerySchema = payoutsQuerySchema.extend({
   providerId: uuidSchema.optional(),
+  /** Provider name (gap 25). */
+  ...searchShape,
 });
 
 export interface PayoutSummaryRow {
@@ -61,11 +65,13 @@ export interface PayoutSummaryRow {
 
 export function createFinanceService({ prisma }: { prisma: PrismaClient }) {
   async function listInvoices(
-    query: z.infer<typeof adminInvoicesQuerySchema>,
+    query: z.infer<typeof invoicesQuerySchema> & { q?: string },
     providerId: string | undefined,
   ) {
+    const contains = query.q ? { contains: query.q, mode: "insensitive" as const } : undefined;
     const where: Prisma.ProviderInvoiceWhereInput = {
       ...(providerId ? { providerId } : {}),
+      ...(contains ? { OR: [{ number: contains }, { provider: { displayName: contains } }] } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.from || query.to
         ? {
@@ -80,7 +86,8 @@ export function createFinanceService({ prisma }: { prisma: PrismaClient }) {
       prisma.providerInvoice.findMany({
         where,
         include: INVOICE_INCLUDE,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        // Newest first (gap 25); `id` keeps pages stable.
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         ...skipTake(query),
       }),
       prisma.providerInvoice.count({ where }),
@@ -89,7 +96,7 @@ export function createFinanceService({ prisma }: { prisma: PrismaClient }) {
   }
 
   async function payoutSummary(
-    query: z.infer<typeof adminPayoutsQuerySchema>,
+    query: z.infer<typeof payoutsQuerySchema> & { q?: string },
     providerId: string | undefined,
   ): Promise<{ rows: PayoutSummaryRow[]; total: number }> {
     const filters = [
@@ -100,6 +107,7 @@ export function createFinanceService({ prisma }: { prisma: PrismaClient }) {
       ...(providerId ? [Prisma.sql`bi.provider_id = ${providerId}::uuid`] : []),
       ...(query.from ? [Prisma.sql`bi.start_date >= ${query.from}::date`] : []),
       ...(query.to ? [Prisma.sql`bi.start_date < ${query.to}::date`] : []),
+      ...(query.q ? [Prisma.sql`p.display_name ILIKE ${likePattern(query.q)}`] : []),
     ];
     const where = Prisma.join(filters, " AND ");
     const grouped = Prisma.sql`

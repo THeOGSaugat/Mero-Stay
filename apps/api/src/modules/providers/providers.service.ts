@@ -5,7 +5,7 @@ import { maskAccountNumber } from "../../domain/masking.js";
 import { missingRequirements, requirementGroups } from "../../domain/verification.js";
 import { AppError } from "../../lib/errors.js";
 import { withIdempotency, type IdempotentResult } from "../../lib/idempotency.js";
-import { skipTake, type Page } from "../../lib/pagination.js";
+import { skipTake, type Page, type ListSort } from "../../lib/pagination.js";
 import { recordAudit, type AuditContext } from "../audit/audit.js";
 import { assertProviderWritable } from "../partner/partner-context.js";
 import type {
@@ -28,8 +28,25 @@ import type {
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 
+/** A provider type's mapped listing types with their flags (ADR 0013). */
+const ALLOWED_LISTING_TYPES_SELECT = {
+  select: {
+    listingType: {
+      select: { code: true, name: true, unitLabel: true, isBookable: true, isActive: true },
+    },
+  },
+  orderBy: { listingTypeCode: "asc" },
+} satisfies Prisma.ProviderType$allowedListingTypesArgs;
+
 export const PROVIDER_PROFILE_INCLUDE = {
-  providerType: { select: { code: true, name: true } },
+  providerType: {
+    select: {
+      code: true,
+      name: true,
+      isActive: true,
+      allowedListingTypes: ALLOWED_LISTING_TYPES_SELECT,
+    },
+  },
   payoutAccounts: { where: { isDefault: true }, take: 1 },
   documents: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 } satisfies Prisma.ProviderInclude;
@@ -114,19 +131,110 @@ async function assertRequiredDocuments(
   }
 }
 
-/** Provider types offered at onboarding, with their required document groups (public). */
+type MappedListingType = {
+  listingType: {
+    code: string;
+    name: string;
+    unitLabel: string;
+    isBookable: boolean;
+    isActive: boolean;
+  };
+};
+
+/** The mapped listing types a provider of this type can use NOW (both types active, ADR 0013). */
+export function usableListingTypesOf(type: {
+  isActive: boolean;
+  allowedListingTypes: readonly MappedListingType[];
+}) {
+  if (!type.isActive) return [];
+  return type.allowedListingTypes
+    .map((m) => m.listingType)
+    .filter((t) => t.isActive)
+    .map(({ code, name, unitLabel, isBookable }) => ({ code, name, unitLabel, isBookable }));
+}
+
+/**
+ * Provider types offered at onboarding, with their required document groups (ADR 0009) and the
+ * listing types they may create (ADR 0013, active listing types only). Public.
+ */
 export async function listOfferedProviderTypes(prisma: PrismaClient) {
   const types = await prisma.providerType.findMany({
     where: { isActive: true },
     orderBy: { code: "asc" },
-    include: { requiredDocuments: { select: { requirement: true, documentType: true } } },
+    include: {
+      requiredDocuments: { select: { requirement: true, documentType: true } },
+      allowedListingTypes: ALLOWED_LISTING_TYPES_SELECT,
+    },
   });
   return types.map((type) => ({
     code: type.code,
     name: type.name,
     description: type.description,
     requiredDocuments: requirementGroups(type.requiredDocuments),
+    allowedListingTypes: usableListingTypesOf(type),
   }));
+}
+
+/**
+ * ADMIN (read-only): EVERY provider type, offered or not, with its required documents and its
+ * full listing-type mapping including each type's active flag (ADR 0013). Editing is a later
+ * phase: the mapping changes by migration.
+ */
+export async function listAllProviderTypeRules(prisma: PrismaClient) {
+  const types = await prisma.providerType.findMany({
+    orderBy: { code: "asc" },
+    include: {
+      requiredDocuments: { select: { requirement: true, documentType: true } },
+      allowedListingTypes: ALLOWED_LISTING_TYPES_SELECT,
+    },
+  });
+  return types.map((type) => ({
+    code: type.code,
+    name: type.name,
+    isActive: type.isActive,
+    requiredDocuments: requirementGroups(type.requiredDocuments),
+    listingTypes: type.allowedListingTypes.map((m) => m.listingType),
+    usableListingTypes: usableListingTypesOf(type).map((t) => t.code),
+  }));
+}
+
+/**
+ * Admin provider list filters (gap 25). `q` matches the display or legal name, the owner's email
+ * or the provider type's name (case-insensitive, contains), or the type code exactly. Combined
+ * with the status and type filters by AND.
+ */
+export function adminProviderWhere(
+  filters: Pick<z.infer<typeof adminProvidersQuerySchema>, "q" | "status" | "providerType">,
+): Prisma.ProviderWhereInput {
+  const q = filters.q;
+  const contains = q ? { contains: q, mode: "insensitive" as const } : undefined;
+  return {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.providerType ? { providerTypeCode: filters.providerType } : {}),
+    ...(contains
+      ? {
+          OR: [
+            { displayName: contains },
+            { legalName: contains },
+            { owner: { email: contains } },
+            { providerType: { name: contains } },
+            { providerTypeCode: q!.toLowerCase() },
+          ],
+        }
+      : {}),
+  };
+}
+
+/** Stable orders: newest (default), oldest, or by name; `id` breaks ties. */
+export function adminProviderOrder(sort: ListSort): Prisma.ProviderOrderByWithRelationInput[] {
+  switch (sort) {
+    case "oldest":
+      return [{ createdAt: "asc" }, { id: "asc" }];
+    case "name":
+      return [{ displayName: "asc" }, { id: "asc" }];
+    default:
+      return [{ createdAt: "desc" }, { id: "desc" }];
+  }
 }
 
 export function createProvidersService({ prisma, now }: { prisma: PrismaClient; now: () => Date }) {
@@ -368,15 +476,12 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
   async function adminListProviders(
     filters: z.infer<typeof adminProvidersQuerySchema>,
   ): Promise<{ providers: AdminProvider[]; total: number; page: Page }> {
-    const where: Prisma.ProviderWhereInput = {
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.providerType ? { providerTypeCode: filters.providerType } : {}),
-    };
+    const where = adminProviderWhere(filters);
     const [providers, total] = await Promise.all([
       prisma.provider.findMany({
         where,
         include: ADMIN_PROVIDER_INCLUDE,
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        orderBy: adminProviderOrder(filters.sort),
         ...skipTake(filters),
       }),
       prisma.provider.count({ where }),

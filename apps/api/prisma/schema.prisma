@@ -145,10 +145,26 @@ model ProviderType {
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  providers         Provider[]
-  requiredDocuments ProviderTypeRequiredDocument[]
+  providers           Provider[]
+  requiredDocuments   ProviderTypeRequiredDocument[]
+  allowedListingTypes ProviderTypeListingType[]
 
   @@map("provider_types")
+}
+
+/// Which listing types a provider type may create (ADR 0013, gap 22). Data, not code: changed by
+/// migration. The API also requires both types to be active; a database trigger
+/// (`listings_listing_type_allowed_chk`) refuses any listing whose pair is not mapped.
+model ProviderTypeListingType {
+  providerTypeCode String @map("provider_type_code")
+  listingTypeCode  String @map("listing_type_code")
+
+  providerType ProviderType @relation(fields: [providerTypeCode], references: [code], onDelete: Cascade)
+  listingType  ListingType  @relation(fields: [listingTypeCode], references: [code], onDelete: Cascade)
+
+  @@id([providerTypeCode, listingTypeCode])
+  @@index([listingTypeCode])
+  @@map("provider_type_listing_types")
 }
 
 /// Verification documents a provider type must have (ADR 0009, requirements §6.2). Rows with the
@@ -309,7 +325,8 @@ model ListingType {
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  listings Listing[]
+  listings      Listing[]
+  providerTypes ProviderTypeListingType[]
 
   @@map("listing_types")
 }
