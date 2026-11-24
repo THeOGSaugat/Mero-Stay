@@ -1,7 +1,7 @@
 # Phase 08: Listing rules & admin lists
 
-- **Status:** complete, awaiting owner review. **The end-of-phase Neon run is still owed:** the
-  Neon test branch refused its credentials (see below).
+- **Status:** complete, awaiting owner review. End-of-phase Neon run: **200/200** (attempt 2,
+  after the owner updated the test-branch password; see below).
 - **Branch:** `phase/08-listing-rules-admin-search`
 - **Date:** 2026-11-24
 
@@ -61,7 +61,8 @@ Phase 9 has not been started.
 | E2E (Playwright, booking mode, disposable DB) | **20/20**, desktop and mobile; Phase 1, Track A, Track B (+ allowed types) and Track C (+ search, actor name, rules page) |
 | `npm audit` | 0 vulnerabilities |
 | CI on `c2c178f` | Run `45406825276`, success |
-| **Neon integration (end of phase)** | **Not run yet:** credentials refused (below) |
+| CI on `f48c61e` | Run `45407396033`, success |
+| **Neon integration (end of phase)** | **13/13 files, 200/200 tests**, 1,829.22 s, exit 0 (attempt 2, below) |
 
 ### Gap 22 cases (integration)
 
@@ -97,22 +98,28 @@ Phase 9 has not been started.
 
 ## Neon integration run (end of phase)
 
-Command: `caffeinate -i npm run test:integration` on committed code `c2c178f`, against the Neon
-`test` branch from `apps/api/.env.test`.
+Command: `caffeinate -i npm run test:integration`, against the Neon `test` branch from
+`apps/api/.env.test`. Attempt 1 ran on `c2c178f`; attempt 2 ran on `f48c61e`, whose only change
+since `c2c178f` is documentation, so the code under test was identical. The working tree was clean
+both times.
 
 | Attempt | Started (UTC) | Result |
 |---|---|---|
 | 1 | 13:46:11 | **Did not run.** Global setup failed after 2 s with `28P01 password authentication failed for user 'neondb_owner'` (P2010), before any test file |
+| 2 | 15:21:39 | **Passed: 13/13 files, 200/200 tests**, duration 1,829.22 s (about 30.5 min), exit 0, ended 15:52:09 |
 
-- **Diagnosis, without printing secrets:**
+- **Attempt 1 diagnosis, without printing secrets:**
   - `.env.test` was last changed on 22 Nov, and points at the recreated test endpoint
     `ep-odd-feather-benn83wc`, the configuration that passed Phase 7's run (183/183);
   - its password equals the dev password (compared by hash only), and dev still connects
     (`npm run db:check` ✔).
-  - So the test branch's role password has changed since 22 Nov.
-- **No retry was made, and no credential was changed.**
-- **Owner action:** set the test branch's current `neondb_owner` password in `apps/api/.env.test`
-  (both URLs) and ask for the run.
+  - So the test branch's role password had changed since 22 Nov.
+- **No retry until the owner acted, and no credential was changed by the agent.** The owner
+  updated the test-branch password in `apps/api/.env.test`, then attempt 2 ran once.
+- **Log:** only the known `pg` SSL-mode and `client.query()` deprecation warnings (also present in
+  Phase 7); no errors.
+- **Duration:** 1,829 s for 200 tests, against Phase 6's 1,549 s for 179. The extra time is mostly
+  the new admin-lists file seeding 105 providers and 100 audit rows over Neon round trips.
 
 ## Operational gaps
 
@@ -130,7 +137,8 @@ Command: `caffeinate -i npm run test:integration` on committed code `c2c178f`, a
 |---|---|
 | `d4df1c4` | feat(api): data-driven listing rules per provider type and admin list search (gaps 22, 25) |
 | `c2c178f` | feat(web): allowed listing types in the partner form; admin search, paging and rules |
-| (this commit) | docs: document Phase 8 listing rules and admin lists, ADR 0013 and gaps |
+| `f48c61e` | docs: document Phase 8 listing rules and admin lists, ADR 0013 and gaps |
+| (this commit) | docs: record the end-of-Phase-8 Neon integration run (200/200) |
 
 The two gaps share API files (`providers.service.ts`, the Phase 6 test file), so the API work is
 one tested commit whose body explains both gaps. Interactive partial staging isn't available here.

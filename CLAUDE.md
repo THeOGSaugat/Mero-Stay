@@ -371,6 +371,6 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 7, Web frontend:** merged to `main`, tagged `v0.7.0` (customer, partner and admin; ADRs 0009–0012).
 - **Phase 8, Listing rules & admin lists:** complete on branch `phase/08-listing-rules-admin-search`, awaiting owner
   review. Gap 22 closed (data-driven provider-type → listing-type rules, ADR 0013) and gap 25 closed (admin search,
-  ordering, paging, actor names). 20 gaps open; launch blocker: gap 5. The rest of the old Phase 8 scope (admin
+  ordering, paging, actor names). Neon integration run 200/200. 20 gaps open; launch blocker: gap 5. The rest of the old Phase 8 scope (admin
   moderation: gaps 9, 13, 15) is not yet scheduled.
 - **Next:** owner review of Phase 8. Phase 9 only after approval.
