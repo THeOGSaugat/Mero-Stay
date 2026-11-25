@@ -4,6 +4,7 @@ import helmet from "helmet";
 import type { Logger } from "pino";
 import { pinoHttp } from "pino-http";
 import type { PrismaClient } from "./generated/prisma/client.js";
+import { createProxyTrust, NO_TRUSTED_PROXY, type TrustProxyConfig } from "./lib/client-ip.js";
 import type { AuthConfig } from "./modules/auth/auth.config.js";
 import { createAuthMiddleware } from "./modules/auth/auth.middleware.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
@@ -42,6 +43,11 @@ export interface AppDependencies {
   payments?: PaymentsConfig;
   /** Clock, injectable for tests (hold expiry, "today" in Nepal). */
   now?: () => Date;
+  /**
+   * Which proxies' X-Forwarded-For entries are believed for the client IP (ADR 0014). Default:
+   * none, so `req.ip` is the socket peer. Never Express's `true`.
+   */
+  trustProxy?: TrustProxyConfig;
 }
 
 /**
@@ -51,6 +57,10 @@ export interface AppDependencies {
  */
 export function createApp(deps: AppDependencies): Express {
   const app = express();
+
+  // Client IP (rate limits, audit rows): believe X-Forwarded-For only from the configured proxy
+  // addresses and only for the configured number of hops (ADR 0014, gap 5).
+  app.set("trust proxy", createProxyTrust(deps.trustProxy ?? NO_TRUSTED_PROXY));
 
   // Security headers (also removes X-Powered-By).
   app.use(helmet());

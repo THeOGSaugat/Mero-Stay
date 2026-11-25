@@ -161,6 +161,8 @@ describe("auth configuration from the environment", () => {
         NODE_ENV: "production",
         DATABASE_URL: `${base.DATABASE_URL}?sslmode=require`,
         SESSION_SECRET: secret,
+        TRUST_PROXY_HOPS: "1",
+        TRUST_PROXY_ADDRESSES: "loopback",
       }),
     );
     expect(prod.cookieSecure).toBe(true);

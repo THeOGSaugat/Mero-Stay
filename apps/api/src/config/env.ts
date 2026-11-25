@@ -7,6 +7,11 @@ import {
   type AuthConfig,
 } from "../modules/auth/auth.config.js";
 import type { PaymentsConfig } from "../modules/payments/payments.config.js";
+import {
+  MAX_TRUST_PROXY_HOPS,
+  parseTrustedAddresses,
+  type TrustProxyConfig,
+} from "../lib/client-ip.js";
 
 /** Treat "VAR=" (empty) like an unset variable. */
 const emptyAsUndefined = (value: unknown) => (value === "" ? undefined : value);
@@ -55,6 +60,34 @@ const envSchema = z
       emptyAsUndefined,
       z.coerce.number().int().min(5).max(3600).default(60),
     ),
+    /**
+     * Proxies in front of the API whose X-Forwarded-For entry is believed (ADR 0014): 0 = the API
+     * is exposed directly, 1 = the MeroStay web server, 2 = web server + one edge/load balancer.
+     * Required in production; default 1 elsewhere (the web server on this machine).
+     */
+    TRUST_PROXY_HOPS: z.preprocess(
+      emptyAsUndefined,
+      z.coerce.number().int().min(0).max(MAX_TRUST_PROXY_HOPS).optional(),
+    ),
+    /**
+     * Addresses those proxies connect from (comma-separated IPs, CIDR ranges, or loopback,
+     * linklocal, uniquelocal). Never "true" or a /0. Required in production when hops > 0;
+     * default "loopback" elsewhere.
+     */
+    TRUST_PROXY_ADDRESSES: z.preprocess(
+      emptyAsUndefined,
+      z
+        .string()
+        .transform((raw, ctx) => {
+          try {
+            return parseTrustedAddresses(raw);
+          } catch (err) {
+            ctx.addIssue({ code: "custom", message: (err as Error).message });
+            return z.NEVER;
+          }
+        })
+        .optional(),
+    ),
   })
   .superRefine((env, ctx) => {
     // Neon only accepts TLS connections. In production, refuse to start without it
@@ -81,6 +114,26 @@ const envSchema = z
         code: "custom",
         path: ["SESSION_COOKIE_SECURE"],
         message: "cannot be false in production (session cookies must be HTTPS-only)",
+      });
+    }
+    // The trusted-proxy chain is a security boundary (ADR 0014): production must state it.
+    if (env.NODE_ENV === "production" && env.TRUST_PROXY_HOPS === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TRUST_PROXY_HOPS"],
+        message:
+          "is required in production (proxies in front of the API: 1 = the MeroStay web server, 0 = none)",
+      });
+    }
+    if (
+      env.NODE_ENV === "production" &&
+      (env.TRUST_PROXY_HOPS ?? 0) > 0 &&
+      env.TRUST_PROXY_ADDRESSES === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TRUST_PROXY_ADDRESSES"],
+        message: "is required in production when TRUST_PROXY_HOPS > 0 (the proxies' addresses)",
       });
     }
   });
@@ -136,6 +189,20 @@ export function authConfigFromEnv(env: Env): AuthConfig {
         ? env.NODE_ENV === "production"
         : env.SESSION_COOKIE_SECURE === "true",
     rateLimits: DEFAULT_RATE_LIMITS,
+  };
+}
+
+/** Development and tests: the web server runs on the same machine. */
+const DEFAULT_DEV_TRUST_PROXY: TrustProxyConfig = { hops: 1, addresses: ["loopback"] };
+
+/**
+ * Trusted proxies for client-IP resolution (ADR 0014). The defaults apply outside production only:
+ * parseEnv refuses production without explicit values.
+ */
+export function trustProxyConfigFromEnv(env: Env): TrustProxyConfig {
+  return {
+    hops: env.TRUST_PROXY_HOPS ?? DEFAULT_DEV_TRUST_PROXY.hops,
+    addresses: env.TRUST_PROXY_ADDRESSES ?? DEFAULT_DEV_TRUST_PROXY.addresses,
   };
 }
 

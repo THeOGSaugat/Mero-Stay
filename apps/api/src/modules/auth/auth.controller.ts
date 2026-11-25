@@ -1,4 +1,5 @@
 import type { CookieOptions, Request, RequestHandler, Response } from "express";
+import { clientIp, rateLimitKeyForIp } from "../../lib/client-ip.js";
 import { AppError } from "../../lib/errors.js";
 import type { AuthConfig } from "./auth.config.js";
 import type { AuthMiddleware } from "./auth.middleware.js";
@@ -62,16 +63,20 @@ export function createAuthController(
     });
   }
 
-  const clientIp = (req: Request) => req.ip ?? "unknown";
+  /**
+   * The client's bucket: its IP as resolved through the trusted proxies (ADR 0014), IPv6 by /64.
+   * Each action has its own limiter, so the effective key is (action, client).
+   */
+  const clientKey = (req: Request) => rateLimitKeyForIp(clientIp(req));
 
   const register: RequestHandler = async (req, res) => {
-    enforce(limiters.registerPerIp, clientIp(req), res);
+    enforce(limiters.registerPerIp, clientKey(req), res);
     const body = registerBodySchema.parse(req.body ?? {});
     respondWithSession(res, 201, await service.register(body));
   };
 
   const login: RequestHandler = async (req, res) => {
-    enforce(limiters.loginPerIp, clientIp(req), res);
+    enforce(limiters.loginPerIp, clientKey(req), res);
     const body = loginBodySchema.parse(req.body ?? {});
     enforce(limiters.loginPerEmail, body.email, res);
     respondWithSession(res, 200, await service.login(body, req.auth?.session.id));

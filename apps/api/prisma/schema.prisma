@@ -992,7 +992,7 @@ model AuditLog {
   entityId    String    @map("entity_id")
   before      Json?
   after       Json?
-  /// Client IP as Express sees it (see the trust-proxy gap).
+  /// Client IP resolved through the trusted proxies (ADR 0014); a forged X-Forwarded-For cannot set it.
   ip          String?
   requestId   String?   @map("request_id")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

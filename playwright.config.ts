@@ -16,8 +16,12 @@ const bookingDatabase = process.env.E2E_DATABASE_URL;
 // builds with API_URL=http://localhost:4100 (Next.js bakes the /api/v1 rewrite in at build time).
 const API_PORT = bookingDatabase ? 4100 : 4000;
 const WEB_PORT = bookingDatabase ? 3100 : 3000;
+// The web server (apps/web/server.mts) runs on this machine and appends the browser's address to
+// X-Forwarded-For; the API trusts it for exactly one hop from loopback (ADR 0014, gap 5).
+const trustWebServer = { TRUST_PROXY_HOPS: "1", TRUST_PROXY_ADDRESSES: "loopback" };
 const apiEnv: Record<string, string> = bookingDatabase
   ? {
+      ...trustWebServer,
       NODE_ENV: "test",
       PORT: String(API_PORT),
       LOG_LEVEL: "warn",
@@ -28,7 +32,7 @@ const apiEnv: Record<string, string> = bookingDatabase
       // booking for the payout summary. The customer UI still offers no online payment.
       PAYMENT_GATEWAY: "simulated",
     }
-  : { NODE_ENV: "production", PORT: String(API_PORT), LOG_LEVEL: "warn" };
+  : { ...trustWebServer, NODE_ENV: "production", PORT: String(API_PORT), LOG_LEVEL: "warn" };
 
 /**
  * End-to-end tests run against PRODUCTION builds of the API and web app.
@@ -65,7 +69,7 @@ export default defineConfig({
       url: `http://localhost:${WEB_PORT}`,
       reuseExistingServer: !isCI && !bookingDatabase,
       timeout: 60_000,
-      // `next start` listens on PORT (default 3000).
+      // apps/web/server.mts (Next.js production server + X-Forwarded-For) listens on PORT.
       env: { API_URL: `http://localhost:${API_PORT}`, PORT: String(WEB_PORT) },
     },
   ],

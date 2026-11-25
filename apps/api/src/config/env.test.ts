@@ -53,10 +53,15 @@ describe("parseEnv", () => {
     expect(parseEnv({ DATABASE_URL: noSsl, NODE_ENV: "test" }).DATABASE_URL).toBe(noSsl);
   });
 
-  it("accepts sslmode=require in production", () => {
-    expect(parseEnv({ DATABASE_URL: validUrl, NODE_ENV: "production" }).NODE_ENV).toBe(
-      "production",
-    );
+  it("accepts sslmode=require in production (with the proxy chain stated)", () => {
+    expect(
+      parseEnv({
+        DATABASE_URL: validUrl,
+        NODE_ENV: "production",
+        TRUST_PROXY_HOPS: "1",
+        TRUST_PROXY_ADDRESSES: "loopback",
+      }).NODE_ENV,
+    ).toBe("production");
   });
 
   it.each([

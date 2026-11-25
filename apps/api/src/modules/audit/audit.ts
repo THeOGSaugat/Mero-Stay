@@ -2,6 +2,7 @@ import type { Request } from "express";
 import type { Prisma } from "../../generated/prisma/client.js";
 import type { UserRole } from "../../generated/prisma/enums.js";
 import { maskAccountNumber } from "../../domain/masking.js";
+import { clientIp } from "../../lib/client-ip.js";
 import { toJsonSafe } from "../../lib/money-json.js";
 import { currentUser } from "../auth/auth-context.js";
 
@@ -39,7 +40,8 @@ export function auditContextOf(req: Request): AuditContext {
   return {
     actorUserId: user.id,
     actorRole: user.role,
-    ip: req.ip ?? null,
+    // Resolved through the trusted proxies (ADR 0014), so a forged X-Forwarded-For cannot set it.
+    ip: clientIp(req) ?? null,
     requestId: typeof requestId === "string" ? requestId : null,
   };
 }
