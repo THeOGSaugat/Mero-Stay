@@ -1,7 +1,8 @@
 # Phase 09: Rate limits behind the proxy & E2E in CI
 
-- **Status:** complete, awaiting owner review. **The end-of-phase Neon run is still owed:** the
-  Neon test endpoint stopped existing during attempt 1 (see below).
+- **Status:** complete, awaiting owner review. **The end-of-phase Neon run is not clean.**
+  Attempt 1: the test endpoint disappeared. Attempt 2: 199/209, with one stalled request in
+  `partner-admin` (see below).
 - **Branch:** `phase/09-rate-limits-e2e-ci`
 - **Date:** 2026-11-25
 
@@ -89,7 +90,7 @@ the journeys change data. CI therefore runs each test once and keeps traces (com
 | CI `b1bc350` (first run with the E2E job) | Run `45635367284`: `verify` ✔, **`e2e` ✘** (2 journeys, the dependencies above) |
 | CI `2c64ff8` | Run `45636903736`: `verify` ✔ (104 s), **`e2e` ✔ 20 passed (21.4 s)**, job 99 s |
 | CI `9eb807a` | Run `45638096999`: `verify` ✔, **`e2e` ✔ 20 passed (19.9 s)** |
-| **Neon integration (end of phase)** | **Not completed: the Neon test endpoint disappeared mid-run** (attempt 1, below). Owed |
+| **Neon integration (end of phase)** | Attempt 1: the test endpoint disappeared mid-run. Attempt 2: **199/209, 13/14 files**; the 10 failures are one 12-minute stalled request in `partner-admin` and the 9 tests after it (below). Not clean |
 
 ### Gap 5 cases
 
@@ -137,6 +138,7 @@ from `apps/api/.env.test` (endpoint `ep-plain-bird-beob278r`, file unchanged sin
 | Attempt | Started (UTC) | Result |
 |---|---|---|
 | 1 | 15:03:10 | **Infrastructure failure, not a code result.** Global setup succeeded (wipe + all migrations), and 74 tests passed. Then the endpoint refused every request: `User was denied access on the database (not available)` (Prisma), and once `P1001 Can't reach database server`. **11 of 14 files failed: 52 failed, 74 passed, 83 skipped** (their `beforeAll` failed). 1,177 s, ended 15:22:48 |
+| 2 | 15:52:38 | After the owner recreated the test branch (new endpoint `ep-gentle-salad-beigu8ag`, `.env.test` updated 21:37 local). Run on `eafe96d` (no API change since `9eb807a`). **13 of 14 files passed; 199 passed, 10 failed.** 2,454.98 s, ended 16:33:33. All 10 failures are in `partner-admin.integration.test.ts`: one test stalled (below) and 9 failed after it |
 
 - **Diagnosis, without printing secrets.** One diagnostic connection after the run (not a retry of
   the suite) printed only the error code and message:
@@ -149,10 +151,28 @@ from `apps/api/.env.test` (endpoint `ep-plain-bird-beob278r`, file unchanged sin
     assertion about behaviour.
 - **What passed before access ended:** all of `rate-limit-per-client` (this phase's gap 5 tests,
   9/9), `partner-admin` and `payments`, plus 5 tests inside the failing files.
-- **No retry was made, and no credential was changed.**
-- **Owner action:** check the Neon `test` branch (endpoint `ep-plain-bird-beob278r`), recreate it
-  if needed, put its current connection strings in `apps/api/.env.test` (both URLs), and ask for
-  the run.
+- **No retry was made after attempt 1, and no credential was changed by the agent.** The owner
+  recreated the test branch, then asked for attempt 2.
+
+**Attempt 2: what failed.**
+
+- **The stall:** "status moves: submit for review yes, self-approval never" took **739,609 ms**
+  for a handful of listing PATCHes and hit its 300 s timeout. One request waited about 12 minutes
+  on the database.
+- **The 9 failures after it:** they continue the file's shared scenario (it is written as one
+  story), and the listing was never submitted and approved. So they got, for example,
+  `422` (not bookable) instead of `201` when booking it, then `409`, `404` and empty lists.
+- **The other 13 files passed in full**, including this phase's `rate-limit-per-client` (9/9).
+
+**Why this is not a code result:**
+
+- the same file passed **22/22 on Neon in attempt 1**, on identical API code (`9eb807a`);
+- it passes locally (209/209) and in CI `verify` on every push;
+- Phase 9 changed nothing on the listing-update path; its only API changes are the client IP for
+  rate limits and audit rows.
+
+**Not retried.** A third full run (~40 min) waits for the owner's decision. The end-of-phase
+Neon run is therefore **not clean: 199/209**, with the 10 failures explained above.
 - **The same committed code passed locally:** 209/209 on the disposable PostgreSQL 17, and CI
   `verify` ran the integration suite green on every push.
 

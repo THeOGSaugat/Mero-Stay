@@ -377,8 +377,9 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 8, Listing rules & admin lists:** merged to `main`, tagged `v0.8.0` (gaps 22 and 25, ADR 0013).
 - **Phase 9, Rate limits behind the proxy & E2E in CI:** complete on branch `phase/09-rate-limits-e2e-ci`, awaiting
   owner review. Gap 5 closed (per-client limits behind the web proxy, ADR 0014) and gap 21 closed (Playwright
-  journeys in CI on a disposable database, `docs/development/ci.md`). End-of-phase Neon run owed: the test endpoint
-  disappeared mid-run (attempt 1; local and CI integration green). Roadmap rows after 8 moved down by one
+  journeys in CI on a disposable database, `docs/development/ci.md`). Neon end-of-phase run not clean: attempt 1 lost the
+  endpoint; attempt 2 199/209 (one stalled request in partner-admin plus 9 dependent failures; that file passed 22/22 on
+  Neon in attempt 1; local and CI integration green). Roadmap rows after 8 moved down by one
   (Hardening is Phase 17). 18 gaps open; **no launch blocker** (gap 4, the in-memory rate-limit store, matters only
   with more than one API instance). Admin moderation (gaps 9, 13, 15) is not yet scheduled.
 - **Next:** owner review of Phase 9. Phase 10 only after approval.
