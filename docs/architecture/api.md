@@ -31,6 +31,25 @@ Data model: [data-model.md](data-model.md).
   `404 TRIP_NOT_FOUND`, exactly as for a trip that does not exist (existence never leaks).
 - **No password data is ever returned** (no hash, no password, no session token in any body).
 
+### Rate limits and the client IP (ADR 0014)
+
+| Limit | Per | Key |
+|---|---|---|
+| Registration: 5 / hour | Client | Client IP (IPv6: its /64) |
+| Login: 30 / 15 min | Client | Client IP (IPv6: its /64) |
+| Login: 10 / 15 min | Account | The email address, whichever client sends it |
+
+- **Per client, not global.** One client using up its budget does not affect any other client.
+- **The client IP** is resolved through the trusted proxies only (`TRUST_PROXY_HOPS`,
+  `TRUST_PROXY_ADDRESSES`). Behind the MeroStay web server, that is the address the web server saw.
+- **`X-Forwarded-For` written by a client is ignored**, whether it reaches the API through the
+  web server (only the entry the web server appended counts) or directly (an untrusted source).
+  Sending a different header does not give a fresh budget.
+- **When a limit is hit:** `429 RATE_LIMITED` with a `Retry-After` header (seconds) and
+  `details.retryAfterSeconds`. The window is fixed: the count resets when it ends.
+- **Audit rows** record the same resolved client IP.
+- **Counters live in the API process** (one instance; gap 4). A restart resets them.
+
 ### 403 or 404?
 
 | Situation | Answer |
@@ -87,7 +106,7 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
 | 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED` | Well-formed, but breaks a business rule |
-| 429 | `RATE_LIMITED` | Too many login/registration attempts; see `Retry-After` |
+| 429 | `RATE_LIMITED` | Too many login/registration attempts from this client (or for this email); see `Retry-After` and [rate limits](#rate-limits-and-the-client-ip-adr-0014) |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
 | 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
 
@@ -147,7 +166,7 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 
 Email is trimmed and lower-cased. Password: 12–128 characters, not a common password. `phone` is
 optional (international format). New accounts are `CUSTOMER`s. Duplicate email → `409 EMAIL_TAKEN`,
-duplicate phone → `409 PHONE_TAKEN`. Limit: 5 per hour per IP.
+duplicate phone → `409 PHONE_TAKEN`. Limit: 5 per hour per client IP.
 
 ### POST /api/v1/auth/login → 200 (+ session cookie)
 
@@ -157,7 +176,7 @@ duplicate phone → `409 PHONE_TAKEN`. Limit: 5 per hour per IP.
 
 Any failure → `401 INVALID_CREDENTIALS` "Email or password is incorrect." (same for unknown email,
 wrong password, or an account without a password). A new session replaces any session the browser
-already held. Limits: 10 per 15 min per email, 30 per 15 min per IP.
+already held. Limits: 10 per 15 min per email, 30 per 15 min per client IP.
 
 Register, login and `GET /auth/me` all return:
 

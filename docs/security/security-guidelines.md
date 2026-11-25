@@ -20,7 +20,13 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
   the session; suspended users lose all sessions; a login always issues a new session.
 - CSRF: `X-CSRF-Token` = HMAC(`SESSION_SECRET`, session) required on state-changing requests with a
   session; login/register accept only `application/json`.
-- Rate limits: login 10 / 15 min per email and 30 / 15 min per IP; registration 5 / hour per IP.
+- Rate limits: login 10 / 15 min per email and 30 / 15 min per client IP; registration 5 / hour
+  per client IP (IPv6 by /64).
+- **Client IP (ADR 0014):** `trust proxy` is never `true`.
+  - An `X-Forwarded-For` entry counts only within `TRUST_PROXY_HOPS` and only from
+    `TRUST_PROXY_ADDRESSES`; both are required in production.
+  - The web server (`apps/web/server.mts`) appends the connecting address. A client-written header
+    can never choose the rate-limit bucket or the audit IP.
 - One generic "Email or password is incorrect." for every failed login, with a dummy Argon2 check for
   unknown emails so timing does not reveal accounts.
 - Never return or log passwords, hashes or session tokens. Users are selected through

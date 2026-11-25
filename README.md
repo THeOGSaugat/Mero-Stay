@@ -48,9 +48,16 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
   `__Host-` prefix, and `SESSION_COOKIE_SECURE=false` is refused.
 - Trips (booking) endpoints always require a logged-in user and only show a user their own trips
   (ADR 0006). Search stays public.
-- Login/registration rate limits are kept in process memory: run **one** API instance until a
-  shared store is added, and configure the proxy's client IP before relying on per-IP limits (see
-  operational gaps).
+- **Client IP and rate limits (ADR 0014).** Set `TRUST_PROXY_HOPS` and `TRUST_PROXY_ADDRESSES`
+  on the API. In production they are **required**; `true`, `*` and `/0` ranges are refused.
+  - Web server and API on one host: `1` and `loopback`.
+  - Separate hosts: `1` and the web server's private address or subnet.
+  - An edge or load balancer in front of the web server: `2` and the web server's **and** the
+    edge's addresses. The edge must **append** to `X-Forwarded-For`, not replace it.
+  - Limits are per client: login 30 / 15 min and registration 5 / hour per client IP, login
+    10 / 15 min per email.
+- Rate-limit counters are kept in process memory: run **one** API instance until a shared store is
+  added (operational gap 4).
 - **Run the hold-release job** (ADR 0007), otherwise abandoned trips keep their inventory held:
   either schedule `node apps/api/dist/scripts/hold-release.js` every minute with the platform's
   cron/scheduler, or run `node apps/api/dist/scripts/hold-release.js --watch` as one always-on worker
@@ -61,9 +68,12 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
   grants it): `UPDATE users SET role = 'ADMIN' WHERE email = '…';`. Use it sparingly.
 - **Web app (`apps/web`):** set `API_URL` (the API's base URL) for **both** `npm run build` and
   `npm start`. Browsers call `/api/v1/*` on the web origin and Next.js proxies it to `API_URL`; the
-  proxy target is fixed at build time (ADR 0010). Behind this proxy all requests reach the API from
-  the web server's IP, so forward the client IP before relying on per-IP rate limits (operational
-  gap 5).
+  proxy target is fixed at build time (ADR 0010).
+  - Start it with **`npm start`**, which runs `apps/web/server.mts`. That is the Next.js production
+    server plus one step: it appends the connecting address to `X-Forwarded-For`, which the API's
+    per-client limits rely on.
+  - Plain `next start` forwards a client's header unchanged and adds nothing.
+  - It listens on `PORT` (default 3000).
 - Set `NODE_ENV=production`; the API then also requires `sslmode=require` in `DATABASE_URL`.
 - Apply migrations with `npm run db:migrate` (uses the direct database URL) before starting a new release.
 - Known gaps before launch: [docs/development/operational-gaps.md](docs/development/operational-gaps.md).
