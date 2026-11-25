@@ -208,6 +208,11 @@ mero-stay/
   at build time), so the session cookie is first-party. Auth state (user + CSRF token) lives in memory, never in
   localStorage. Public pages are Server Components inside `<Suspense>`; account pages are Client Components. Money is
   formatted from the API's strings with string operations only (`apps/web/src/lib/money.ts`); the UI computes no totals.
+- **Client IP behind the proxy (ADR 0014):** the production web server (`apps/web/server.mts`, `npm start`) appends the
+  connecting address to `X-Forwarded-For`; plain `next start` would forward a client's header unchanged. The API's
+  `trust proxy` is a function, **never `true`**: an entry counts only within `TRUST_PROXY_HOPS` and from
+  `TRUST_PROXY_ADDRESSES` (both required in production). Rate limits are per client (IPv6 by /64); audit rows use
+  the same IP (`lib/client-ip.ts`).
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -369,8 +374,13 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   (Roadmap renumbered: payments moved ahead of provider onboarding at the owner's request.)
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
 - **Phase 7, Web frontend:** merged to `main`, tagged `v0.7.0` (customer, partner and admin; ADRs 0009–0012).
-- **Phase 8, Listing rules & admin lists:** complete on branch `phase/08-listing-rules-admin-search`, awaiting owner
-  review. Gap 22 closed (data-driven provider-type → listing-type rules, ADR 0013) and gap 25 closed (admin search,
-  ordering, paging, actor names). Neon integration run 200/200. 20 gaps open; launch blocker: gap 5. The rest of the old Phase 8 scope (admin
-  moderation: gaps 9, 13, 15) is not yet scheduled.
-- **Next:** owner review of Phase 8. Phase 9 only after approval.
+- **Phase 8, Listing rules & admin lists:** merged to `main`, tagged `v0.8.0` (gaps 22 and 25, ADR 0013).
+- **Phase 9, Rate limits behind the proxy & E2E in CI:** complete on branch `phase/09-rate-limits-e2e-ci`; result
+  accepted by the owner, awaiting the merge prompt. Gap 5 closed (per-client limits behind the web proxy, ADR 0014) and gap 21 closed (Playwright
+  journeys in CI on a disposable database, `docs/development/ci.md`). Neon end-of-phase run not clean: attempt 1 lost the
+  endpoint; attempt 2 199/209 (one stalled request in partner-admin plus 9 dependent failures; that file passed 22/22 on
+  Neon in attempt 1; local and CI integration green; gap 5's tests 9/9 on Neon). Flaky Neon runs are a recorded
+  verification constraint (operational-gaps.md); never mask them with weaker tests, longer timeouts or retries. Roadmap rows after 8 moved down by one
+  (Hardening is Phase 17). 18 gaps open; **no launch blocker** (gap 4, the in-memory rate-limit store, matters only
+  with more than one API instance). Admin moderation (gaps 9, 13, 15) is not yet scheduled.
+- **Next:** the owner's v0.9.0 merge-and-tag prompt for Phase 9. Phase 10 only after approval.

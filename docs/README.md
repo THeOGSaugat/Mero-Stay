@@ -11,6 +11,7 @@
 | [development/local-setup.md](development/local-setup.md) | **Install, configure, run, test, troubleshoot** |
 | [development/roadmap.md](development/roadmap.md) | Phase-by-phase development plan |
 | [development/operational-gaps.md](development/operational-gaps.md) | **Known operational gaps before launch** |
+| [development/ci.md](development/ci.md) | CI jobs: verify, and the E2E journeys on a disposable database (Phase 9) |
 | [development/git-workflow.md](development/git-workflow.md) | Branching, commits, pre-push checks |
 | [security/security-guidelines.md](security/security-guidelines.md) | Security practices |
 | [design/](design/README.md) | Design references from the project owner |

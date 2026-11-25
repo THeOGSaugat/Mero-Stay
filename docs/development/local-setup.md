@@ -181,6 +181,10 @@ The booking run builds the web app for an API on port **4100** and starts the AP
 (3100) itself, so it never touches a running `npm run dev`. Afterwards, run `npm run build` again
 before `npm start`. Details: [frontend.md](../architecture/frontend.md#tests).
 
+**CI runs the booking mode on every push** (Phase 9, gap 21) against its own PostgreSQL container:
+[ci.md](ci.md). To reproduce CI's settings locally on an existing build:
+`CI=1 E2E_DATABASE_URL="…disposable…" npx playwright test --workers=2`.
+
 ## 7. Health endpoints
 
 | Endpoint | Meaning | Status codes |
@@ -208,5 +212,8 @@ before `npm start`. Details: [frontend.md](../architecture/frontend.md#tests).
 | Status panel shows **API Unavailable** | API isn't running or `API_URL` in `apps/web/.env.local` is wrong |
 | Status panel shows **Database Unavailable** | Run `npm run db:check`. After idle, Neon can take a few seconds to wake; reload once |
 | Playwright: `Executable doesn't exist` | Run `npm run test:e2e:install` |
+| API exits: `TRUST_PROXY_HOPS: is required in production` (or `TRUST_PROXY_ADDRESSES`) | Production must state its proxy chain (ADR 0014). On one machine: `TRUST_PROXY_HOPS=1` and `TRUST_PROXY_ADDRESSES=loopback`. Development and tests default to exactly that |
+| API exits: `TRUST_PROXY_ADDRESSES: "…" would trust every address` | `true`, `*` and `/0` ranges are refused on purpose. List the web server's (and any edge's) addresses or subnets |
+| Everyone shares one login/registration limit in production | The web app runs under plain `next start`, or the trust settings don't match the topology. Use `npm start` (`apps/web/server.mts`) and see the README deployment notes |
 
 **Resetting data:** use the Neon console (delete and recreate the branch or database). Never reset a database that holds data you need.

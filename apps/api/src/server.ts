@@ -5,6 +5,7 @@ import {
   loadEnvFileIfPresent,
   parseEnv,
   paymentsConfigFromEnv,
+  trustProxyConfigFromEnv,
   type Env,
 } from "./config/env.js";
 import { createLogger } from "./lib/logger.js";
@@ -28,6 +29,7 @@ function readConfig(): { env: Env; auth: AuthConfig } {
 const { env, auth } = readConfig();
 const logger = createLogger(env);
 const prisma = createPrismaClient(env.DATABASE_URL);
+const trustProxy = trustProxyConfigFromEnv(env);
 
 const app = createApp({
   logger,
@@ -35,6 +37,7 @@ const app = createApp({
   prisma,
   auth,
   payments: paymentsConfigFromEnv(env),
+  trustProxy,
 });
 
 const server = app.listen(env.PORT, (error) => {
@@ -43,7 +46,12 @@ const server = app.listen(env.PORT, (error) => {
     process.exit(1);
   }
   logger.info(
-    { port: env.PORT, env: env.NODE_ENV, paymentGateway: env.PAYMENT_GATEWAY ?? "none" },
+    {
+      port: env.PORT,
+      env: env.NODE_ENV,
+      paymentGateway: env.PAYMENT_GATEWAY ?? "none",
+      trustProxy: { hops: trustProxy.hops, addresses: trustProxy.addresses.join(",") },
+    },
     "MeroStay API listening",
   );
 });

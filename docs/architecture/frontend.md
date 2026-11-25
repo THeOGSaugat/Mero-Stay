@@ -66,10 +66,19 @@ admin console (`SectionNav`, `Panel`, `Facts`, `Pager`, table classes) live in
 ## How the browser talks to the API
 
 ```
-browser ──/api/v1/*──▶ Next.js (same origin) ──rewrite──▶ API_URL/api/v1/*  (Express API)
-           cookie: session (httpOnly)                       sets / reads the cookie
+browser ──/api/v1/*──▶ server.mts ─▶ Next.js (same origin) ──rewrite──▶ API_URL/api/v1/*  (Express API)
+           cookie: session (httpOnly)                                     sets / reads the cookie
            header: X-CSRF-Token on writes
+           X-Forwarded-For: <whatever the client sent>, <address server.mts saw>   (appended)
 ```
+
+- **`server.mts` (Phase 9, ADR 0014)** is the production web server behind `npm start`. It
+  appends the connecting address to `X-Forwarded-For` before Next.js handles the request, because
+  the rewrite proxy adds nothing of its own. The API trusts that one entry (`TRUST_PROXY_HOPS=1`
+  from the web server's address), so login and registration limits and audit rows are per real
+  client.
+- Run the web app with `npm start`, never with plain `next start`, wherever per-client limits
+  matter. `npm run dev` stays `next dev`.
 
 - `lib/api-client.ts` sends `credentials: "include"` and `X-CSRF-Token` on POST, PATCH and DELETE.
   It turns error bodies into `ApiError`, including the `Retry-After` seconds of a 429.
@@ -159,7 +168,7 @@ Forms use native inputs and `FormData`.
 | Kind | Where | Covers |
 |---|---|---|
 | Unit (Vitest) | `src/lib/*.test.ts` | Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
-| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks |
+| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks. Phase 9: the admin journey sends a forged `X-Forwarded-For` on every request and checks the audit row shows the address the web server saw. **Runs in CI on every push** ([ci.md](../development/ci.md)) |
 
 Run the booking journey against a **disposable** database (never dev):
 

@@ -31,7 +31,7 @@ function documentTone(status: string): "good" | "wait" | "bad" {
  * which are satisfied, the documents and their review status, adding a document, and submitting
  * for verification.
  *
- * File upload is not built yet (operational gap 14, Phase 9): the browser reads the chosen file's
+ * File upload is not built yet (operational gap 14, Phase 10): the browser reads the chosen file's
  * type and size, and only those details are recorded. The file never leaves the device.
  */
 export function VerificationView() {
