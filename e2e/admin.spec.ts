@@ -78,8 +78,16 @@ async function bookOnlineNight(api: APIRequestContext, w: World, date: string, n
   await post(`/trips/${trip.data.id}/payments/${intent.data.payment.id}/confirm`);
 }
 
+/**
+ * Gap 5 (ADR 0014): every request in this journey carries a forged X-Forwarded-For. The web
+ * server appends the address it really saw, and the API believes only that entry, so the audit
+ * rows below must show the loopback address, never this one.
+ */
+const FORGED_CLIENT_IP = "198.51.100.7";
+
 test.describe("admin console journey", () => {
   test.skip(!world, "Set E2E_DATABASE_URL to a disposable database to run the admin journey.");
+  test.use({ extraHTTPHeaders: { "X-Forwarded-For": FORGED_CLIENT_IP } });
 
   test("providers, approve with audit, blocked approval, reject, invoices, payouts, audit log", async ({
     page,
@@ -144,6 +152,10 @@ test.describe("admin console journey", () => {
     await expect(status).toContainText("VERIFIED");
     // The actor is shown by name (gap 25), not by user id.
     await expect(entry.getByTestId("audit-actor")).toHaveText(`${w.adminName} (admin)`);
+    // Gap 5: the browser forged X-Forwarded-For; the row has the address the web server saw.
+    const actorLine = entry.getByTestId("audit-actor").locator("xpath=..");
+    await expect(actorLine).toHaveText(/ · (127\.0\.0\.1|::1)$/);
+    await expect(entry).not.toContainText(FORGED_CLIENT_IP);
 
     // An incomplete provider: the block is shown before clicking, and Approve is disabled.
     await page.goto(`/admin/providers/${pair.incomplete.id}`);
