@@ -77,3 +77,85 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  e2e:
+    # Gap 21: the Playwright journeys (customer, partner, admin; desktop + mobile) on every push
+    # and pull request, against production builds of the API and web app and a throwaway
+    # PostgreSQL. No secrets: nothing here reaches Neon. Runs in parallel with `verify`.
+    name: E2E journeys (Playwright, disposable database)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: merostay_ci
+          POSTGRES_PASSWORD: merostay_ci_password
+          POSTGRES_DB: merostay_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U merostay_ci -d merostay_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Throwaway credentials for the CI-only container above. Not a secret. Playwright's global
+      # setup applies all migrations here and seeds the test world (apps/api/src/testing/e2e-world.ts).
+      E2E_DATABASE_URL: postgresql://merostay_ci:merostay_ci_password@localhost:5432/merostay_e2e
+      # Next.js bakes the /api/v1 rewrite target in at build time (ADR 0010): the E2E API's port
+      # (playwright.config.ts). The same value is used by the build and by the running servers.
+      API_URL: http://localhost:4100
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium and its system libraries
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium's system libraries (browser from cache)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Production build (API + web, API_URL baked in)
+        run: npm run build
+
+      - name: E2E journeys (desktop + mobile Chromium)
+        # CI=true (set by Actions): servers are never reused, one retry records a trace, and a
+        # flaky pass still fails the run (failOnFlakyTests). Any failure fails this job.
+        run: npx playwright test
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore

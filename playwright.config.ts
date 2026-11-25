@@ -44,7 +44,12 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
+  // CI (gap 21): one retry, only to record a trace of the failure (trace: on-first-retry). A test
+  // that fails and then passes is flaky, and failOnFlakyTests fails the run anyway: retries never
+  // hide a broken journey. (Each run's API starts with empty rate limits; the suite registers 4
+  // accounts against the 5-per-hour limit, so more retries could run into it.)
+  retries: isCI ? 1 : 0,
+  failOnFlakyTests: isCI,
   reporter: isCI
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
