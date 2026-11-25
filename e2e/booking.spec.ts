@@ -72,7 +72,12 @@ test.describe("customer booking journey", () => {
       `/search?type=hotel_room&location=${w.provinceSlug}&startDate=${day1}&endDate=${day3}&quantity=1`,
     );
     await expect(page.getByRole("link", { name: w.roomTitle })).toBeVisible();
-    await expect(page.getByText("Rs 7,700.00 for 1 × 2 nights")).toBeVisible();
+    // Scoped to the room's visible result card: while results stream in, React briefly keeps a
+    // hidden copy of them in the DOM, which a page-wide getByText would also match (seen in CI).
+    const roomCard = page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("link", { name: w.roomTitle }) });
+    await expect(roomCard.getByText("Rs 7,700.00 for 1 × 2 nights")).toBeVisible();
     await page.getByRole("link", { name: w.roomTitle }).click();
 
     // Listing detail: priced calendar (the festival price on the first night), then add to trip.
