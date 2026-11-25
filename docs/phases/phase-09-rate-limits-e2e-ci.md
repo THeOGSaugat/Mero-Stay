@@ -1,8 +1,10 @@
 # Phase 09: Rate limits behind the proxy & E2E in CI
 
-- **Status:** complete, awaiting owner review. **The end-of-phase Neon run is not clean.**
-  Attempt 1: the test endpoint disappeared. Attempt 2: 199/209, with one stalled request in
-  `partner-admin` (see below).
+- **Status:** complete. Owner accepted the result as recorded (no third Neon run); awaiting
+  the merge prompt.
+- **Neon:** **Full Neon suite not clean on this run due to a transient connection stall; the
+  affected file passed 22/22 on Neon in attempt 1 on identical code; Phase 9 work verified via
+  local 209/209, CI, and the 9/9 rate-limit tests on Neon.**
 - **Branch:** `phase/09-rate-limits-e2e-ci`
 - **Date:** 2026-11-25
 
@@ -90,7 +92,8 @@ the journeys change data. CI therefore runs each test once and keeps traces (com
 | CI `b1bc350` (first run with the E2E job) | Run `45635367284`: `verify` ✔, **`e2e` ✘** (2 journeys, the dependencies above) |
 | CI `2c64ff8` | Run `45636903736`: `verify` ✔ (104 s), **`e2e` ✔ 20 passed (21.4 s)**, job 99 s |
 | CI `9eb807a` | Run `45638096999`: `verify` ✔, **`e2e` ✔ 20 passed (19.9 s)** |
-| **Neon integration (end of phase)** | Attempt 1: the test endpoint disappeared mid-run. Attempt 2: **199/209, 13/14 files**; the 10 failures are one 12-minute stalled request in `partner-admin` and the 9 tests after it (below). Not clean |
+| **Neon integration (end of phase)** | Attempt 1: the test endpoint disappeared mid-run. Attempt 2: **199/209, 13/14 files**; the 10 failures are one 12-minute stalled request in `partner-admin` and the 9 tests after it (below). Not clean; owner accepted. **Gap 5's 9 tests passed on Neon in both attempts** |
+| CI `5bd9825` (latest code state + docs) | Run `45655391392`: `verify` ✔; **"E2E journeys (Playwright, disposable database)" ✔**, step "E2E journeys (desktop + mobile Chromium)" 25 s, summary "20 passed (23.9s)" |
 
 ### Gap 5 cases
 
@@ -171,8 +174,43 @@ from `apps/api/.env.test` (endpoint `ep-plain-bird-beob278r`, file unchanged sin
 - Phase 9 changed nothing on the listing-update path; its only API changes are the client IP for
   rate limits and audit rows.
 
-**Not retried.** A third full run (~40 min) waits for the owner's decision. The end-of-phase
-Neon run is therefore **not clean: 199/209**, with the 10 failures explained above.
+**Owner decision (2026-11-25): no third run; result accepted as recorded.**
+
+> Full Neon suite not clean on this run due to a transient connection stall; the affected file
+> passed 22/22 on Neon in attempt 1 on identical code; Phase 9 work verified via local 209/209,
+> CI, and the 9/9 rate-limit tests on Neon.
+
+**Attribution of the two attempts:**
+
+| | Attempt 1 (15:03, `9eb807a`) | Attempt 2 (15:52, `eafe96d`, same API code) |
+|---|---|---|
+| Cause of failures | The Neon test endpoint disappeared mid-run (infrastructure) | One request stalled about 12 minutes (transient connection), plus 9 dependent failures in the same scenario file |
+| `partner-admin` | **22/22 passed** before access ended | 12 passed, 10 failed (the stall and what followed it) |
+| `rate-limit-per-client` (gap 5) | **9/9 passed** | **9/9 passed** |
+| Totals | 74 passed, 52 failed, 83 skipped | 199 passed, 10 failed, 0 skipped; 13/14 files |
+
+**How the gap 5 tests are known to have passed in attempt 2.** Vitest's non-interactive output
+names only failing files. The summary is "1 failed | 13 passed (14)" and "10 failed | 199 passed
+(209)", with none skipped, and the only failing file is `partner-admin`. So every test in
+`rate-limit-per-client.integration.test.ts` passed, by elimination; the log never names that file
+when it passes. Its 9 tests:
+
+- per-client isolation: "exhausting client A's login budget does not limit client B"
+- spoofing through the proxy: "a forged X-Forwarded-For does not open a new bucket: only the
+  proxy's entry counts"
+- spoofing from an untrusted source: "from an untrusted source, rotating X-Forwarded-For does not
+  bypass the limit"
+- 2 hops: "behind web server + edge (2 hops), the address the edge reported is the client"
+- IPv6: "IPv6 clients are grouped by /64, so rotating addresses inside one network does not help"
+- per email: "the per-email limit still spans clients (a distributed guess at one account)"
+- per-client registration: "client A's registrations do not use up client B's; forging does not
+  reset A"
+- untrusted registration: "from an untrusted source, all registrations share the socket's budget"
+- audit IP: "the forged entry never reaches the audit log; the proxy-reported client does"
+
+**Recorded as a known constraint** in
+[operational-gaps.md](../development/operational-gaps.md#development-and-verification-constraints).
+No test was weakened, and no timeout or retry was added to hide it.
 - **The same committed code passed locally:** 209/209 on the disposable PostgreSQL 17, and CI
   `verify` ran the integration suite green on every push.
 

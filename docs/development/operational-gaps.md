@@ -53,10 +53,27 @@ Not launch gaps, but limits on how the project is verified today.
 - **How to run it reliably:** on mains power, lid open, stable Wi-Fi, with someone at the machine:
   `caffeinate -i npm run test:integration`. `caffeinate -i` keeps macOS awake only while that
   command runs. Stop the run if the connection drops rather than letting it crawl.
-- **Phase 9 runs:** attempt 1 lost the test endpoint mid-run (`28000` endpoint not found; the owner
-  recreated the branch). Attempt 2 took 41 minutes with one request stalled for about 12 minutes,
-  which failed one test and the 9 dependent tests after it in the same file. Long single-file
-  scenarios (`partner-admin`) turn one network stall into many failures.
+- **Known constraint: Neon runs are flaky, and one stall cascades (recorded in Phase 9, owner
+  accepted).**
+  - **The cause:** the suite is latency-bound, and a transient connection stall can hold one
+    request for minutes.
+  - **Why one stall fails many tests:** some files are written as one continuous scenario
+    (`partner-admin.integration.test.ts`), so each test builds on the previous one. One stalled
+    request fails its test, and every later step in that file fails too, although nothing is
+    wrong with the code.
+  - **What happened in Phase 9:**
+    - Attempt 1 lost the test endpoint mid-run (`28000` endpoint not found; the owner recreated
+      the branch).
+    - Attempt 2 took 41 minutes, with one request stalled for about 12 minutes: 1 timeout and 9
+      dependent failures, all in `partner-admin`, which had passed 22/22 on Neon in attempt 1 on
+      identical code.
+  - **What to do:** re-run on a stable connection with the machine awake (below). Read a failure in
+    a scenario file from its **first** failing test; the rest usually follow from it.
+  - **What not to do:** don't weaken tests, raise timeouts or add retries to hide it. A stalled
+    request must still fail the run.
+  - **The real fix (not scheduled):** the owner's speedup note below. Seeding setup directly
+    shortens the window a stall can hit, and so does running the full Neon suite only on release
+    tags, while local PostgreSQL and CI stay the per-change gate.
 - **CI is not affected:** it uses a local PostgreSQL service container (fast, no network).
 - **Future speedup (owner's note, not scheduled):** seed test setup directly with Prisma where the
   setup itself is not under test, and run the full Neon suite only on release tags.
