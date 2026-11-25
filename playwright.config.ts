@@ -44,18 +44,20 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: isCI,
-  // CI (gap 21): one retry, only to record a trace of the failure (trace: on-first-retry). A test
-  // that fails and then passes is flaky, and failOnFlakyTests fails the run anyway: retries never
-  // hide a broken journey. (Each run's API starts with empty rate limits; the suite registers 4
-  // accounts against the 5-per-hour limit, so more retries could run into it.)
-  retries: isCI ? 1 : 0,
+  // No retries, in CI too (gap 21). The journeys change data (a retried admin journey finds its
+  // provider already approved), and each retried registration spends the API's 5-per-hour limit:
+  // the deliberately broken CI probe showed retries turning one failure into extra 429 failures.
+  // CI records a trace for every test and keeps it for failures (trace below) instead. Should
+  // retries ever be added, failOnFlakyTests still fails a run that only passed on a retry.
+  retries: 0,
   failOnFlakyTests: isCI,
   reporter: isCI
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
-    trace: "on-first-retry",
+    // CI: the failing test's trace is uploaded with the report (.github/workflows/ci.yml).
+    trace: isCI ? "retain-on-failure" : "off",
   },
   projects: [
     { name: "desktop-chromium", use: { ...devices["Desktop Chrome"] } },

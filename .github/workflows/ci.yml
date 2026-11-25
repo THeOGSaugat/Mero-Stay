@@ -145,8 +145,8 @@ jobs:
         run: npm run build
 
       - name: E2E journeys (desktop + mobile Chromium)
-        # CI=true (set by Actions): servers are never reused, one retry records a trace, and a
-        # flaky pass still fails the run (failOnFlakyTests). Any failure fails this job.
+        # CI=true (set by Actions): servers are never reused, no retries, and each failing
+        # test's trace is kept (playwright.config.ts). Any failure fails this job.
         run: npx playwright test
 
       - name: Upload Playwright report and traces
