@@ -390,8 +390,9 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   retries. 18 gaps open; **no launch blocker**. Launch checklist: `docs/development/operational-gaps.md#launch-checklist`.
 - **Roadmap:** Admin moderation (gaps 9, 13, 15) is **Phase 12**; the phases after it moved down by one (live
   gateways 13 … hardening 18).
-- **Phase 10, Cancellation policies & verification documents:** complete on branch `phase/10-policies-documents`,
-  awaiting owner review. Gap 23 closed (ADR 0015) and gap 14 closed (ADR 0016); Neon end-of-phase run clean (233/233, attempt 1); residual gaps 26–30 added (malware
+- **Phase 10, Cancellation policies & verification documents:** merged to `main`, tagged `v0.10.0`. Gap 23 closed (ADR 0015) and gap 14 closed (ADR 0016); Neon end-of-phase run clean (233/233, attempt 1); residual gaps 26–30 added (malware
   scanning, production storage, backup/retention, PDF metadata/re-encoding, listings without a policy). 21 gaps open;
-  **no launch blocker**. Listing photos and bulk pricing are an unscheduled roadmap row.
-- **Next:** owner review of Phase 10. Phase 11 only after approval.
+  **no launch blocker**. Gap 27 (production storage) is on the launch checklist; gap 28 (backup/retention) is for
+  Hardening (Phase 18) after the owner's decision; gap 30 (listings without a policy) for Cancellations & refunds
+  (Phase 14). Listing photos and bulk pricing are in the unscheduled "Frontend polish" roadmap row.
+- **Next:** Phase 11 only when the owner sends its prompt.
