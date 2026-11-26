@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import { apiRequest, ApiError, describeApiError } from "@/lib/api-client";
 import type { Pagination, Trip, TripListEntry } from "@/lib/api-types";
 import { formatMoney } from "@/lib/money";
+import { canPayOnline } from "@/lib/payment-flow";
 import { confirmOutcome, formatDateRange, statusLabel } from "@/lib/trip-display";
 import { Alert, buttonSecondary, StatusPill, statusTone } from "../ui/primitives";
+import { PayOnline } from "./pay-online";
 import { TripView } from "./trip-view";
 
 /** The customer's trips (GET /trips: owner-scoped by the API), newest first. */
@@ -129,11 +131,7 @@ export function TripDetail() {
     <div className="space-y-4">
       {confirmed ? <Alert tone="success">{confirmOutcome(trip)}</Alert> : null}
       <TripView trip={trip} />
-      {trip.status === "PENDING" ? (
-        <Alert tone="info">
-          Online payment opens in a later release. Items paid at the property are already confirmed.
-        </Alert>
-      ) : null}
+      {canPayOnline(trip) ? <PayOnline trip={trip} /> : null}
     </div>
   );
 }

@@ -140,6 +140,18 @@ export function describeApiError(error: unknown): string {
       return "Choose a date that is not in the past.";
     case "INVALID_DATE_RANGE":
       return "Check the dates: the end must be after the start.";
+    case "PAYMENT_GATEWAY_UNAVAILABLE":
+      return "The payment gateway is not answering. Try again in a moment.";
+    case "PAYMENT_CALLBACK_INVALID":
+      return "This payment response could not be verified. Open your trip to check its payment.";
+    case "PAYMENT_IN_PROGRESS":
+      return "A payment is already being started. Wait a moment and try again.";
+    case "PAYMENTS_UNAVAILABLE":
+      return "Online payment is not available right now. You can pay at the property where offered.";
+    case "PAYMENT_GATEWAY_NOT_AVAILABLE":
+      return "That payment method is not available. Choose another.";
+    case "NOTHING_DUE":
+      return "Nothing is due online for this trip.";
     case "TRIP_NOT_FOUND":
     case "NOT_FOUND":
       return "Not found.";
