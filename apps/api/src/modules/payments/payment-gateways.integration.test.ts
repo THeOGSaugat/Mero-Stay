@@ -697,6 +697,99 @@ describe("customers who never come back: the hold-release check (gap 8)", () => 
   });
 });
 
+describe("re-checking closed payments on a schedule (gap 33, ADR 0018)", () => {
+  const at = (minutes: number) =>
+    createPaymentsService({
+      prisma,
+      now: () => new Date(Date.now() + minutes * 60_000),
+      config: paymentsConfig,
+    });
+  /** A Khalti payment whose trip hold expired (the sweep cancelled the payment). */
+  async function closedKhaltiPayment() {
+    const trip = await confirmedTrip();
+    const { payment, checkout } = dataOf<IntentBody>(await intent(trip.id, "khalti"));
+    await prisma.trip.update({
+      where: { id: trip.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    await createTripsService({ prisma, now: () => new Date() }).expireStaleTrips(500);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe(
+      "CANCELLED",
+    );
+    return { payment, pidx: pidxOf(checkout) };
+  }
+
+  it("money paid after the hold closed, by a customer who never returns, is found and recorded once", async () => {
+    const { payment, pidx } = await closedKhaltiPayment();
+    fake.khalti.complete(pidx); // paid on the still-open Khalti page, tab closed
+    await at(1).recheckClosedPayments(500); // not due yet (first check at 5 min)
+    expect(
+      await prisma.paymentGatewayCheck.findUnique({ where: { paymentId: payment.id } }),
+    ).toBeNull();
+
+    await at(6).recheckClosedPayments(500);
+    const rows = await prisma.paymentReconciliation.findMany({ where: { paymentId: payment.id } });
+    expect(rows.map((r) => [r.reason, r.amountMinor, r.status])).toEqual([
+      ["PAYMENT_NOT_OPEN", 360000n, "OPEN"],
+    ]);
+    expect(
+      await prisma.paymentGatewayCheck.findUniqueOrThrow({ where: { paymentId: payment.id } }),
+    ).toMatchObject({
+      checks: 1,
+      lastResult: "paid",
+      nextCheckAt: null,
+    });
+    expect(await prisma.paymentAllocation.count({ where: { paymentId: payment.id } })).toBe(0);
+
+    // Re-runs never record it twice.
+    await at(70).recheckClosedPayments(500);
+    await at(70).recheckClosedPayments(500);
+    expect(await prisma.paymentReconciliation.count({ where: { paymentId: payment.id } })).toBe(1);
+  });
+
+  it("an unpaid closed payment is asked again on schedule (5 min, 65 min, …), each check counted once", async () => {
+    const { payment } = await closedKhaltiPayment();
+    await at(6).recheckClosedPayments(500);
+    const first = await prisma.paymentGatewayCheck.findUniqueOrThrow({
+      where: { paymentId: payment.id },
+    });
+    expect(first.checks).toBe(1);
+    expect(first.lastResult).toBe("pending");
+    const closedAt = (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } }))
+      .completedAt!;
+    expect(first.nextCheckAt?.getTime()).toBe(closedAt.getTime() + 65 * 60_000);
+
+    await at(10).recheckClosedPayments(500); // not due
+    expect(
+      (await prisma.paymentGatewayCheck.findUniqueOrThrow({ where: { paymentId: payment.id } }))
+        .checks,
+    ).toBe(1);
+    await at(66).recheckClosedPayments(500);
+    const second = await prisma.paymentGatewayCheck.findUniqueOrThrow({
+      where: { paymentId: payment.id },
+    });
+    expect(second.checks).toBe(2);
+    expect(second.nextCheckAt?.getTime()).toBe(closedAt.getTime() + 6 * 60 * 60_000);
+    expect(await prisma.paymentReconciliation.count({ where: { paymentId: payment.id } })).toBe(0);
+  });
+
+  it("a gateway outage is not counted as a check; it is retried 5 minutes later", async () => {
+    const { payment } = await closedKhaltiPayment();
+    fake.setUnavailable(true);
+    try {
+      const result = await at(6).recheckClosedPayments(500);
+      expect(result.unavailable).toBeGreaterThanOrEqual(1);
+    } finally {
+      fake.setUnavailable(false);
+    }
+    const row = await prisma.paymentGatewayCheck.findUniqueOrThrow({
+      where: { paymentId: payment.id },
+    });
+    expect([row.checks, row.lastResult]).toEqual([0, "unavailable:GATEWAY_UNAVAILABLE"]);
+    expect(row.nextCheckAt!.getTime()).toBeGreaterThan(Date.now() + 10 * 60_000);
+  });
+});
+
 describe("concurrent intents while the gateway is slow", () => {
   it("every caller gets the SAME intent and checkout (200), never PAYMENT_IN_PROGRESS", async () => {
     // A gateway that takes 400 ms to answer: the other requests take the trip lock while the

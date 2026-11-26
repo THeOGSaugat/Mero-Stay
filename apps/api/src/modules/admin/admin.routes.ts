@@ -45,6 +45,38 @@ import {
   serializeRefundRequestPage,
 } from "../refunds/refunds.serializers.js";
 
+import {
+  adminIdParamsSchema,
+  createAdminSchema,
+  serializeAdmin,
+  serializeSetupLink,
+  type AdminAccountsService,
+} from "../admin-accounts/admin-accounts.service.js";
+import {
+  reasonSchema,
+  rejectListingSchema,
+  reviewQuerySchema,
+  type ModerationService,
+} from "../moderation/moderation.service.js";
+import {
+  serializeReviewEntry,
+  serializeReviewPage,
+  serializeVoid,
+} from "../moderation/moderation.serializers.js";
+import {
+  generatePayoutsSchema,
+  markFailedSchema,
+  markPaidSchema,
+  payoutsListQuerySchema,
+  type PayoutsService,
+} from "../payouts/payouts.service.js";
+import {
+  serializePayout,
+  serializePayoutChanges,
+  serializePayoutDetail,
+  serializePayoutPage,
+} from "../payouts/payouts.serializers.js";
+
 export interface AdminRouterDeps {
   prisma: PrismaClient;
   auth: AuthMiddleware;
@@ -54,6 +86,9 @@ export interface AdminRouterDeps {
   auditLog: AuditLogService;
   policies: CancellationPoliciesService;
   refunds: RefundsService;
+  payouts: PayoutsService;
+  adminAccounts: AdminAccountsService;
+  moderation: ModerationService;
 }
 
 /**
@@ -74,6 +109,9 @@ export function createAdminRouter({
   auditLog,
   policies,
   refunds,
+  payouts,
+  adminAccounts,
+  moderation,
 }: AdminRouterDeps): Router {
   const router = Router();
   router.use(
@@ -189,6 +227,138 @@ export function createAdminRouter({
     const query = auditLogQuerySchema.parse(req.query);
     const { rows, total } = await auditLog.list(query);
     res.json(serializeAuditLog(rows, total, query));
+  });
+
+  // ------------------------------------------------------------------ payout batches (gap 16, ADR 0018)
+  router.post("/admin/payout-batches/generate", async (req, res) => {
+    const { period } = generatePayoutsSchema.parse(req.body ?? {});
+    res.json(serializePayoutChanges(await payouts.generate(auditContextOf(req), period)));
+  });
+
+  router.get("/admin/payout-batches", async (req, res) => {
+    const query = payoutsListQuerySchema.parse(req.query);
+    const { rows, total } = await payouts.list(query);
+    res.json(serializePayoutPage(rows, total, query));
+  });
+
+  router.get("/admin/payout-batches/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { payout, items } = await payouts.get(id);
+    res.json(serializePayoutDetail(payout, items));
+  });
+
+  router.post("/admin/payout-batches/:id/schedule", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { payout, changed } = await payouts.schedule(auditContextOf(req), id);
+    res.json({ data: { changed, payout: serializePayout(payout) } });
+  });
+
+  router.post("/admin/payout-batches/:id/mark-paid", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { bankReference } = markPaidSchema.parse(req.body ?? {});
+    const { payout, changed } = await payouts.markPaid(auditContextOf(req), id, bankReference);
+    res.json({ data: { changed, payout: serializePayout(payout) } });
+  });
+
+  router.post("/admin/payout-batches/:id/mark-failed", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { reason } = markFailedSchema.parse(req.body ?? {});
+    const { payout, changed } = await payouts.markFailed(auditContextOf(req), id, reason);
+    res.json({ data: { changed, payout: serializePayout(payout) } });
+  });
+
+  router.post("/admin/providers/:id/payout-account/verify", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const result = await moderation.verifyPayoutAccount(auditContextOf(req), id);
+    res.json({
+      data: {
+        changed: result.changed,
+        payoutAccountLabel: result.label,
+        verifiedAt: result.verifiedAt.toISOString(),
+      },
+    });
+  });
+
+  // ------------------------------------------------------------------ admin accounts (gap 9)
+  router.get("/admin/admins", async (_req, res) => {
+    res.json({ data: (await adminAccounts.list()).map(serializeAdmin) });
+  });
+
+  router.post("/admin/admins", async (req, res) => {
+    const input = createAdminSchema.parse(req.body ?? {});
+    const { admin, link } = await adminAccounts.create(auditContextOf(req), input);
+    res.setHeader("Cache-Control", "no-store");
+    res
+      .status(201)
+      .json({ data: { admin: serializeAdmin(admin), setupLink: serializeSetupLink(link) } });
+  });
+
+  router.post("/admin/admins/:id/setup-link", async (req, res) => {
+    const { id } = adminIdParamsSchema.parse(req.params);
+    const link = await adminAccounts.newSetupLink(auditContextOf(req), id);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ data: { setupLink: serializeSetupLink(link) } });
+  });
+
+  router.post("/admin/admins/:id/suspend", async (req, res) => {
+    const { id } = adminIdParamsSchema.parse(req.params);
+    const { admin, changed } = await adminAccounts.setStatus(auditContextOf(req), id, "SUSPENDED");
+    res.json({ data: { changed, admin: serializeAdmin(admin) } });
+  });
+
+  router.post("/admin/admins/:id/reactivate", async (req, res) => {
+    const { id } = adminIdParamsSchema.parse(req.params);
+    const { admin, changed } = await adminAccounts.setStatus(auditContextOf(req), id, "ACTIVE");
+    res.json({ data: { changed, admin: serializeAdmin(admin) } });
+  });
+
+  // ------------------------------------------------------------------ listing review (gap 15)
+  router.get("/admin/listings", async (req, res) => {
+    const query = reviewQuerySchema.parse(req.query);
+    const { entries, total } = await moderation.listForReview(query);
+    res.json(serializeReviewPage(entries, total, query));
+  });
+
+  router.get("/admin/listings/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    res.json({ data: serializeReviewEntry(await moderation.getForReview(id)) });
+  });
+
+  router.post("/admin/listings/:id/approve", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { changed } = await moderation.approveListing(auditContextOf(req), id);
+    res.json({
+      data: { changed, listing: serializeReviewEntry(await moderation.getForReview(id)) },
+    });
+  });
+
+  router.post("/admin/listings/:id/reject", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { reason } = rejectListingSchema.parse(req.body ?? {});
+    const { changed } = await moderation.rejectListing(auditContextOf(req), id, reason);
+    res.json({
+      data: { changed, listing: serializeReviewEntry(await moderation.getForReview(id)) },
+    });
+  });
+
+  // ------------------------------------------------------------------ voids and corrections (gap 13)
+  router.post("/admin/booking-items/:id/void", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { reason } = reasonSchema.parse(req.body ?? {});
+    res.json(serializeVoid(await moderation.voidItem(auditContextOf(req), id, reason)));
+  });
+
+  router.post("/admin/trips/:id/void", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { reason } = reasonSchema.parse(req.body ?? {});
+    res.json(serializeVoid(await moderation.voidTrip(auditContextOf(req), id, reason)));
+  });
+
+  router.post("/admin/booking-items/:id/settlement/reverse", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { reason } = reasonSchema.parse(req.body ?? {});
+    const result = await moderation.reverseSettlement(auditContextOf(req), id, reason);
+    res.json({ data: result });
   });
 
   return router;

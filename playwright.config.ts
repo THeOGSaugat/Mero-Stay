@@ -59,6 +59,9 @@ const apiEnv: Record<string, string> = bookingDatabase
       PAYMENT_GATEWAYS: "esewa,khalti,simulated",
       PAYMENT_MODE: "uat",
       PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
+      // Every E2E browser logs in from this one machine; the per-client login limit (30 per 15
+      // minutes) is raised for this test API only (refused in production; per-email unchanged).
+      AUTH_LOGIN_PER_IP_LIMIT: "500",
       ESEWA_FORM_URL: `${fakeGatewayUrl}/esewa/form`,
       ESEWA_STATUS_URL: `${fakeGatewayUrl}/esewa/status`,
       KHALTI_API_URL: `${fakeGatewayUrl}/khalti`,

@@ -59,6 +59,9 @@ import { serializeDocument, serializeProfile } from "../providers/providers.seri
 import type { ProvidersService } from "../providers/providers.service.js";
 import { createPartnerContext, currentPartner } from "./partner-context.js";
 
+import { payoutsListQuerySchema, type PayoutsService } from "../payouts/payouts.service.js";
+import { serializePayoutDetail, serializePayoutPage } from "../payouts/payouts.serializers.js";
+
 export interface PartnerRouterDeps {
   prisma: PrismaClient;
   auth: AuthMiddleware;
@@ -68,6 +71,7 @@ export interface PartnerRouterDeps {
   bookings: ProviderBookingsService;
   finance: FinanceService;
   policies: CancellationPoliciesService;
+  payouts: PayoutsService;
 }
 
 const itemParamsSchema = z.object({ itemId: uuidSchema }).strict();
@@ -86,7 +90,7 @@ function markReplay(res: Response, result: IdempotentResult): void {
  *   provider (partner-context.ts); another provider's data is a 404.
  */
 export function createPartnerRouter(deps: PartnerRouterDeps): Router {
-  const { auth, providers, listings, inventory, bookings, finance, policies } = deps;
+  const { auth, providers, listings, inventory, bookings, finance, policies, payouts } = deps;
   const router = Router();
   router.use("/partner", auth.loadSession, auth.requireAuth, auth.requireCsrf);
 
@@ -406,6 +410,19 @@ export function createPartnerRouter(deps: PartnerRouterDeps): Router {
     const query = payoutsQuerySchema.parse(req.query);
     const { rows, total } = await finance.payoutSummary(query, currentPartner(req).providerId);
     res.json(serializePayoutSummary(rows, total, query));
+  });
+
+  // Own payout batches (Phase 12, ADR 0018): read-only; another provider's is a 404.
+  router.get("/partner/payout-batches", async (req, res) => {
+    const query = payoutsListQuerySchema.parse(req.query);
+    const { rows, total } = await payouts.list(query, currentPartner(req).providerId);
+    res.json(serializePayoutPage(rows, total, query));
+  });
+
+  router.get("/partner/payout-batches/:id", async (req, res) => {
+    const { id } = z.object({ id: uuidSchema }).strict().parse(req.params);
+    const { payout, items } = await payouts.get(id, currentPartner(req).providerId);
+    res.json(serializePayoutDetail(payout, items));
   });
 
   return router;

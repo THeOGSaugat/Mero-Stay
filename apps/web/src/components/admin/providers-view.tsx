@@ -286,11 +286,47 @@ function DecisionPanel({
   );
 }
 
+/**
+ * An account changed after approval starts unverified again (ADR 0008); a payout can only be
+ * scheduled to a verified one (ADR 0018). Check the account out of band, then verify it here.
+ */
+function VerifyAccountButton({
+  providerId,
+  onVerified,
+}: {
+  providerId: string;
+  onVerified: () => void;
+}) {
+  const request = useAdminRequest();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <div className="mt-2 space-y-2">
+      <button
+        type="button"
+        className={buttonSecondary}
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setProblem(null);
+          request(`/providers/${providerId}/payout-account/verify`, { method: "POST" })
+            .then(onVerified)
+            .catch((err: unknown) => setProblem(describeAdminError(err)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        Mark bank account verified
+      </button>
+      {problem ? <Alert>{problem}</Alert> : null}
+    </div>
+  );
+}
+
 /** /admin/providers/[id]: profile, owner, masked payout account, documents, requirements, decision. */
 export function ProviderReview() {
   const params = useParams<{ id: string }>();
   const types = useProviderTypes();
-  const { data, error, setData } = useAdminData<{ data: AdminProvider }>(
+  const { data, error, setData, reload } = useAdminData<{ data: AdminProvider }>(
     `/providers/${encodeURIComponent(params.id)}`,
   );
   const [outcome, setOutcome] = useState<{
@@ -398,6 +434,9 @@ export function ProviderReview() {
             </span>{" "}
             · {account.verified ? "verified" : "not verified (approval verifies it)"}
           </p>
+        ) : null}
+        {account && !account.verified && p.status === "VERIFIED" ? (
+          <VerifyAccountButton providerId={p.id} onVerified={reload} />
         ) : null}
       </Panel>
 

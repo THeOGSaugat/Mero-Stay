@@ -12,7 +12,6 @@ import {
   toDbDate,
   todayInKathmandu,
 } from "../../domain/dates.js";
-import { summarizeTrip } from "../../domain/money.js";
 import {
   assertCommissionTransition,
   assertItemTransition,
@@ -43,6 +42,7 @@ import {
   lockTrip,
   type BookingListing,
   type TripWithItems,
+  recalculateTripTotals,
 } from "./trips.repository.js";
 import type { AddItemInput, ListTripsQuery, UpdateItemInput } from "./trips.schemas.js";
 
@@ -304,35 +304,7 @@ export function createTripsService({
   }
 
   /** Trip totals = sum of its active items (CANCELLED/EXPIRED items no longer count). */
-  async function recalculateTrip(
-    tx: Prisma.TransactionClient,
-    trip: { id: string; currency: string },
-    extra: Prisma.TripUpdateInput = {},
-  ): Promise<void> {
-    const items = await tx.bookingItem.findMany({
-      where: { tripId: trip.id, status: { in: [...ACTIVE_ITEM_STATUSES] } },
-      select: {
-        currency: true,
-        subtotalMinor: true,
-        serviceChargeMinor: true,
-        taxMinor: true,
-        totalMinor: true,
-        commissionMinor: true,
-      },
-    });
-    const totals = summarizeTrip(trip.currency, items);
-    await tx.trip.update({
-      where: { id: trip.id },
-      data: {
-        subtotalMinor: totals.subtotalMinor,
-        serviceChargeMinor: totals.serviceChargeMinor,
-        taxMinor: totals.taxMinor,
-        totalMinor: totals.totalMinor,
-        commissionTotalMinor: totals.commissionTotalMinor,
-        ...extra,
-      },
-    });
-  }
+  const recalculateTrip = recalculateTripTotals;
 
   async function createTrip(
     ownerId: string,

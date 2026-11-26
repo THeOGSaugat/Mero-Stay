@@ -708,6 +708,10 @@ describe("ownership and access (ADR 0006/0007)", () => {
   });
 
   it("a demoted admin loses access on the very next request", async () => {
+    // Phase 12: the last active admin can never be demoted (users_last_admin_chk), so another
+    // admin exists first.
+    const other = await signUp("second-admin");
+    await prisma.user.update({ where: { id: other.userId }, data: { role: "ADMIN" } });
     await prisma.user.update({ where: { id: admin.userId }, data: { role: "CUSTOMER" } });
     const res = await call("get", `/api/v1/admin/trips/${trip.id}/invoices`, undefined, admin);
     expect(statusAndCode(res)).toEqual([403, "FORBIDDEN"]);

@@ -248,7 +248,7 @@ test.describe("admin console journey", () => {
     await expect(payout).toContainText("Rs 4,350.50");
     await expect(payout).toContainText("Rs 525.00");
     await expect(payout.getByTestId("admin-payout-amount")).toHaveText("Rs 3,825.50");
-    await expect(payout).toContainText("Pending · not executed");
+    await expect(payout).toContainText("Pending · not paid out");
   });
 
   test("a customer cannot reach the console: page not found, API 403; a visitor is sent to log in", async ({

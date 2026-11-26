@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PayoutSummary } from "@/components/partner/finance-view";
+import { PartnerPayoutBatches } from "@/components/partner/payout-batches-list";
 import { PageHeading } from "@/components/ui/primitives";
 
 export const metadata: Metadata = { title: "Payouts" };
@@ -10,7 +11,10 @@ export default function PartnerPayoutsPage() {
     <>
       <PageHeading title="Payouts" />
       <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
-        <PayoutSummary />
+        <div className="space-y-6">
+          <PayoutSummary />
+          <PartnerPayoutBatches />
+        </div>
       </Suspense>
     </>
   );

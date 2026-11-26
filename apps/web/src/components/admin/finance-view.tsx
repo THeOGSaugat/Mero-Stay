@@ -168,8 +168,8 @@ export function AdminPayoutSummary() {
   return (
     <div className="space-y-4">
       <Alert tone="info">
-        Read-only: payouts are not executed yet. Each provider&apos;s payout is its bookings&apos;
-        total minus MeroStay&apos;s commission.
+        Owed and not yet paid out: each provider&apos;s bookings paid online, total minus
+        MeroStay&apos;s commission. Pay them out with the payout batches below.
       </Alert>
       <Form action="/admin/payouts" className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ProviderFilter base="/admin/payouts" values={values} searchLabel="Provider name" />
@@ -226,7 +226,7 @@ export function AdminPayoutSummary() {
                     </td>
                     <td className={tdClass}>
                       <StatusPill
-                        label={`${payoutStatusLabel(row.payoutStatus)} · not executed`}
+                        label={`${payoutStatusLabel(row.payoutStatus)} · not paid out`}
                         tone="wait"
                       />
                     </td>

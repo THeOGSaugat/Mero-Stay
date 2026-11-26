@@ -34,7 +34,13 @@ async function main(): Promise<void> {
     if (checked.applied > 0 || checked.unavailable > 0) {
       logger.info(checked, "hold-release: checked open gateway payments");
     }
-    return trips.expireStaleTrips(limit);
+    const released = await trips.expireStaleTrips(limit);
+    // Gap 33 (ADR 0018): closed eSewa/Khalti payments are asked again on a schedule.
+    const rechecked = await payments.recheckClosedPayments(limit);
+    if (rechecked.recorded > 0 || rechecked.unavailable > 0) {
+      logger.info(rechecked, "hold-release: re-checked closed gateway payments");
+    }
+    return released;
   };
 
   if (!process.argv.includes("--watch")) {

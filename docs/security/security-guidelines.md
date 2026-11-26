@@ -60,6 +60,16 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Make callback handlers idempotent (unique provider transaction ID; repeated callbacks are no-ops).
 - Store provider references and raw verification responses (without secrets) for reconciliation.
 - Use sandbox credentials in development; never commit merchant secrets.
+- Phase 12 (ADR 0018): payouts are recorded manual bank transfers (no bank API); a payout can only
+  be scheduled to a **verified** bank account (a changed account must be re-verified by an admin:
+  the fraud-sensitive moment); bank references are stored but only ever returned and audited
+  masked. New admins get a one-time setup link (32 random bytes, only the SHA-256 stored, 24 h,
+  once, in the URL fragment so it reaches no server log or Referer; `no-referrer` page) and choose
+  their own password; no one sees another person's password. You cannot suspend yourself, and the
+  last usable admin can never be suspended or demoted (service + database trigger, serialised by
+  an advisory lock). Listing approval re-checks the listing-type rule in the service and the
+  database. Voids never edit money snapshots or issued invoices. `AUTH_LOGIN_PER_IP_LIMIT`
+  (tests only) is refused in production; the per-email login limit is never changed.
 - Phase 11 (ADR 0017): eSewa and Khalti are verified **server to server** (eSewa: HMAC-SHA256
   signature on the callback, compared in constant time, plus the status API; Khalti: lookup by
   `pidx`); the browser's redirect alone never marks a payment paid, and amounts must match exactly

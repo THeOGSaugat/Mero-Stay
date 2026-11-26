@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paymentsConfigFromEnv, parseEnv } from "./env.js";
+import { authConfigFromEnv, paymentsConfigFromEnv, parseEnv } from "./env.js";
 
 const url =
   "postgresql://user:s3cret-pass@ep-test-pooler.eu-central-1.aws.neon.tech/db?sslmode=require";
@@ -94,6 +94,24 @@ describe("payment gateway configuration (ADR 0017)", () => {
     );
     expect(Object.keys(prod.gateways)).toEqual(["khalti"]);
     expect(prod.mode).toBe("production");
+  });
+
+  it("the per-client login limit can be raised for tests only, never in production", () => {
+    expect(issues({ ...production, AUTH_LOGIN_PER_IP_LIMIT: "300" })).toMatch(
+      /AUTH_LOGIN_PER_IP_LIMIT: is for tests only/,
+    );
+    const env = parseEnv({
+      DATABASE_URL: url,
+      AUTH_LOGIN_PER_IP_LIMIT: "300",
+      SESSION_SECRET: "x".repeat(40),
+    });
+    const auth = authConfigFromEnv(env);
+    expect(auth.rateLimits.loginPerIp.limit).toBe(300);
+    expect(auth.rateLimits.loginPerEmail.limit).toBe(10); // never changed
+    expect(
+      authConfigFromEnv(parseEnv({ DATABASE_URL: url, SESSION_SECRET: "x".repeat(40) })).rateLimits
+        .loginPerIp.limit,
+    ).toBe(30);
   });
 
   it("refuses the old PAYMENT_GATEWAY setting instead of ignoring it", () => {

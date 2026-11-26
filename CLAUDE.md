@@ -207,6 +207,15 @@ mero-stay/
   (never dropped, never allocated). Refund requests are stored only (DB refuses execution). Production
   refuses to start without gateway config. Tests use local fakes (`testing/fake-gateways.ts`); the real
   sandbox only via `npm run payment:sandbox-check`.
+- **Payouts and moderation (ADR 0018):** payouts are batches per provider/month/currency paid by MANUAL
+  bank transfer that an admin records (generate → schedule → mark paid/failed; no bank API). Eligible:
+  paid online, not cancelled, service over in Nepal time, no open refund request; net = gross − commission.
+  Scheduling needs a verified bank account; bank references are only ever returned/audited masked. Admins
+  add admins with a one-time setup link (SHA-256 stored, 24 h, fragment); never yourself, never the last
+  usable admin (service + DB trigger). Listing approval re-checks the ADR 0013 rule (service + DB). Voids:
+  CANCELLED, inventory released, commission WAIVED, online money → refund REQUESTS (not executed),
+  invoiced commission → append-only invoice adjustment (issued invoices never change). Closed eSewa/Khalti
+  payments are re-checked at 5 min/65 min/6 h/25 h by the hold-release job.
 - **Partners and admins (ADR 0008):** `/partner…` needs role PARTNER and acts for one owned provider (`X-Provider-Id`
   when several); another provider's data is a 404. Wrong role for an area is 403 before any data is read. Admin writes
   and sensitive partner writes call `recordAudit` inside their transaction (append-only, secrets redacted). Bank
@@ -404,9 +413,13 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   **no launch blocker**. Gap 27 (production storage) is on the launch checklist; gap 28 (backup/retention) is for
   Hardening (Phase 18) after the owner's decision; gap 30 (listings without a policy) for Cancellations & refunds
   (now Phase 15). Listing photos and bulk pricing are in the unscheduled "Frontend polish" roadmap row.
-- **Phase 11, Live payment gateways:** on `phase/11-live-payment-gateways`, awaiting review (CI green, Neon clean 258/258). Gaps 7 and 8
-  closed (ADR 0017); residual gaps 31–34 (refund execution, production gateway accounts, money after the
-  last check, admin screens). Roadmap order set by the owner: 12 Commission & payouts, 13 Admin moderation,
-  14 Search UX, 15 Cancellations & refunds (refund clock reference decided there), 16 Reviews,
-  17 Notifications, 18 Hardening.
-- **Next:** Phase 12 only when the owner sends its prompt.
+- **Phase 11, Live payment gateways:** merged to `main`, tagged `v0.11.0`. Gaps 7 and 8 closed (ADR 0017);
+  sandbox check passed 2026-11-26 (eSewa UAT + Khalti sandbox); Neon clean 258/258.
+- **Phase 12, Payouts & admin moderation:** on `phase/12-payouts-admin-moderation`, awaiting review (CI green,
+  Neon clean 293/293). Gaps 16,
+  9, 13 (correction), 15 and 34 closed, gap 33 narrowed (ADR 0018); residual gaps 35–39 (invoice payment
+  tracking, settlement reconciliation, setup links by email, re-review of edited listings, paid-out voids).
+  23 gaps open; **no launch blocker**. Roadmap (owner, shift up by one): 13 Search UX, 14 Cancellations &
+  refunds (refund execution and the refund clock reference decided there), 15 Reviews, 16 Notifications,
+  17 Hardening. Gap 10 (invoice numbering) still waits for the tax advisor.
+- **Next:** Phase 13 only when the owner sends its prompt.

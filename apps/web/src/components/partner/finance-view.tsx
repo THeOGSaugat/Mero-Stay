@@ -122,8 +122,9 @@ export function PayoutSummary() {
   return (
     <div className="space-y-4">
       <Alert tone="info">
-        Payouts are not sent yet: this is what MeroStay owes you for bookings paid online. Your
-        payout is each booking&apos;s total minus MeroStay&apos;s commission.
+        What MeroStay owes you for bookings paid online and not yet paid out: each booking&apos;s
+        total minus MeroStay&apos;s commission. Once a booking&apos;s service is over, it is paid by
+        bank transfer in the next monthly payout (below).
       </Alert>
       {data.data.length === 0 ? (
         <p className="text-sm text-slate-600">No online-paid bookings waiting for a payout.</p>

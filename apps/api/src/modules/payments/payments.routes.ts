@@ -1,8 +1,6 @@
-import { Router, type RequestHandler } from "express";
-import { clientIp, rateLimitKeyForIp } from "../../lib/client-ip.js";
-import { AppError } from "../../lib/errors.js";
+import { Router } from "express";
+import { limitPerClient as limitPerClientWith } from "../../lib/limit-per-client.js";
 import type { AuthMiddleware } from "../auth/auth.middleware.js";
-import { createRateLimiter } from "../auth/rate-limit.js";
 import { createPaymentsController } from "./payments.controller.js";
 import type { PaymentsService } from "./payments.service.js";
 
@@ -13,23 +11,7 @@ export interface PaymentsRouterDeps {
 
 /** Per-client limit on payment starts and gateway callbacks (CLAUDE.md §4). */
 const PAYMENT_LIMIT = { limit: 30, windowMs: 60_000 };
-
-function limitPerClient(): RequestHandler {
-  const limiter = createRateLimiter(PAYMENT_LIMIT);
-  return (req, res, next) => {
-    const result = limiter.consume(`${req.path}|${rateLimitKeyForIp(clientIp(req))}`);
-    if (!result.allowed) {
-      res.setHeader("Retry-After", String(result.retryAfterSeconds));
-      next(
-        new AppError(429, "RATE_LIMITED", "Too many attempts. Try again later.", {
-          retryAfterSeconds: result.retryAfterSeconds,
-        }),
-      );
-      return;
-    }
-    next();
-  };
-}
+const limitPerClient = () => limitPerClientWith(PAYMENT_LIMIT);
 
 /**
  * Payment endpoints, mounted under /api/v1 (ADR 0007, ADR 0017).

@@ -68,13 +68,21 @@ model User {
   trips                   Trip[]
   reviews                 Review[]
   notifications           Notification[]
-  reviewedDocuments       ProviderDocument[]      @relation("DocumentReviewer")
+  reviewedDocuments       ProviderDocument[]          @relation("DocumentReviewer")
   sessions                Session[]
-  settledItems            BookingItem[]           @relation("PaymentSettledBy")
+  settledItems            BookingItem[]               @relation("PaymentSettledBy")
   auditEntries            AuditLog[]
   idempotencyKeys         IdempotencyKey[]
-  resolvedReconciliations PaymentReconciliation[] @relation("ReconciliationResolvedBy")
-  refundRequests          RefundRequest[]         @relation("RefundRequestedBy")
+  resolvedReconciliations PaymentReconciliation[]     @relation("ReconciliationResolvedBy")
+  refundRequests          RefundRequest[]             @relation("RefundRequestedBy")
+  voidedItems             BookingItem[]               @relation("BookingItemVoidedBy")
+  reviewedListings        Listing[]                   @relation("ListingReviewedBy")
+  payoutsCreated          Payout[]                    @relation("PayoutCreatedBy")
+  payoutsScheduled        Payout[]                    @relation("PayoutScheduledBy")
+  payoutsPaid             Payout[]                    @relation("PayoutPaidBy")
+  invoiceAdjustments      ProviderInvoiceAdjustment[] @relation("InvoiceAdjustmentCreatedBy")
+  adminSetupTokens        AdminSetupToken[]           @relation("AdminSetupTokenUser")
+  adminSetupTokensCreated AdminSetupToken[]           @relation("AdminSetupTokenCreatedBy")
 
   @@map("users")
 }
@@ -372,6 +380,10 @@ model Listing {
   slug                        String        @unique
   description                 String?
   status                      ListingStatus @default(DRAFT)
+  /// Admin review (Phase 12, gap 15): who decided and when; a rejection always has a note.
+  reviewedAt                  DateTime?     @map("reviewed_at") @db.Timestamptz(3)
+  reviewedById                String?       @map("reviewed_by_id") @db.Uuid
+  reviewNote                  String?       @map("review_note")
   currency                    String        @default("NPR") @db.Char(3)
   /// Price per billable unit (see listing_types.unit_label), in minor units.
   basePriceMinor              BigInt        @map("base_price_minor")
@@ -398,6 +410,7 @@ model Listing {
   children                  Listing[]           @relation("ListingHierarchy")
   location                  Location?           @relation(fields: [locationId], references: [id])
   defaultCancellationPolicy CancellationPolicy? @relation(fields: [defaultCancellationPolicyId], references: [id])
+  reviewedBy                User?               @relation("ListingReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
 
   hotelDetail        HotelDetail?
   hotelRoomDetail    HotelRoomDetail?
@@ -726,6 +739,10 @@ model BookingItem {
   /// total − commission. For pay-at-property the provider collects `total` and owes `commission`.
   providerPayoutMinor        BigInt            @map("provider_payout_minor")
   payoutStatus               PayoutStatus      @default(PENDING) @map("payout_status")
+  /// Set when an admin voided the item (Phase 12, gap 13); the item is then CANCELLED.
+  voidedAt                   DateTime?         @map("voided_at") @db.Timestamptz(3)
+  voidedById                 String?           @map("voided_by_id") @db.Uuid
+  voidReason                 String?           @map("void_reason")
   paymentStatus              PaymentStatus     @default(UNPAID) @map("payment_status")
   refundedMinor              BigInt            @default(0) @map("refunded_minor")
   cancellationPolicyId       String?           @map("cancellation_policy_id") @db.Uuid
@@ -755,11 +772,13 @@ model BookingItem {
   payout             Payout?             @relation(fields: [payoutId], references: [id])
   commissionInvoice  ProviderInvoice?    @relation(fields: [commissionInvoiceId], references: [id])
   paymentSettledBy   User?               @relation("PaymentSettledBy", fields: [paymentSettledById], references: [id], onDelete: Restrict)
+  voidedBy           User?               @relation("BookingItemVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
 
-  slots          BookingItemSlot[]
-  allocations    PaymentAllocation[]
-  refundRequests RefundRequest[]
-  review         Review?
+  slots             BookingItemSlot[]
+  allocations       PaymentAllocation[]
+  refundRequests    RefundRequest[]
+  invoiceAdjustment ProviderInvoiceAdjustment?
+  review            Review?
 
   @@index([tripId])
   @@index([listingId])
@@ -842,6 +861,7 @@ model Payment {
   allocations     PaymentAllocation[]
   reconciliations PaymentReconciliation[]
   refundRequests  RefundRequest[]
+  gatewayCheck    PaymentGatewayCheck?
 
   @@unique([gateway, gatewayTransactionId])
   @@unique([gateway, gatewayReference])
@@ -959,7 +979,8 @@ model RefundRequest {
 
 enum PayoutBatchStatus {
   PENDING
-  PROCESSING
+  /// Chosen for a manual bank transfer (Phase 12, ADR 0018); amounts and items are then fixed.
+  SCHEDULED
   PAID
   FAILED
 
@@ -968,22 +989,95 @@ enum PayoutBatchStatus {
 
 /// A transfer to a provider covering many online-paid booking items (net of commission).
 model Payout {
-  id          String            @id @default(uuid()) @db.Uuid
-  providerId  String            @map("provider_id") @db.Uuid
-  status      PayoutBatchStatus @default(PENDING)
-  currency    String            @default("NPR") @db.Char(3)
-  amountMinor BigInt            @map("amount_minor")
-  periodStart DateTime          @map("period_start") @db.Date
-  periodEnd   DateTime          @map("period_end") @db.Date
-  reference   String?
-  paidAt      DateTime?         @map("paid_at") @db.Timestamptz(3)
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                 String            @id @default(uuid()) @db.Uuid
+  providerId         String            @map("provider_id") @db.Uuid
+  status             PayoutBatchStatus @default(PENDING)
+  currency           String            @default("NPR") @db.Char(3)
+  /// Net payout = gross − commission (CHECK).
+  amountMinor        BigInt            @map("amount_minor")
+  /// Sum of the items' totals.
+  grossMinor         BigInt            @default(0) @map("gross_minor")
+  commissionMinor    BigInt            @default(0) @map("commission_minor")
+  itemCount          Int               @default(0) @map("item_count")
+  /// One calendar month of service dates: first and last day.
+  periodStart        DateTime          @map("period_start") @db.Date
+  periodEnd          DateTime          @map("period_end") @db.Date
+  /// The bank transfer's reference (only ever returned masked).
+  reference          String?
+  /// Masked bank account snapshot taken when scheduled; never the account number.
+  payoutAccountLabel String?           @map("payout_account_label")
+  createdById        String?           @map("created_by_id") @db.Uuid
+  scheduledAt        DateTime?         @map("scheduled_at") @db.Timestamptz(3)
+  scheduledById      String?           @map("scheduled_by_id") @db.Uuid
+  paidAt             DateTime?         @map("paid_at") @db.Timestamptz(3)
+  paidById           String?           @map("paid_by_id") @db.Uuid
+  failedAt           DateTime?         @map("failed_at") @db.Timestamptz(3)
+  failureReason      String?           @map("failure_reason")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   provider     Provider      @relation(fields: [providerId], references: [id])
+  createdBy    User?         @relation("PayoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  scheduledBy  User?         @relation("PayoutScheduledBy", fields: [scheduledById], references: [id], onDelete: Restrict)
+  paidBy       User?         @relation("PayoutPaidBy", fields: [paidById], references: [id], onDelete: Restrict)
   bookingItems BookingItem[]
 
+  @@unique([providerId, periodStart, currency], map: "payouts_one_pending_per_provider_period", where: raw("status = 'PENDING'"))
   @@index([providerId])
+  @@index([status])
   @@map("payouts")
+}
+
+/// Commission no longer owed on an ISSUED invoice because its item was voided (Phase 12): the
+/// invoice never changes; owed = invoice amount − adjustments. Append-only (database guard).
+model ProviderInvoiceAdjustment {
+  id            String   @id @default(uuid()) @db.Uuid
+  invoiceId     String   @map("invoice_id") @db.Uuid
+  bookingItemId String   @unique @map("booking_item_id") @db.Uuid
+  amountMinor   BigInt   @map("amount_minor")
+  currency      String   @db.Char(3)
+  reason        String
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  invoice     ProviderInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  bookingItem BookingItem     @relation(fields: [bookingItemId], references: [id], onDelete: Restrict)
+  createdBy   User?           @relation("InvoiceAdjustmentCreatedBy", fields: [createdById], references: [id])
+
+  @@index([invoiceId])
+  @@map("provider_invoice_adjustments")
+}
+
+/// One-time admin setup links (Phase 12, gap 9): only the SHA-256 of the token is stored.
+model AdminSetupToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User  @relation("AdminSetupTokenUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("AdminSetupTokenCreatedBy", fields: [createdById], references: [id])
+
+  @@index([userId])
+  @@map("admin_setup_tokens")
+}
+
+/// When a closed eSewa/Khalti payment is asked again (Phase 12, gap 33).
+model PaymentGatewayCheck {
+  paymentId     String    @id @map("payment_id") @db.Uuid
+  checks        Int       @default(0)
+  lastCheckedAt DateTime? @map("last_checked_at") @db.Timestamptz(3)
+  lastResult    String?   @map("last_result")
+  /// NULL = no more checks planned.
+  nextCheckAt   DateTime? @map("next_check_at") @db.Timestamptz(3)
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([nextCheckAt])
+  @@map("payment_gateway_checks")
 }
 
 enum InvoiceStatus {
@@ -1013,9 +1107,10 @@ model ProviderInvoice {
   paidAt      DateTime?     @map("paid_at") @db.Timestamptz(3)
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  provider     Provider      @relation(fields: [providerId], references: [id])
-  trip         Trip?         @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  provider     Provider                    @relation(fields: [providerId], references: [id])
+  trip         Trip?                       @relation(fields: [tripId], references: [id], onDelete: Restrict)
   bookingItems BookingItem[]
+  adjustments  ProviderInvoiceAdjustment[]
 
   @@unique([tripId, providerId], map: "provider_invoices_one_live_per_trip_provider", where: raw("trip_id IS NOT NULL AND status <> 'VOID'"))
   @@index([providerId])

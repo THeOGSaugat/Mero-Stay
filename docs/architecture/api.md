@@ -100,10 +100,11 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 |---|---|---|
 | 400 | `VALIDATION_ERROR`, `INVALID_JSON` | Malformed request; `details` lists `{ path, message }` |
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
+| 400 | `SETUP_LINK_INVALID` | Admin setup link unknown, used or expired (one answer for all) |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
 | 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND`, `RECONCILIATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT`, `PAYMENT_IN_PROGRESS`, `RECONCILIATION_ALREADY_RESOLVED`, `RECONCILIATION_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND`, `RECONCILIATION_NOT_FOUND`, `PAYOUT_NOT_FOUND`, `ADMIN_NOT_FOUND`, `PAYOUT_ACCOUNT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT`, `PAYMENT_IN_PROGRESS`, `RECONCILIATION_ALREADY_RESOLVED`, `RECONCILIATION_STATE_CONFLICT`, `PAYOUT_ACCOUNT_NOT_VERIFIED`, `PAYOUT_EMPTY`, `PAYOUT_NOT_SCHEDULABLE`, `PAYOUT_NOT_SCHEDULED`, `PAYOUT_ALREADY_PAID`, `PAYOUT_STATE_CONFLICT`, `LAST_ADMIN`, `ADMIN_SELF_LOCKOUT`, `ADMIN_ALREADY_SET_UP`, `LISTING_NOT_IN_REVIEW`, `ITEM_NOT_VOIDABLE_STATUS`, `ITEM_PAID_OUT`, `ITEM_IN_SCHEDULED_PAYOUT`, `ITEM_NOT_SETTLED`, `VOID_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
 | 413 | `PAYLOAD_TOO_LARGE` | Body over the limit (100 KB JSON; 10 MB for a document file) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json`; a document file that is not PDF/JPEG/PNG |
 | 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED`, `CANCELLATION_POLICY_INACTIVE`, `CANCELLATION_POLICY_NOT_USABLE`, `INVALID_CANCELLATION_RULES`, `DOCUMENT_TYPE_MISMATCH`, `DOCUMENT_SIZE_MISMATCH`, `DOCUMENT_CONTENT_INVALID`, `PAYMENT_GATEWAY_NOT_AVAILABLE`, `PAYMENT_CURRENCY_NOT_SUPPORTED`, `PAYMENT_GATEWAY_REJECTED`, `PAYMENT_CALLBACK_INVALID`, `REFUND_EXCEEDS_PAID` | Well-formed, but breaks a business rule |
@@ -171,6 +172,18 @@ records → 409 `RECONCILIATION_STATE_CONFLICT`). Raw PostgreSQL text is never r
 | GET | `/api/v1/admin/payment-reconciliations` | ADMIN: late or unusable payments to handle (gap 8, ADR 0017) |
 | POST | `/api/v1/admin/payment-reconciliations/:id/resolve` | ADMIN: mark one handled, with a note; audited |
 | GET / POST | `/api/v1/admin/refund-requests` | ADMIN: refund requests / record one (stored, **never executed**); audited |
+| POST | `/api/v1/admin/payout-batches/generate` | ADMIN: build or top up last month's (any month's) payout batches (Phase 12, ADR 0018) |
+| GET | `/api/v1/admin/payout-batches`, `/api/v1/admin/payout-batches/:id` | ADMIN: payout batches / one with its items |
+| POST | `/api/v1/admin/payout-batches/:id/schedule`, `…/mark-paid`, `…/mark-failed` | ADMIN: schedule a manual transfer, record it paid (bank reference) or failed; audited |
+| POST | `/api/v1/admin/providers/:id/payout-account/verify` | ADMIN: mark the provider's default bank account verified; audited |
+| GET | `/api/v1/partner/payout-batches`, `/api/v1/partner/payout-batches/:id` | Own payout batches (read-only) |
+| GET / POST | `/api/v1/admin/admins` | ADMIN: admins / add one (returns a one-time setup link once); audited |
+| POST | `/api/v1/admin/admins/:id/setup-link`, `…/suspend`, `…/reactivate` | ADMIN: new setup link / suspend / reactivate; audited |
+| POST | `/api/v1/auth/admin-setup` | Invited admin sets a password with the setup link (no session) |
+| GET | `/api/v1/admin/listings`, `/api/v1/admin/listings/:id` | ADMIN: listings to review (type-rule hint) |
+| POST | `/api/v1/admin/listings/:id/approve`, `…/reject` | ADMIN: approve (re-checks the listing-type rule) / reject with a reason; audited |
+| POST | `/api/v1/admin/booking-items/:id/void`, `/api/v1/admin/trips/:id/void` | ADMIN: void a booking item / every voidable item of a trip; audited |
+| POST | `/api/v1/admin/booking-items/:id/settlement/reverse` | ADMIN: undo a pay-at-property settlement recorded by mistake; audited |
 
 ### POST /api/v1/auth/register → 201 (+ session cookie)
 
@@ -862,6 +875,86 @@ code; refused by a database CHECK). Actions recorded: `provider.create`,
   (`422 REFUND_EXCEEDS_PAID`, with `availableMinor`). The response includes the gateway's refund
   capability (`gatewayRefundCapability: { api: "documented" | "none", partial, note }`) and
   `executed: false`. Audited. `GET /admin/refund-requests?paymentId=&page=` lists them.
+
+## Payouts, admin accounts and moderation (Phase 12, ADR 0018)
+
+All `/admin…` endpoints need role ADMIN (403 otherwise, before any data is read); writes need
+`X-CSRF-Token`, are audited, and repeating one changes nothing (`changed: false`).
+
+**Payout batches** (gap 16). MeroStay pays providers by MANUAL bank transfer and records it; no
+bank is called. An item is eligible once its service is over in Nepal time, paid online in full,
+not cancelled, not already in a batch and without an open refund request. One batch per provider,
+currency and calendar month of the service date. Net = gross − commission.
+
+- `POST /admin/payout-batches/generate {"period":"2026-10"}` → `{ data: [{ changed, payout }] }`
+  (new or topped-up batches; empty when nothing new).
+- `GET /admin/payout-batches?status=&providerId=&period=&page=` and `GET /admin/payout-batches/:id`
+  (with `items`).
+- `POST …/:id/schedule` → PENDING → SCHEDULED; `409 PAYOUT_ACCOUNT_NOT_VERIFIED` without a verified
+  default bank account, `409 PAYOUT_EMPTY` if no item is left. Amounts and items are then fixed.
+- `POST …/:id/mark-paid {"bankReference":"NABIL-TRF-0007788"}` → PAID (items paid out, commission
+  collected). Same reference again: `changed: false`; another: `409 PAYOUT_ALREADY_PAID`.
+- `POST …/:id/mark-failed {"reason":"…"}` → FAILED; its items are released for the next batch.
+- `POST /admin/providers/:id/payout-account/verify` → `{ changed, payoutAccountLabel, verifiedAt }`.
+- Partners: `GET /partner/payout-batches[/:id]`, own provider only (another's is `404 PAYOUT_NOT_FOUND`).
+
+```json
+{ "data": { "id": "…", "provider": { "id": "…", "name": "…" }, "period": "2026-10",
+  "periodStart": "2026-10-01", "periodEnd": "2026-10-31", "status": "PAID",
+  "currency": "NPR", "currencyExponent": 2,
+  "grossMinor": "360000", "commissionMinor": "54000", "netMinor": "306000", "itemCount": 1,
+  "payoutAccountLabel": "Nabil Bank · ••••4321", "bankReferenceMasked": "••••7788",
+  "scheduledAt": "…", "paidAt": "…", "failedAt": null, "failureReason": null, "createdAt": "…",
+  "items": [ { "id": "…", "trip": { "id": "…", "reference": "MS-…" },
+    "listing": { "id": "…", "title": "…", "listingType": "bus_ticket" },
+    "startDate": "2026-10-10", "endDate": null, "quantity": 2, "currency": "NPR",
+    "currencyExponent": 2, "totalMinor": "360000", "commissionMinor": "54000", "netMinor": "306000" } ] } }
+```
+
+The bank reference is stored but only ever returned (and audited) masked; the account only as its
+masked label. The database keeps batches, their transitions and their sums (`payouts_*_chk`,
+`booking_items_payout_*_chk` → `409 PAYOUT_STATE_CONFLICT`).
+
+**Admin accounts** (gap 9).
+
+- `GET /admin/admins` → `[{ id, email, fullName, status, setupPending, lastLoginAt, createdAt }]`
+  (never a password hash).
+- `POST /admin/admins {"email","fullName"}` → `201 { admin, setupLink: { setupPath, expiresAt } }`,
+  `Cache-Control: no-store`. `setupPath` is `/admin-setup#token=…` (on the web origin); it works once
+  for 24 hours and is shown only in this response. Email in use: `409 EMAIL_TAKEN`.
+- `POST /admin/admins/:id/setup-link` (only while no password is set; else `409 ADMIN_ALREADY_SET_UP`).
+- `POST /admin/admins/:id/suspend` (ends its sessions) and `…/reactivate`. Yourself:
+  `409 ADMIN_SELF_LOCKOUT`; the last usable admin: `409 LAST_ADMIN` (also refused by the database).
+- `POST /auth/admin-setup {"token","password"}` → `204` (no session; 10 per 15 minutes per client;
+  password rules as for registration). Bad, used or expired link: `400 SETUP_LINK_INVALID`.
+
+**Listing review** (gap 15).
+
+- `GET /admin/listings?status=PENDING_REVIEW|APPROVED|REJECTED&q=&page=` → each with
+  `typeRule: { allowed, reason, allowedListingTypes }` (a preview of the rule).
+- `POST /admin/listings/:id/approve` → re-checks that the provider's type may list this type and
+  both are active: otherwise `422 LISTING_TYPE_NOT_ALLOWED` / `LISTING_TYPE_NOT_OFFERED` with
+  `details`, nothing changed. Not waiting for review: `409 LISTING_NOT_IN_REVIEW`.
+- `POST /admin/listings/:id/reject {"reason"}` (1–1000 characters). Partners see the decision on
+  their listing as `review: { reviewedAt, note }`.
+
+**Voids and corrections** (gap 13).
+
+- `POST /admin/booking-items/:id/void {"reason"}` and `POST /admin/trips/:id/void {"reason"}` →
+  `{ data: { tripId, items: [{ itemId, changed, refundRequests, invoiceAdjusted }] } }`. The item
+  becomes CANCELLED (held inventory released, commission WAIVED, out of an open payout batch);
+  online money becomes refund REQUESTS (not executed); invoiced commission gets an invoice
+  adjustment (the issued invoice never changes; fully adjusted → VOID). Refusals (409):
+  `ITEM_NOT_VOIDABLE_STATUS` (in progress, completed, no-show), `ITEM_PAID_OUT`,
+  `ITEM_IN_SCHEDULED_PAYOUT`.
+- `POST /admin/booking-items/:id/settlement/reverse {"reason"}` → undoes a pay-at-property
+  settlement (`PAID_AT_PROPERTY → PAY_AT_PROPERTY`); `409 ITEM_NOT_SETTLED` for other items.
+  Amounts are never edited: a wrong amount is voided and rebooked.
+
+Audit actions added: `payout.generate.create|add`, `payout.schedule`, `payout.mark_paid`,
+`payout.mark_failed`, `provider.payout_account.verify`, `admin.create`, `admin.setup_link.reissue`,
+`admin.setup.complete`, `admin.suspend`, `admin.reactivate`, `listing.approve`, `listing.reject`,
+`booking_item.void`, `booking_item.settlement.reverse`.
 
 ## Why the API is vertical-agnostic
 

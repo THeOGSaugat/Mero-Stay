@@ -53,6 +53,7 @@ describe("migrations", () => {
       WHERE table_schema = 'public' AND table_name <> '_prisma_migrations'`;
     expect(rows.map((r) => r.table_name).sort()).toEqual(
       [
+        "admin_setup_tokens",
         "audit_log",
         "booking_item_slots",
         "booking_items",
@@ -69,10 +70,12 @@ describe("migrations", () => {
         "locations",
         "notifications",
         "payment_allocations",
+        "payment_gateway_checks",
         "payment_reconciliations",
         "payments",
         "payouts",
         "provider_documents",
+        "provider_invoice_adjustments",
         "provider_invoices",
         "provider_payout_accounts",
         "provider_type_listing_types",
