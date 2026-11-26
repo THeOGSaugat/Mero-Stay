@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { simulatedPayments } from "../../modules/payments/payments.config.js";
 import { pino } from "pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -29,7 +30,7 @@ const appDeps = {
   prisma,
   auth: testAuthConfig(),
 };
-const app = createApp({ ...appDeps, payments: { gateway: "simulated" } });
+const app = createApp({ ...appDeps, payments: simulatedPayments() });
 let world: World;
 
 interface Client {
@@ -147,7 +148,7 @@ async function confirmedTrip(items: ItemSpec[], as: Client = me): Promise<Trip> 
 const getTrip = async (id: string, as: Client = me) =>
   dataOf<Trip>(await call("get", `/api/v1/trips/${id}`, undefined, as));
 const intent = (tripId: string, as: Client = me) =>
-  call("post", `/api/v1/trips/${tripId}/payments/intent`, {}, as);
+  call("post", `/api/v1/trips/${tripId}/payments/intent`, { gateway: "simulated" }, as);
 const confirmPayment = (tripId: string, paymentId: string, body: object = {}, as: Client = me) =>
   call("post", `/api/v1/trips/${tripId}/payments/${paymentId}/confirm`, body, as);
 
@@ -718,7 +719,8 @@ describe("ownership and access (ADR 0006/0007)", () => {
     const res = await request(offline)
       .post(`/api/v1/trips/${trip.id}/payments/intent`)
       .set("Cookie", me.cookie)
-      .set("X-CSRF-Token", me.csrfToken);
+      .set("X-CSRF-Token", me.csrfToken)
+      .send({ gateway: "simulated" });
     expect(statusAndCode(res)).toEqual([503, "PAYMENTS_UNAVAILABLE"]);
     const confirm = await request(offline)
       .post(`/api/v1/trips/${trip.id}/payments/${paymentId}/confirm`)
@@ -731,7 +733,7 @@ describe("ownership and access (ADR 0006/0007)", () => {
   it("after the hold window, paying is refused (the hold-release job then frees the seats)", async () => {
     const late = createApp({
       ...appDeps,
-      payments: { gateway: "simulated" },
+      payments: simulatedPayments(),
       now: () => new Date(Date.now() + 31 * 60_000),
     });
     const res = await request(late)

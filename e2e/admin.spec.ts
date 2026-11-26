@@ -82,6 +82,7 @@ async function bookNights(api: APIRequestContext, w: World, date: string, next: 
   await post(`/trips/${trip.data.id}/confirm`);
   const intent = await post<{ data: { payment: { id: string } } }>(
     `/trips/${trip.data.id}/payments/intent`,
+    { gateway: "simulated" },
   );
   await post(`/trips/${trip.data.id}/payments/${intent.data.payment.id}/confirm`);
 

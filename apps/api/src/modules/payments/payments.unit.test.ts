@@ -23,6 +23,9 @@ const payment: PaymentWithAllocations = {
   intentFingerprint: "a".repeat(64),
   gatewayTransactionId: "SIM-1",
   gatewayResponse: null,
+  gatewayReference: null,
+  checkout: null,
+  checkoutExpiresAt: null,
   completedAt: new Date("2026-11-21T06:00:00Z"),
   createdAt: new Date("2026-11-21T05:59:00Z"),
   updatedAt: new Date("2026-11-21T06:00:00Z"),
@@ -38,6 +41,7 @@ describe("payment responses: money is a string at the boundary (BIGINT inside)",
         serializeIntent({
           payment,
           created: true,
+          checkout: null,
           lines: [
             { itemId: "33333333-3333-4333-8333-333333333333", dueMinor: 9_007_199_254_740_993n },
           ],
@@ -133,21 +137,26 @@ describe("payment gateway configuration", () => {
   const url = "postgresql://u:p@ep-x-pooler.eu-central-1.aws.neon.tech/db?sslmode=require";
 
   it("is off unless explicitly set (payment endpoints then return 503)", () => {
-    expect(paymentsConfigFromEnv(parseEnv({ DATABASE_URL: url }))).toEqual({ gateway: null });
+    expect(Object.keys(paymentsConfigFromEnv(parseEnv({ DATABASE_URL: url })).gateways)).toEqual(
+      [],
+    );
     expect(
-      paymentsConfigFromEnv(parseEnv({ DATABASE_URL: url, PAYMENT_GATEWAY: "simulated" })),
-    ).toEqual({ gateway: "simulated" });
+      Object.keys(
+        paymentsConfigFromEnv(parseEnv({ DATABASE_URL: url, PAYMENT_GATEWAYS: "simulated" }))
+          .gateways,
+      ),
+    ).toEqual(["simulated"]);
   });
 
   it("the simulated gateway is refused in production", () => {
     expect(() =>
-      parseEnv({ DATABASE_URL: url, NODE_ENV: "production", PAYMENT_GATEWAY: "simulated" }),
-    ).toThrow(/PAYMENT_GATEWAY: cannot be simulated in production/);
+      parseEnv({ DATABASE_URL: url, NODE_ENV: "production", PAYMENT_GATEWAYS: "simulated" }),
+    ).toThrow(/PAYMENT_GATEWAYS: cannot include simulated in production/);
   });
 
   it("rejects unknown gateways and out-of-range job intervals", () => {
-    expect(() => parseEnv({ DATABASE_URL: url, PAYMENT_GATEWAY: "esewa" })).toThrow(
-      /PAYMENT_GATEWAY/,
+    expect(() => parseEnv({ DATABASE_URL: url, PAYMENT_GATEWAYS: "paypal" })).toThrow(
+      /PAYMENT_GATEWAYS/,
     );
     expect(() => parseEnv({ DATABASE_URL: url, HOLD_RELEASE_INTERVAL_SECONDS: "1" })).toThrow(
       /HOLD_RELEASE_INTERVAL_SECONDS/,

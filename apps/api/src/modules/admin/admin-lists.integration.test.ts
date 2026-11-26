@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { simulatedPayments } from "../../modules/payments/payments.config.js";
 import { pino } from "pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -38,7 +39,7 @@ const app = createApp({
   checkDatabase: () => Promise.resolve(),
   prisma: counted,
   auth: testAuthConfig(),
-  payments: { gateway: "simulated" },
+  payments: simulatedPayments(),
 });
 
 interface Client {
@@ -305,7 +306,9 @@ describe("gap 25: invoices and payouts", () => {
     await call(customer, "post", `/api/v1/trips/${trip.id}/confirm`);
     if (method === "online") {
       const intent = dataOf<{ payment: { id: string } }>(
-        await call(customer, "post", `/api/v1/trips/${trip.id}/payments/intent`),
+        await call(customer, "post", `/api/v1/trips/${trip.id}/payments/intent`, {
+          gateway: "simulated",
+        }),
       );
       await call(
         customer,

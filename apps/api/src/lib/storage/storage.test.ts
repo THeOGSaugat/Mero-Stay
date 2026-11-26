@@ -1,4 +1,5 @@
 import { mkdtempSync, statSync } from "node:fs";
+import { PRODUCTION_PAYMENT_ENV } from "../../testing/production-env.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -124,6 +125,7 @@ describe("storage configuration", () => {
     DATABASE_URL: `${url}?sslmode=require`,
     NODE_ENV: "production",
     TRUST_PROXY_HOPS: "0",
+    ...PRODUCTION_PAYMENT_ENV,
   };
 
   it("defaults to local disk (apps/api/.storage) outside production", () => {

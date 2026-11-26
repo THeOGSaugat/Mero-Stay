@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GATEWAY_NAMES, LIVE_GATEWAY_NAMES } from "../../lib/payment-gateways/index.js";
 import { uuidSchema } from "../../lib/validation.js";
 
 /** Input contracts for the payment endpoints (ADR 0007). Strict: unknown fields are rejected. */
@@ -6,14 +7,36 @@ import { uuidSchema } from "../../lib/validation.js";
 export const paymentParamsSchema = z.object({ id: uuidSchema, paymentId: uuidSchema }).strict();
 
 /**
- * Creating an intent takes no input: the amount and items are computed on the server from the
- * trip (CLAUDE.md §4: never trust the client about amount). An empty object or no body.
+ * Creating an intent takes only the gateway: the amount and items are computed on the server from
+ * the trip (CLAUDE.md §4: never trust the client about amount).
  */
-export const createIntentBodySchema = z.object({}).strict();
+export const createIntentBodySchema = z
+  .object({ gateway: z.enum(GATEWAY_NAMES, { error: "must be esewa, khalti or simulated" }) })
+  .strict();
+
+/** The customer's browser hands back what the gateway gave it (verified server-side). */
+export const callbackParamsSchema = z.object({ gateway: z.enum(LIVE_GATEWAY_NAMES) }).strict();
+
+const opaque = (max: number) => z.string().trim().min(1).max(max);
+export const esewaCallbackBodySchema = z
+  .object({
+    paymentId: uuidSchema,
+    /** eSewa's base64 response from the success page; absent on the failure page (status API). */
+    data: opaque(4000).optional(),
+  })
+  .strict();
+export const khaltiCallbackBodySchema = z
+  .object({
+    paymentId: uuidSchema,
+    /** Only names the payment to look up; Khalti's other return parameters are ignored. */
+    pidx: opaque(200),
+  })
+  .passthrough()
+  .transform(({ paymentId, pidx }) => ({ paymentId, pidx }));
 
 /**
- * Simulated provider callback (test mode only). In a real integration these values come from the
- * gateway's server-to-server verification, never from the customer's browser.
+ * Simulated provider callback (development and tests only; refused in production). Real gateways
+ * are verified server-side through the callback and refresh endpoints instead.
  */
 export const confirmPaymentBodySchema = z
   .object({

@@ -1,4 +1,5 @@
 import express from "express";
+import { PRODUCTION_PAYMENT_ENV } from "../testing/production-env.js";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { parseEnv, trustProxyConfigFromEnv } from "../config/env.js";
@@ -173,6 +174,7 @@ describe("TRUST_PROXY_* configuration", () => {
       TRUST_PROXY_HOPS: "0",
       STORAGE_DRIVER: "local",
       STORAGE_LOCAL_DIR: "/var/lib/merostay/documents",
+      ...PRODUCTION_PAYMENT_ENV,
     });
     expect(trustProxyConfigFromEnv(direct).hops).toBe(0);
   });

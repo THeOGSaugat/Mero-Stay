@@ -1,7 +1,8 @@
-import { loadEnvFileIfPresent, parseEnv } from "../config/env.js";
+import { loadEnvFileIfPresent, parseEnv, paymentsConfigFromEnv } from "../config/env.js";
 import { runHoldRelease, startHoldReleaseLoop } from "../jobs/hold-release.js";
 import { createLogger } from "../lib/logger.js";
 import { createPrismaClient } from "../lib/prisma.js";
+import { createPaymentsService } from "../modules/payments/payments.service.js";
 import { createTripsService } from "../modules/trips/trips.service.js";
 
 /**
@@ -11,7 +12,9 @@ import { createTripsService } from "../modules/trips/trips.service.js";
  *   npm run jobs:hold-release:watch    run now and every HOLD_RELEASE_INTERVAL_SECONDS (worker)
  *
  * Production (after `npm run build`): `node apps/api/dist/scripts/hold-release.js [--watch]`.
- * Needs only DATABASE_URL (no SESSION_SECRET). Exit code 1 if a one-off run fails.
+ * Needs DATABASE_URL and the payment settings (eSewa/Khalti keys, to ask the gateways about open
+ * payments before their hold ends; gap 8, ADR 0017), no SESSION_SECRET. Exit code 1 if a one-off
+ * run fails.
  */
 async function main(): Promise<void> {
   loadEnvFileIfPresent();
@@ -19,7 +22,20 @@ async function main(): Promise<void> {
   const logger = createLogger(env);
   const prisma = createPrismaClient(env.DATABASE_URL);
   const trips = createTripsService({ prisma, now: () => new Date() });
-  const sweep = (limit: number) => trips.expireStaleTrips(limit);
+  const payments = createPaymentsService({
+    prisma,
+    now: () => new Date(),
+    config: paymentsConfigFromEnv(env),
+  });
+  // Gap 8 (ADR 0017): ask eSewa/Khalti about open payments of holds about to end before releasing
+  // them, so money from a customer who never came back is applied or recorded, never dropped.
+  const sweep = async (limit: number) => {
+    const checked = await payments.checkExpiringPayments(limit);
+    if (checked.applied > 0 || checked.unavailable > 0) {
+      logger.info(checked, "hold-release: checked open gateway payments");
+    }
+    return trips.expireStaleTrips(limit);
+  };
 
   if (!process.argv.includes("--watch")) {
     try {

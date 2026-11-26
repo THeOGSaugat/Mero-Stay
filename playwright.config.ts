@@ -32,6 +32,17 @@ const documentStorage = {
       ? mkdtempSync(join(tmpdir(), "merostay-e2e-docs-"))
       : join(tmpdir(), "merostay-e2e-docs-unused"),
 };
+// Payments (ADR 0017): local fake eSewa and Khalti (apps/api/src/testing/fake-gateways.ts) with
+// random test keys per run; no network, no real keys, no real money. Generated in the main process
+// only (the servers' environment comes from here); workers never use them.
+// Not 4190: it is on the fetch "bad ports" list (Node refuses it; browsers may not).
+const FAKE_GATEWAYS_PORT = 4180;
+const gatewayKeys = {
+  ESEWA_PRODUCT_CODE: "EPAYTEST",
+  ESEWA_SECRET_KEY: randomBytes(24).toString("base64"),
+  KHALTI_SECRET_KEY: `test_${randomBytes(16).toString("hex")}`,
+};
+const fakeGatewayUrl = `http://127.0.0.1:${FAKE_GATEWAYS_PORT}`;
 const apiEnv: Record<string, string> = bookingDatabase
   ? {
       ...trustWebServer,
@@ -42,9 +53,15 @@ const apiEnv: Record<string, string> = bookingDatabase
       MEROSTAY_SKIP_ENV_FILE: "1",
       DATABASE_URL: bookingDatabase,
       SESSION_SECRET: randomBytes(48).toString("base64"),
-      // Test-mode gateway (refused in production) so the partner journey has an online-paid
-      // booking for the payout summary. The customer UI still offers no online payment.
-      PAYMENT_GATEWAY: "simulated",
+      // eSewa and Khalti through the fakes; the simulated gateway (refused in production) gives
+      // the partner and admin journeys online-paid bookings through the API.
+      ...gatewayKeys,
+      PAYMENT_GATEWAYS: "esewa,khalti,simulated",
+      PAYMENT_MODE: "uat",
+      PUBLIC_WEB_URL: `http://localhost:${WEB_PORT}`,
+      ESEWA_FORM_URL: `${fakeGatewayUrl}/esewa/form`,
+      ESEWA_STATUS_URL: `${fakeGatewayUrl}/esewa/status`,
+      KHALTI_API_URL: `${fakeGatewayUrl}/khalti`,
     }
   : {
       ...trustWebServer,
@@ -84,6 +101,22 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
   ],
   webServer: [
+    ...(bookingDatabase
+      ? [
+          {
+            command: "npm run fake-gateways -w @merostay/api",
+            url: `${fakeGatewayUrl}/health`,
+            reuseExistingServer: false,
+            timeout: 60_000,
+            env: {
+              ...gatewayKeys,
+              FAKE_GATEWAYS_PORT: String(FAKE_GATEWAYS_PORT),
+              FAKE_GATEWAYS_LOG: process.env.FAKE_GATEWAYS_LOG ?? "",
+              NODE_ENV: "test",
+            },
+          },
+        ]
+      : []),
     {
       command: "npm run start -w @merostay/api",
       url: `http://localhost:${API_PORT}/api/health`,

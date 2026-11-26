@@ -30,6 +30,7 @@ import { createProvidersService } from "./modules/providers/providers.service.js
 import { NO_PAYMENTS, type PaymentsConfig } from "./modules/payments/payments.config.js";
 import { createPaymentsRouter } from "./modules/payments/payments.routes.js";
 import { createPaymentsService } from "./modules/payments/payments.service.js";
+import { createRefundsService } from "./modules/refunds/refunds.service.js";
 
 export interface AppDependencies {
   logger: Logger;
@@ -123,10 +124,11 @@ export function createApp(deps: AppDependencies): Express {
         auth: authMiddleware,
       }),
     );
+    const paymentsConfig = deps.payments ?? NO_PAYMENTS;
     const paymentsService = createPaymentsService({
       prisma: deps.prisma,
       now,
-      config: deps.payments ?? NO_PAYMENTS,
+      config: paymentsConfig,
     });
     // Always authenticated; owner-scoped (ADR 0007).
     v1.use(createPaymentsRouter({ service: paymentsService, auth: authMiddleware }));
@@ -160,6 +162,7 @@ export function createApp(deps: AppDependencies): Express {
         finance: financeService,
         auditLog: createAuditLogService({ prisma: deps.prisma }),
         policies: policiesService,
+        refunds: createRefundsService({ prisma: deps.prisma, gateways: paymentsConfig.gateways }),
       }),
     );
     app.use("/api/v1", v1);

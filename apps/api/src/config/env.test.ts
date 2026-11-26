@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PRODUCTION_PAYMENT_ENV } from "../testing/production-env.js";
 import { parseEnv } from "./env.js";
 
 const validUrl =
@@ -62,6 +63,7 @@ describe("parseEnv", () => {
         TRUST_PROXY_ADDRESSES: "loopback",
         STORAGE_DRIVER: "local",
         STORAGE_LOCAL_DIR: "/var/lib/merostay/documents",
+        ...PRODUCTION_PAYMENT_ENV,
       }).NODE_ENV,
     ).toBe("production");
   });

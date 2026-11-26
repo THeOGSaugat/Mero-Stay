@@ -83,6 +83,7 @@ async function bookAsCustomer(api: APIRequestContext, w: World, label: string) {
     api,
     `/trips/${trip.data.id}/payments/intent`,
     csrf,
+    { gateway: "simulated" },
   );
   await post(api, `/trips/${trip.data.id}/payments/${intent.data.payment.id}/confirm`, csrf);
 
