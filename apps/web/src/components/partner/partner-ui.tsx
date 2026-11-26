@@ -12,6 +12,7 @@ import { usePartner } from "./partner-context";
 const SECTIONS = [
   { href: "/partner", label: "Overview" },
   { href: "/partner/listings", label: "Listings" },
+  { href: "/partner/cancellation-policies", label: "Cancellation policies" },
   { href: "/partner/bookings", label: "Bookings" },
   { href: "/partner/invoices", label: "Invoices" },
   { href: "/partner/payouts", label: "Payouts" },

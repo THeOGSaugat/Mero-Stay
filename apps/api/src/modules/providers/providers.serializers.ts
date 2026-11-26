@@ -20,9 +20,12 @@ export function serializeDocument(doc: Doc) {
     id: doc.id,
     documentType: doc.documentType,
     status: doc.status,
+    // The private storage key is never sent (ADR 0016): files are fetched through the API only.
+    fileName: doc.fileName,
     mimeType: doc.mimeType,
     sizeBytes: doc.sizeBytes,
-    storageKey: doc.storageKey,
+    hasFile: doc.uploadedAt !== null,
+    uploadedAt: doc.uploadedAt?.toISOString() ?? null,
     documentNumber: doc.documentNumber,
     expiresOn: doc.expiresOn ? fromDbDate(doc.expiresOn) : null,
     reviewedAt: doc.reviewedAt?.toISOString() ?? null,
@@ -45,7 +48,7 @@ export function serializePayoutAccount(account: Account | undefined) {
 }
 
 function documentCounts(docs: readonly Doc[]) {
-  const counts = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
+  const counts = { AWAITING_UPLOAD: 0, UPLOADED: 0, PENDING: 0, APPROVED: 0, REJECTED: 0 };
   for (const doc of docs) counts[doc.status] += 1;
   return counts;
 }

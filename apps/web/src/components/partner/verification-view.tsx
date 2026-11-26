@@ -14,13 +14,24 @@ import {
 } from "@/lib/partner-display";
 import type { PartnerProfile, ProviderTypeOffer, VerificationDocument } from "@/lib/partner-types";
 import { formatServiceDate } from "@/lib/trip-display";
-import { Alert, buttonPrimary, inputClass, labelClass, StatusPill } from "../ui/primitives";
+import {
+  canDeleteDocument,
+  checkDocumentFile,
+  describeUploadError,
+  uploadStepLabel,
+  type UploadStep,
+} from "@/lib/document-upload";
+import {
+  Alert,
+  buttonPrimary,
+  buttonSecondary,
+  inputClass,
+  labelClass,
+  StatusPill,
+} from "../ui/primitives";
 import { usePartner } from "./partner-context";
 import { Panel, PartnerError, tableClass, tdClass, thClass, usePartnerData } from "./partner-ui";
 import { providerStatusTone } from "./profile-view";
-
-const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 10 * 1024 * 1024;
 
 function documentTone(status: string): "good" | "wait" | "bad" {
   return status === "APPROVED" ? "good" : status === "REJECTED" ? "bad" : "wait";
@@ -31,16 +42,18 @@ function documentTone(status: string): "good" | "wait" | "bad" {
  * which are satisfied, the documents and their review status, adding a document, and submitting
  * for verification.
  *
- * File upload is not built yet (operational gap 14, Phase 10): the browser reads the chosen file's
- * type and size, and only those details are recorded. The file never leaves the device.
+ * Adding a document uploads the file itself (ADR 0016, gap 14): request → upload → confirm for
+ * review. The file is private: only this business (and MeroStay admins) can open it, through the
+ * API. A document that is not approved can be deleted (its file is removed).
  */
 export function VerificationView() {
-  const { profile, request, setProfile } = usePartner();
+  const { profile, request, requestFile, setProfile } = usePartner();
   const docs = usePartnerData<{ data: VerificationDocument[] }>("/verification-documents");
   const [types, setTypes] = useState<ProviderTypeOffer[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<UploadStep | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,17 +79,11 @@ export function VerificationView() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const file = form.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      setError("Choose the document file.");
-      return;
-    }
-    if (!ALLOWED_MIME.includes(file.type)) {
-      setError("The file must be a PDF, JPEG, PNG or WebP.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError("The file must be 10 MB or smaller.");
+    const chosen = form.get("file");
+    const file = chosen instanceof File ? chosen : null;
+    const problem = checkDocumentFile(file);
+    if (problem || !file) {
+      setError(problem);
       return;
     }
     const text = (name: string) => String(form.get(name) ?? "").trim() || null;
@@ -84,24 +91,65 @@ export function VerificationView() {
     setError(null);
     setNotice(null);
     try {
-      await request("/verification-documents", {
+      setStep("requesting");
+      const created = await request<{ data: VerificationDocument }>("/verification-documents", {
         method: "POST",
         headers: { "Idempotency-Key": `doc-${crypto.randomUUID()}` },
         body: {
           documentType: String(form.get("documentType")),
-          // Not uploaded: an honest placeholder key until private storage exists (gap 14).
-          storageKey: `not-uploaded/${crypto.randomUUID()}`,
+          fileName: file.name,
           mimeType: file.type,
           sizeBytes: file.size,
           documentNumber: text("documentNumber"),
           expiresOn: text("expiresOn"),
         },
       });
+      const id = created.data.id;
+      setStep("uploading");
+      await request(`/verification-documents/${id}/file`, {
+        method: "PUT",
+        rawBody: { data: file, contentType: file.type },
+      });
+      setStep("confirming");
+      await request(`/verification-documents/${id}/confirm`, { method: "POST", body: {} });
       formElement.reset();
-      setNotice("Document details recorded.");
-      docs.reload();
+      setNotice("Document uploaded and sent for review.");
     } catch (err) {
-      setError(describePartnerError(err));
+      setError(describeUploadError(err) ?? describePartnerError(err));
+    } finally {
+      setStep(null);
+      setBusy(false);
+      docs.reload();
+    }
+  }
+
+  async function onDocumentAction(
+    doc: VerificationDocument,
+    action: "open" | "confirm" | "delete",
+  ) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      if (action === "open") {
+        const blob = await requestFile(`/verification-documents/${doc.id}/file`);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = doc.fileName ?? "document";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else if (action === "confirm") {
+        await request(`/verification-documents/${doc.id}/confirm`, { method: "POST", body: {} });
+        setNotice("Document sent for review.");
+        docs.reload();
+      } else {
+        await request(`/verification-documents/${doc.id}`, { method: "DELETE" });
+        setNotice("Document deleted. Its file was removed.");
+        docs.reload();
+      }
+    } catch (err) {
+      setError(describeUploadError(err) ?? describePartnerError(err));
     } finally {
       setBusy(false);
     }
@@ -177,7 +225,8 @@ export function VerificationView() {
           ))}
         </ul>
         <p className="mt-2 text-xs text-slate-600">
-          Rejected documents don&apos;t count; add a new one.
+          Only documents uploaded and sent for review count. Rejected ones don&apos;t; add a new
+          one.
         </p>
         {canSubmit ? (
           <button
@@ -203,11 +252,12 @@ export function VerificationView() {
                   <th className={thClass}>Status</th>
                   <th className={thClass}>File</th>
                   <th className={thClass}>Added</th>
+                  <th className={thClass}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-mist">
                 {docs.data.data.map((doc) => (
-                  <tr key={doc.id}>
+                  <tr key={doc.id} data-testid="document-row" data-status={doc.status}>
                     <td className={tdClass}>
                       {documentTypeLabel(doc.documentType)}
                       {doc.documentNumber ? (
@@ -229,10 +279,50 @@ export function VerificationView() {
                       ) : null}
                     </td>
                     <td className={tdClass}>
-                      {doc.mimeType.replace("application/", "").replace("image/", "").toUpperCase()}
-                      , {formatFileSize(doc.sizeBytes)}
+                      {doc.fileName ? <span className="block">{doc.fileName}</span> : null}
+                      <span className="block text-slate-600">
+                        {doc.mimeType
+                          .replace("application/", "")
+                          .replace("image/", "")
+                          .toUpperCase()}
+                        , {formatFileSize(doc.sizeBytes)}
+                      </span>
                     </td>
                     <td className={tdClass}>{formatTimestamp(doc.createdAt)}</td>
+                    <td className={tdClass}>
+                      <div className="flex flex-wrap gap-2">
+                        {doc.hasFile ? (
+                          <button
+                            type="button"
+                            className={buttonSecondary}
+                            disabled={busy}
+                            onClick={() => void onDocumentAction(doc, "open")}
+                          >
+                            Open
+                          </button>
+                        ) : null}
+                        {doc.status === "UPLOADED" ? (
+                          <button
+                            type="button"
+                            className={buttonSecondary}
+                            disabled={busy}
+                            onClick={() => void onDocumentAction(doc, "confirm")}
+                          >
+                            Send for review
+                          </button>
+                        ) : null}
+                        {canDeleteDocument(doc.status, profile.status) ? (
+                          <button
+                            type="button"
+                            className={buttonSecondary}
+                            disabled={busy}
+                            onClick={() => void onDocumentAction(doc, "delete")}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -243,12 +333,10 @@ export function VerificationView() {
 
       {profile.status !== "SUSPENDED" ? (
         <Panel title="Add a document">
-          <div className="mb-4">
-            <Alert tone="info">
-              File upload is coming soon. For now, MeroStay records the document&apos;s type, size
-              and number; the file itself stays on your device and is collected when uploads open.
-            </Alert>
-          </div>
+          <p className="mb-4 text-sm text-slate-600">
+            Your file is stored privately: only your business and MeroStay&apos;s verification team
+            can open it. Photos lose their location and camera details before they are stored.
+          </p>
           <form onSubmit={onAddDocument} className="grid gap-4 sm:grid-cols-2">
             <label className={labelClass}>
               Document
@@ -266,12 +354,12 @@ export function VerificationView() {
               </select>
             </label>
             <label className={labelClass}>
-              File (PDF, JPEG, PNG or WebP, up to 10 MB)
+              File (PDF, JPEG or PNG, up to 10 MB)
               <input
                 name="file"
                 type="file"
                 required
-                accept="application/pdf,image/jpeg,image/png,image/webp"
+                accept="application/pdf,image/jpeg,image/png"
                 className={`${inputClass} py-1.5`}
               />
             </label>
@@ -285,7 +373,7 @@ export function VerificationView() {
             </label>
             <div className="sm:col-span-2">
               <button type="submit" className={buttonPrimary} disabled={busy}>
-                {busy ? "Saving…" : "Add document"}
+                {step ? uploadStepLabel(step) : busy ? "Working…" : "Upload document"}
               </button>
             </div>
           </form>

@@ -67,6 +67,9 @@ pgdata/
 
 # ---------- User uploads (stored outside git) ----------
 uploads/
+# Local document storage (ADR 0016): verification files in dev; never committed.
+.storage/
+.storage-*/
 tmp/
 
 # ---------- Logs ----------

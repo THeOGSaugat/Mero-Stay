@@ -1,5 +1,6 @@
 "use client";
 
+import { CancellationTerms } from "@/components/ui/cancellation-terms";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useReducer } from "react";
@@ -21,7 +22,6 @@ import {
   settleReducer,
 } from "@/lib/settle-state";
 import {
-  describeCancellationRule,
   formatDateRange,
   formatServiceDate,
   paymentMethodLabel,
@@ -224,7 +224,6 @@ export function BookingDetailView() {
   if (!data) return <p className="text-sm text-slate-600">Loading booking…</p>;
   const b = data.data;
   const f = (minor: string) => formatMoney(minor, b.currency, b.currencyExponent);
-  const rules = Array.isArray(b.cancellationPolicy?.rules) ? b.cancellationPolicy.rules : [];
 
   return (
     <div className="space-y-4">
@@ -317,26 +316,7 @@ export function BookingDetailView() {
         ) : null}
       </Panel>
 
-      <Panel title="Cancellation policy (as booked)">
-        {b.cancellationPolicy ? (
-          <>
-            {b.cancellationPolicy.name ? (
-              <p className="font-medium text-ink">{b.cancellationPolicy.name}</p>
-            ) : null}
-            {rules.length > 0 ? (
-              <ul className="mt-1 list-disc pl-5 text-sm text-ink">
-                {rules.map((rule, i) => (
-                  <li key={i}>{describeCancellationRule(rule)}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-600">No refund rules.</p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-slate-600">No cancellation policy was attached.</p>
-        )}
-      </Panel>
+      <CancellationTerms terms={b.cancellationPolicy} context="booking" />
 
       {b.paymentMethod === "pay_at_property" ? (
         <Panel title="Payment at the property">

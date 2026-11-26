@@ -1,8 +1,9 @@
+import { CancellationTerms } from "@/components/ui/cancellation-terms";
+import { policySummary } from "@/lib/cancellation-policy";
 import type { ReactNode } from "react";
 import type { Trip, TripItem } from "@/lib/api-types";
 import { formatMoney } from "@/lib/money";
 import {
-  describeCancellationRule,
   formatDateRange,
   formatServiceDate,
   paymentMethodLabel,
@@ -66,20 +67,16 @@ function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
           {f(item.money.totalMinor)}
         </dd>
       </dl>
-      {item.cancellationPolicy?.rules && item.cancellationPolicy.rules.length > 0 ? (
-        <details className="mt-2 text-sm">
-          <summary className="cursor-pointer text-navy">
-            Cancellation policy
-            {item.cancellationPolicy.name ? `: ${item.cancellationPolicy.name}` : ""} (fixed when
-            booked)
-          </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {item.cancellationPolicy.rules.map((rule, i) => (
-              <li key={i}>{describeCancellationRule(rule)}</li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+      <details className="mt-2 text-sm" data-testid="item-cancellation">
+        <summary className="cursor-pointer text-navy">
+          {item.cancellationPolicy
+            ? `Cancellation: ${policySummary(item.cancellationPolicy)} (fixed when booked)`
+            : "No cancellation policy"}
+        </summary>
+        <div className="mt-2">
+          <CancellationTerms terms={item.cancellationPolicy} context="booking" headingLevel={3} />
+        </div>
+      </details>
       {actions ? <div className="mt-3 border-t border-mist pt-3">{actions}</div> : null}
     </li>
   );

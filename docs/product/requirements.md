@@ -154,7 +154,9 @@ place: [operational-gaps.md → Owner decisions on invoicing](../development/ope
 
 *Still to confirm in the phase that needs them (do not assume):*
 - Whether each provider may disable pay-at-property for their listings.
-- Cancellation policy presets to offer partners (the seed contains *sample* templates only).
+- ~~Cancellation policy presets to offer partners~~. **Decided 2026-11-26 (Phase 10): partner-authored
+  policies only, no MeroStay presets for now** (ADR 0015). Whether a policy becomes required before a
+  listing goes live: operational gap 30.
 - VAT/service-charge handling per vertical (hotels: 10% service charge then 13% VAT is
   implemented as the default formula) — confirm with a Nepali tax advisor before launch.
 

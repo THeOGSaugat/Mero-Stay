@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiRequest, type ApiRequest } from "@/lib/api-client";
+import { ApiError, apiRequest, type ApiRequest } from "@/lib/api-client";
 import { partnerAccess, partnerErrorView, providerHeaders } from "@/lib/partner-access";
 import type { PartnerProfile } from "@/lib/partner-types";
 import { useAuth } from "../auth/auth-provider";
@@ -30,6 +30,11 @@ interface PartnerContextValue {
   profile: PartnerProfile;
   /** Calls `/partner${path}` for the current provider. */
   request: <T>(path: string, options?: Omit<ApiRequest, "csrfToken">) => Promise<T>;
+  /**
+   * Fetches a private file of the current provider (a verification document, ADR 0016) as a
+   * Blob, with the same session and provider header. A plain link could not send the header.
+   */
+  requestFile: (path: string) => Promise<Blob>;
   /** Re-reads the profile (after a change elsewhere on the page). */
   reloadProfile: () => Promise<void>;
   setProfile: (profile: PartnerProfile) => void;
@@ -100,6 +105,21 @@ function PartnerProvider({ children }: { children: ReactNode }) {
     };
   }, [loadProfile]);
 
+  const requestFile = useCallback(
+    async (path: string) => {
+      const response = await fetch(`/api/v1/partner${path}`, {
+        credentials: "include",
+        cache: "no-store",
+        headers: providerHeaders(providerId),
+      });
+      if (!response.ok) {
+        throw new ApiError(response.status, "FILE_UNAVAILABLE", "The file could not be opened.");
+      }
+      return response.blob();
+    },
+    [providerId],
+  );
+
   const reloadProfile = useCallback(async () => {
     setLoad(await loadProfile());
   }, [loadProfile]);
@@ -111,9 +131,9 @@ function PartnerProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () =>
       load.status === "ready"
-        ? { profile: load.profile, request, reloadProfile, setProfile }
+        ? { profile: load.profile, request, requestFile, reloadProfile, setProfile }
         : null,
-    [load, request, reloadProfile, setProfile],
+    [load, request, requestFile, reloadProfile, setProfile],
   );
 
   if (load.status === "loading") {

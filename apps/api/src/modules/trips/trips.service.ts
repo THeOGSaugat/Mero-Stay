@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import {
+  cancellationSnapshot,
+  resolveCancellationPolicy,
+} from "../../domain/cancellation-policy.js";
 import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
 import type { BookingItemStatus } from "../../generated/prisma/enums.js";
 import {
@@ -258,7 +262,11 @@ export function createTripsService({
 
   function itemWriteData(tripId: string, resolved: ResolvedItem) {
     const { listing, request, priced } = resolved;
-    const policy = listing.defaultCancellationPolicy;
+    // Listing's policy → provider's default → none (ADR 0015), frozen onto the item now.
+    const policy = resolveCancellationPolicy(
+      listing.defaultCancellationPolicy,
+      listing.provider.defaultCancellationPolicy,
+    );
     return {
       listingTypeCode: listing.listingTypeCode,
       startDate: toDbDate(request.startDate),
@@ -276,16 +284,10 @@ export function createTripsService({
       commissionMinor: priced.commissionMinor,
       providerPayoutMinor: priced.providerPayoutMinor,
       ...statusesForPaymentMethod(request.paymentMethod),
-      cancellationPolicyId: policy?.id ?? null,
+      cancellationPolicyId: policy?.policy.id ?? null,
       // Frozen copy: later policy edits never change this booking.
       cancellationPolicySnapshot: policy
-        ? {
-            policyId: policy.id,
-            name: policy.name,
-            description: policy.description,
-            rules: policy.rules,
-            capturedAt: now().toISOString(),
-          }
+        ? (cancellationSnapshot(policy, now()) as unknown as Prisma.InputJsonValue)
         : Prisma.DbNull,
       attributes: (request.attributes ?? {}) as Prisma.InputJsonValue,
       slots: {

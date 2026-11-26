@@ -8,6 +8,8 @@ import { inspectDatabaseError } from "../../lib/database-errors.js";
 import type { ErrorResponseBody } from "../../lib/errors.js";
 import { createPrismaClient } from "../../lib/prisma.js";
 import { testAuthConfig } from "../../testing/auth-config.js";
+import { seededFileFields } from "../../testing/documents.js";
+import { samplePdf, testStorage, uploadDocument } from "../../testing/document-upload.js";
 import { createWorld, type World } from "../../testing/fixtures.js";
 import { countMoneyFields, moneyBoundaryViolations } from "../../testing/json-safety.js";
 import { resolveTestDatabase } from "../../testing/test-database.js";
@@ -28,6 +30,7 @@ const app = createApp({
   prisma,
   auth: testAuthConfig(),
   payments: { gateway: "simulated" },
+  storage: testStorage().storage,
 });
 let world: World;
 
@@ -190,29 +193,48 @@ describe("onboarding, profile and verification documents", () => {
     expect(JSON.stringify(audit[0])).not.toContain(ACCOUNT_NUMBER);
   });
 
-  it("documents: metadata + private storage key (no URLs); submit for verification once", async () => {
+  it("documents: request, upload and confirm (server-chosen private key); submit for verification once", async () => {
+    // Phase 10 (ADR 0016): the file is really uploaded; the client never chooses a storage key.
+    const pdf = samplePdf("owner-id");
     const doc = {
       documentType: "OWNER_ID",
-      storageKey: `providers/${providerA}/owner-id.pdf`,
+      fileName: "owner-id.pdf",
       mimeType: "application/pdf",
-      sizeBytes: 120_000,
+      sizeBytes: pdf.length,
       documentNumber: "12-01-75-01234",
     };
     const idem = key();
     const created = await call(partnerA, "post", "/api/v1/partner/verification-documents", doc, {
       "Idempotency-Key": idem,
     });
-    expect([created.status, dataOf<{ status: string }>(created).status]).toEqual([201, "PENDING"]);
+    expect([created.status, dataOf<{ status: string }>(created).status]).toEqual([
+      201,
+      "AWAITING_UPLOAD",
+    ]);
     const retry = await call(partnerA, "post", "/api/v1/partner/verification-documents", doc, {
       "Idempotency-Key": idem,
     });
     expect(retry.headers["idempotent-replayed"]).toBe("true");
     expect(await prisma.providerDocument.count({ where: { providerId: providerA } })).toBe(1);
-    const url = await call(partnerA, "post", "/api/v1/partner/verification-documents", {
+    const clientKey = await call(partnerA, "post", "/api/v1/partner/verification-documents", {
       ...doc,
       storageKey: "https://public.example.com/id.pdf",
     });
-    expect(codeOf(url)).toEqual([400, "VALIDATION_ERROR"]);
+    expect(codeOf(clientKey)).toEqual([400, "VALIDATION_ERROR"]);
+    const id = dataOf<{ id: string }>(created).id;
+    const put = await partnerA.agent
+      .put(`/api/v1/partner/verification-documents/${id}/file`)
+      .set("X-CSRF-Token", partnerA.csrfToken)
+      .set("Content-Type", "application/pdf")
+      .send(pdf);
+    expect([put.status, dataOf<{ status: string }>(put).status]).toEqual([200, "UPLOADED"]);
+    const confirmed = await call(
+      partnerA,
+      "post",
+      `/api/v1/partner/verification-documents/${id}/confirm`,
+      {},
+    );
+    expect(dataOf<{ document: { status: string } }>(confirmed).document.status).toBe("PENDING");
     // Gap 18: a hotel needs identity AND a registration (business or homestay); owner ID alone is
     // incomplete, so the submission is refused and the provider stays DRAFT.
     const incomplete = await call(partnerA, "post", "/api/v1/partner/verification/submit", {});
@@ -228,13 +250,10 @@ describe("onboarding, profile and verification documents", () => {
     expect((await prisma.provider.findUniqueOrThrow({ where: { id: providerA } })).status).toBe(
       "DRAFT",
     );
-    const registration = await call(partnerA, "post", "/api/v1/partner/verification-documents", {
+    const registration = await uploadDocument(partnerA.agent, partnerA.csrfToken, {
       documentType: "LOCAL_GOVERNMENT_REGISTRATION",
-      storageKey: `providers/${providerA}/homestay-registration.pdf`,
-      mimeType: "application/pdf",
-      sizeBytes: 80_000,
     });
-    expect(registration.status).toBe(201);
+    expect(registration.requested.status).toBe(201);
     const list = await call(partnerA, "get", "/api/v1/partner/verification-documents");
     expect(dataOf<unknown[]>(list)).toHaveLength(2);
 
@@ -354,9 +373,11 @@ describe("admin verification decisions (audited exactly once)", () => {
       data: {
         providerId: providerB,
         documentType: "OWNER_ID",
-        storageKey: "k/b.pdf",
+        storageKey: "k/b",
         mimeType: "application/pdf",
         sizeBytes: 10,
+        status: "PENDING",
+        ...seededFileFields("reject-owner-id"),
       },
     });
     // Gap 18: a tour operator also needs a business registration and a PAN certificate, so the

@@ -23,8 +23,13 @@ export class ApiError extends Error {
 }
 
 export interface ApiRequest {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  /**
+   * A file sent as-is instead of JSON (document uploads, ADR 0016), with its type. When set,
+   * `body` is ignored.
+   */
+  rawBody?: { data: Blob; contentType: string };
   csrfToken?: string | null;
   /**
    * Extra request headers (e.g. `X-Provider-Id`, `Idempotency-Key`). They cannot replace the ones
@@ -48,9 +53,10 @@ function isErrorBody(body: unknown): body is ApiErrorBody {
 
 /** Calls the API on the same origin. Resolves with the parsed body; throws ApiError otherwise. */
 export async function apiRequest<T>(path: string, request: ApiRequest = {}): Promise<T> {
-  const { method = "GET", body, csrfToken, fetchImpl = fetch } = request;
+  const { method = "GET", body, rawBody, csrfToken, fetchImpl = fetch } = request;
   const headers: Record<string, string> = { ...request.headers, Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (rawBody) headers["Content-Type"] = rawBody.contentType;
+  else if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET" && csrfToken) headers["X-CSRF-Token"] = csrfToken;
 
   let response: Response;
@@ -60,7 +66,7 @@ export async function apiRequest<T>(path: string, request: ApiRequest = {}): Pro
       headers,
       credentials: "include",
       cache: "no-store",
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: rawBody ? rawBody.data : body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new ApiError(0, "NETWORK_ERROR", "Could not reach MeroStay. Check your connection.");

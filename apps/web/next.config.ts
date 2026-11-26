@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
     return [{ source: "/api/v1/:path*", destination: `${API_URL}/api/v1/:path*` }];
   },
   cacheComponents: true,
+  experimental: {
+    // Proxied /api/v1 bodies are buffered up to this size (document uploads are 10 MB at most,
+    // ADR 0016). server.mts refuses anything larger before Next.js sees it: keep the two equal.
+    proxyClientMaxBodySize: 10 * 1024 * 1024 + 64 * 1024,
+  },
   partialPrefetching: true,
   poweredByHeader: false,
   turbopack: {

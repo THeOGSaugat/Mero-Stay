@@ -1,11 +1,19 @@
+import { createHash, randomUUID } from "node:crypto";
 import type { z } from "zod";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { toDbDate } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
 import { missingRequirements, requirementGroups } from "../../domain/verification.js";
+import {
+  DocumentContentError,
+  safeFileName,
+  sniffDocumentType,
+  stripDocumentMetadata,
+} from "../../lib/document-content.js";
 import { AppError } from "../../lib/errors.js";
 import { withIdempotency, type IdempotentResult } from "../../lib/idempotency.js";
 import { skipTake, type Page, type ListSort } from "../../lib/pagination.js";
+import { documentStorageKey, type DocumentStorage } from "../../lib/storage/index.js";
 import { recordAudit, type AuditContext } from "../audit/audit.js";
 import { assertProviderWritable } from "../partner/partner-context.js";
 import type {
@@ -48,7 +56,7 @@ export const PROVIDER_PROFILE_INCLUDE = {
     },
   },
   payoutAccounts: { where: { isDefault: true }, take: 1 },
-  documents: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+  documents: { where: { deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 } satisfies Prisma.ProviderInclude;
 
 export type ProviderProfile = Prisma.ProviderGetPayload<{
@@ -95,6 +103,34 @@ function sameAccount(
 }
 
 const providerNotFound = () => new AppError(404, "PROVIDER_NOT_FOUND", "Provider not found.");
+const documentNotFound = () => new AppError(404, "DOCUMENT_NOT_FOUND", "Document not found.");
+const documentFileNotFound = () =>
+  new AppError(404, "DOCUMENT_FILE_NOT_FOUND", "This document has no stored file.");
+const documentContentInvalid = () =>
+  new AppError(
+    422,
+    "DOCUMENT_CONTENT_INVALID",
+    "The file is not a valid PDF, JPEG or PNG of the declared type.",
+  );
+
+/** What an audit row may show about a document: metadata only, never its content or key. */
+function documentAudit(doc: {
+  documentType: string;
+  fileName: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+  documentNumber: string | null;
+}) {
+  return {
+    documentType: doc.documentType,
+    fileName: doc.fileName,
+    mimeType: doc.mimeType,
+    sizeBytes: doc.sizeBytes,
+    status: doc.status,
+    hasDocumentNumber: doc.documentNumber !== null,
+  };
+}
 
 async function lockProvider(tx: Prisma.TransactionClient, id: string): Promise<void> {
   const rows = await tx.$queryRaw<{ id: string }[]>`
@@ -117,7 +153,7 @@ async function assertRequiredDocuments(
     select: { requirement: true, documentType: true },
   });
   const documents = await tx.providerDocument.findMany({
-    where: { providerId },
+    where: { providerId, deletedAt: null },
     select: { documentType: true, status: true },
   });
   const missing = missingRequirements(rows, documents);
@@ -237,7 +273,16 @@ export function adminProviderOrder(sort: ListSort): Prisma.ProviderOrderByWithRe
   }
 }
 
-export function createProvidersService({ prisma, now }: { prisma: PrismaClient; now: () => Date }) {
+export function createProvidersService({
+  prisma,
+  now,
+  storage,
+}: {
+  prisma: PrismaClient;
+  now: () => Date;
+  /** Private document storage (ADR 0016). Without it, document files are 503 STORAGE_UNAVAILABLE. */
+  storage?: DocumentStorage;
+}) {
   async function getProfile(providerId: string): Promise<ProviderProfile> {
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
@@ -365,7 +410,34 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
     return getProfile(providerId);
   }
 
-  async function submitDocument(
+  // ------------------------------------------------------- verification documents (ADR 0016)
+
+  function requireStorage(): DocumentStorage {
+    if (!storage) {
+      throw new AppError(503, "STORAGE_UNAVAILABLE", "Document storage is not configured.");
+    }
+    return storage;
+  }
+
+  /** The live (not deleted) document of this provider, locked; 404 otherwise. */
+  async function lockDocument(
+    tx: Prisma.TransactionClient,
+    providerId: string,
+    documentId: string,
+  ) {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id::text AS id FROM provider_documents
+       WHERE id = ${documentId}::uuid AND provider_id = ${providerId}::uuid AND deleted_at IS NULL
+         FOR UPDATE`;
+    if (rows.length !== 1) throw documentNotFound();
+    return tx.providerDocument.findUniqueOrThrow({ where: { id: documentId } });
+  }
+
+  /**
+   * Step 1: the partner asks to upload one document. Creates the record (AWAITING_UPLOAD) with a
+   * server-generated private storage key; nothing the client sends becomes a path.
+   */
+  async function requestDocumentUpload(
     ctx: AuditContext,
     providerId: string,
     providerStatus: Parameters<typeof assertProviderWritable>[0],
@@ -373,57 +445,238 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
     idempotencyKey: string | null,
   ): Promise<IdempotentResult> {
     assertProviderWritable(providerStatus);
+    requireStorage();
     return withIdempotency(
       prisma,
       idempotencyKey && {
         userId: ctx.actorUserId,
         key: idempotencyKey,
-        scope: "partner.document.submit",
+        scope: "partner.document.request",
         request: { providerId, ...input },
       },
       async (tx) => {
         await lockProvider(tx, providerId);
+        const id = randomUUID();
         const doc = await tx.providerDocument.create({
           data: {
+            id,
             providerId,
             documentType: input.documentType,
-            storageKey: input.storageKey,
+            storageKey: documentStorageKey(providerId, id),
+            fileName: safeFileName(input.fileName),
             mimeType: input.mimeType,
             sizeBytes: input.sizeBytes,
             documentNumber: input.documentNumber ?? null,
             expiresOn: input.expiresOn ? toDbDate(input.expiresOn) : null,
-            status: "PENDING",
+            status: "AWAITING_UPLOAD",
           },
         });
         await recordAudit(tx, ctx, {
-          action: "provider.document.submit",
+          action: "provider.document.request",
           entityType: "provider_document",
           entityId: doc.id,
-          after: {
-            providerId,
-            documentType: doc.documentType,
-            mimeType: doc.mimeType,
-            sizeBytes: doc.sizeBytes,
-            hasDocumentNumber: doc.documentNumber !== null,
-            status: doc.status,
-          },
+          after: { providerId, ...documentAudit(doc) },
         });
         return { resourceId: doc.id, status: 201 };
       },
     );
   }
 
+  /**
+   * Step 2: the file itself (raw body). It must be exactly what was declared (type and size), and
+   * its first bytes must really be that type. JPEG/PNG metadata is removed before storage; the
+   * stored bytes' SHA-256 is recorded. One upload per document: to replace a file, delete the
+   * document and request a new one.
+   */
+  async function uploadDocumentFile(
+    ctx: AuditContext,
+    providerId: string,
+    providerStatus: Parameters<typeof assertProviderWritable>[0],
+    documentId: string,
+    body: Buffer,
+    contentTypeHeader: string | undefined,
+  ): Promise<void> {
+    assertProviderWritable(providerStatus);
+    const store = requireStorage();
+    const contentType = (contentTypeHeader ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+    await prisma.$transaction(async (tx) => {
+      const doc = await lockDocument(tx, providerId, documentId);
+      if (doc.status !== "AWAITING_UPLOAD") {
+        throw new AppError(
+          409,
+          "DOCUMENT_ALREADY_UPLOADED",
+          "This document's file is already uploaded.",
+          {
+            status: doc.status,
+          },
+        );
+      }
+      if (contentType !== doc.mimeType) {
+        throw new AppError(
+          422,
+          "DOCUMENT_TYPE_MISMATCH",
+          "The file type is not the one you declared.",
+          {
+            expected: doc.mimeType,
+            received: contentType || null,
+          },
+        );
+      }
+      if (body.length !== doc.sizeBytes) {
+        throw new AppError(
+          422,
+          "DOCUMENT_SIZE_MISMATCH",
+          "The file size is not the one you declared.",
+          {
+            expected: doc.sizeBytes,
+            received: body.length,
+          },
+        );
+      }
+      const sniffed = sniffDocumentType(body);
+      if (sniffed !== doc.mimeType) {
+        throw documentContentInvalid();
+      }
+      let stored: Buffer;
+      try {
+        stored = stripDocumentMetadata(body, sniffed);
+      } catch (err) {
+        if (err instanceof DocumentContentError) throw documentContentInvalid();
+        throw err;
+      }
+      const sha256 = createHash("sha256").update(stored).digest("hex");
+      await store.put(doc.storageKey, stored, doc.mimeType);
+      const updated = await tx.providerDocument.update({
+        where: { id: documentId },
+        data: { status: "UPLOADED", uploadedAt: now(), sha256, sizeBytes: stored.length },
+      });
+      await recordAudit(tx, ctx, {
+        action: "provider.document.upload",
+        entityType: "provider_document",
+        entityId: documentId,
+        before: { status: doc.status },
+        after: documentAudit(updated),
+      });
+    }, TX_OPTIONS);
+  }
+
+  /** Step 3: the partner confirms the uploaded file: UPLOADED → PENDING (for review). Repeatable. */
+  async function confirmDocument(
+    ctx: AuditContext,
+    providerId: string,
+    providerStatus: Parameters<typeof assertProviderWritable>[0],
+    documentId: string,
+  ): Promise<{ changed: boolean }> {
+    assertProviderWritable(providerStatus);
+    return prisma.$transaction(async (tx) => {
+      const doc = await lockDocument(tx, providerId, documentId);
+      if (doc.status === "PENDING") return { changed: false };
+      if (doc.status === "AWAITING_UPLOAD") {
+        throw new AppError(409, "DOCUMENT_FILE_MISSING", "Upload the file before confirming it.");
+      }
+      if (doc.status !== "UPLOADED") {
+        throw new AppError(409, "DOCUMENT_NOT_CONFIRMABLE", `This document is ${doc.status}.`, {
+          status: doc.status,
+        });
+      }
+      const updated = await tx.providerDocument.update({
+        where: { id: documentId },
+        data: { status: "PENDING" },
+      });
+      await recordAudit(tx, ctx, {
+        action: "provider.document.submit",
+        entityType: "provider_document",
+        entityId: documentId,
+        before: { status: doc.status },
+        after: { providerId, ...documentAudit(updated) },
+      });
+      return { changed: true };
+    }, TX_OPTIONS);
+  }
+
+  /**
+   * The partner deletes a document that is not approved (a replaced, rejected or unwanted one).
+   * The row becomes a tombstone (never shown or counted again) and the stored object is removed.
+   * While the provider is under review, its submitted (PENDING) documents stay as they are.
+   * Returns whether the object was removed (false: it is left for a clean-up, and logged).
+   */
+  async function deleteDocument(
+    ctx: AuditContext,
+    providerId: string,
+    providerStatus: Parameters<typeof assertProviderWritable>[0],
+    documentId: string,
+  ): Promise<{ objectRemoved: boolean }> {
+    assertProviderWritable(providerStatus);
+    const store = requireStorage();
+    const doc = await prisma.$transaction(async (tx) => {
+      await lockProvider(tx, providerId);
+      const current = await lockDocument(tx, providerId, documentId);
+      if (current.status === "APPROVED") {
+        throw new AppError(409, "DOCUMENT_APPROVED", "An approved document cannot be deleted.");
+      }
+      if (current.status === "PENDING" && providerStatus === "PENDING_VERIFICATION") {
+        throw new AppError(
+          409,
+          "PROVIDER_UNDER_REVIEW",
+          "Documents under review cannot be deleted until MeroStay has decided.",
+        );
+      }
+      await tx.providerDocument.update({ where: { id: documentId }, data: { deletedAt: now() } });
+      await recordAudit(tx, ctx, {
+        action: "provider.document.delete",
+        entityType: "provider_document",
+        entityId: documentId,
+        before: { providerId, ...documentAudit(current) },
+        after: { deleted: true },
+      });
+      return current;
+    }, TX_OPTIONS);
+    try {
+      await store.delete(doc.storageKey);
+      return { objectRemoved: true };
+    } catch {
+      return { objectRemoved: false };
+    }
+  }
+
+  /** A live document of this provider (metadata). 404 for another provider's or a deleted one. */
   async function getDocument(providerId: string, documentId: string) {
-    const doc = await prisma.providerDocument.findFirst({ where: { id: documentId, providerId } });
-    if (!doc) throw new AppError(404, "DOCUMENT_NOT_FOUND", "Document not found.");
+    const doc = await prisma.providerDocument.findFirst({
+      where: { id: documentId, providerId, deletedAt: null },
+    });
+    if (!doc) throw documentNotFound();
     return doc;
   }
 
   async function listDocuments(providerId: string) {
     return prisma.providerDocument.findMany({
-      where: { providerId },
+      where: { providerId, deletedAt: null },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
+  }
+
+  /** The stored file of a live, uploaded document of this provider; 404 when there is none. */
+  async function readDocumentFile(providerId: string, documentId: string) {
+    const store = requireStorage();
+    const doc = await getDocument(providerId, documentId);
+    if (!doc.uploadedAt) throw documentFileNotFound();
+    const body = await store.get(doc.storageKey);
+    if (!body) throw documentFileNotFound();
+    return { doc, body };
+  }
+
+  /** ADMIN: a provider's document file. Every view of a document is audited (metadata only). */
+  async function adminReadDocumentFile(ctx: AuditContext, providerId: string, documentId: string) {
+    const file = await readDocumentFile(providerId, documentId);
+    await prisma.$transaction((tx) =>
+      recordAudit(tx, ctx, {
+        action: "provider.document.view",
+        entityType: "provider_document",
+        entityId: documentId,
+        after: { providerId, ...documentAudit(file.doc) },
+      }),
+    );
+    return file;
   }
 
   /**
@@ -445,7 +698,7 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
         });
       }
       const pendingDocs = await tx.providerDocument.count({
-        where: { providerId, status: "PENDING" },
+        where: { providerId, status: "PENDING", deletedAt: null },
       });
       if (pendingDocs === 0) {
         throw new AppError(
@@ -519,7 +772,9 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
       await lockProvider(tx, providerId);
       const provider = await tx.provider.findUniqueOrThrow({
         where: { id: providerId },
-        include: { documents: { where: { status: "PENDING" }, select: { id: true } } },
+        include: {
+          documents: { where: { status: "PENDING", deletedAt: null }, select: { id: true } },
+        },
       });
       if (provider.status !== "PENDING_VERIFICATION") {
         throw new AppError(
@@ -580,9 +835,14 @@ export function createProvidersService({ prisma, now }: { prisma: PrismaClient; 
     getProfile,
     onboard,
     updateProfile,
-    submitDocument,
+    requestDocumentUpload,
+    uploadDocumentFile,
+    confirmDocument,
+    deleteDocument,
     getDocument,
     listDocuments,
+    readDocumentFile,
+    adminReadDocumentFile,
     submitForVerification,
     adminListProviders,
     adminGetProvider,

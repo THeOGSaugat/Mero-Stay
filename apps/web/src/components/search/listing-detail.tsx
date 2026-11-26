@@ -1,15 +1,11 @@
+import { CancellationTerms } from "@/components/ui/cancellation-terms";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ListingDetail as Detail } from "@/lib/api-types";
 import { formatMoney } from "@/lib/money";
 import { calendarWindow } from "@/lib/search";
 import { serverApi } from "@/lib/server-api";
-import {
-  describeCancellationRule,
-  detailValueText,
-  formatServiceDate,
-  humanizeKey,
-} from "@/lib/trip-display";
+import { detailValueText, formatServiceDate, humanizeKey } from "@/lib/trip-display";
 import { AddToTrip } from "../trip/add-to-trip";
 import { Alert } from "../ui/primitives";
 
@@ -173,18 +169,7 @@ export async function ListingDetail({
         </section>
       ) : null}
 
-      {listing.cancellationPolicy ? (
-        <section aria-labelledby="policy-heading" className="rounded-xl border border-mist p-4">
-          <h2 id="policy-heading" className="text-base font-semibold text-navy">
-            Cancellation: {listing.cancellationPolicy.name}
-          </h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink">
-            {(listing.cancellationPolicy.rules ?? []).map((rule, i) => (
-              <li key={i}>{describeCancellationRule(rule)}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <CancellationTerms terms={listing.cancellationPolicy} context="listing" />
 
       {listing.listingType.isBookable ? (
         <section

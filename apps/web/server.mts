@@ -15,12 +15,33 @@ import next from "next";
 import { appendForwardedFor } from "./src/lib/forwarded-for.mts";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+
+/**
+ * The largest body the web server will forward to the API: the API's own limit (10 MB, document
+ * uploads, ADR 0016) plus room for headers. Next.js buffers proxied bodies only up to
+ * `experimental.proxyClientMaxBodySize` (next.config.ts, the same number) and would silently cut a
+ * larger one, leaving the API waiting for bytes that never come. Larger bodies are refused here.
+ */
+const MAX_API_BODY_BYTES = 10 * 1024 * 1024 + 64 * 1024;
 const app = next({ dev: false, dir: import.meta.dirname, port });
 const handle = app.getRequestHandler();
 
 await app.prepare();
 
 const server = createServer((req, res) => {
+  const declared = Number(req.headers["content-length"] ?? 0);
+  if (req.url?.startsWith("/api/v1/") && declared > MAX_API_BODY_BYTES) {
+    // Discard the rest of the body (nothing is buffered) so the client can finish sending and
+    // read the answer; closing the socket mid-upload would look like a network error to it.
+    req.resume();
+    res.writeHead(413, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        error: { code: "PAYLOAD_TOO_LARGE", message: "Request body is too large." },
+      }),
+    );
+    return;
+  }
   req.headers["x-forwarded-for"] = appendForwardedFor(
     req.headers["x-forwarded-for"],
     req.socket.remoteAddress,

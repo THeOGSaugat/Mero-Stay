@@ -16,7 +16,11 @@ import {
 import { settleAtPropertyBodySchema } from "../payments/payments.schemas.js";
 import { serializeInvoices, serializeSettlement } from "../payments/payments.serializers.js";
 import type { PaymentsService } from "../payments/payments.service.js";
+import { serializePolicy } from "../cancellation-policies/cancellation-policies.serializers.js";
+import type { CancellationPoliciesService } from "../cancellation-policies/cancellation-policies.service.js";
+import { sendDocumentFile } from "../providers/document-download.js";
 import {
+  adminDocumentParamsSchema,
   adminProvidersQuerySchema,
   verificationDecisionBodySchema,
   verificationDecisionParamsSchema,
@@ -35,6 +39,7 @@ export interface AdminRouterDeps {
   providers: ProvidersService;
   finance: FinanceService;
   auditLog: AuditLogService;
+  policies: CancellationPoliciesService;
 }
 
 /**
@@ -53,6 +58,7 @@ export function createAdminRouter({
   providers,
   finance,
   auditLog,
+  policies,
 }: AdminRouterDeps): Router {
   const router = Router();
   router.use(
@@ -91,6 +97,29 @@ export function createAdminRouter({
   router.get("/admin/providers/:id", async (req, res) => {
     const { id } = idParamsSchema.parse(req.params);
     res.json({ data: serializeAdminProvider(await providers.adminGetProvider(id)) });
+  });
+
+  // A provider's verification document file (ADR 0016): admins only, each view audited.
+  router.get("/admin/providers/:id/documents/:documentId/file", async (req, res) => {
+    const { id, documentId } = adminDocumentParamsSchema.parse(req.params);
+    const { doc, body } = await providers.adminReadDocumentFile(
+      auditContextOf(req),
+      id,
+      documentId,
+    );
+    sendDocumentFile(res, doc, body);
+  });
+
+  // A provider's cancellation policies and default (ADR 0015): read-only.
+  router.get("/admin/providers/:id/cancellation-policies", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { defaultPolicyId, policies: rows } = await policies.adminListForProvider(id);
+    res.json({
+      data: {
+        defaultPolicyId,
+        policies: rows.map(({ policy, usage }) => serializePolicy(policy, usage)),
+      },
+    });
   });
 
   router.post("/admin/providers/:id/verification/:decision", async (req, res) => {

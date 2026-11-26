@@ -70,10 +70,24 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 
 ## 6. File uploads
 
-- Allow-list MIME types (JPEG, PNG, WebP); verify magic bytes, not only the extension.
+- Allow-list MIME types; verify magic bytes, not only the extension.
 - Enforce maximum size; re-encode images and strip EXIF (GPS) metadata.
 - Generate random storage keys; never use the user's filename as a path.
 - Serve from object storage/CDN or a non-executable directory.
+
+**Verification documents (Phase 10, ADR 0016)** follow this as follows.
+
+- **Type:** PDF, JPEG and PNG only, checked from the first bytes.
+- **Size:** exactly the declared size, at most 10 MB. The web server refuses larger `/api/v1`
+  bodies before Next.js buffers them.
+- **Metadata:** JPEG/PNG metadata is stripped (EXIF/GPS, IPTC, comments, text chunks).
+- **Keys:** server-generated (`documents/<provider>/<document>/<random>`); the file name is a display
+  name only.
+- **Storage:** private (local disk outside any web root, files 0600, or a private S3-compatible
+  bucket).
+- **Access:** only the owning partner and admins, through the API. Responses are attachments with
+  `no-store` and a sandboxing CSP. Admin views are audited; audit rows hold metadata only.
+- **Not yet done:** malware scanning, PDF metadata and image re-encoding (operational gaps 26, 29).
 
 ## 7. HTTP & infrastructure
 

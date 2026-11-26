@@ -58,6 +58,17 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
     10 / 15 min per email.
 - Rate-limit counters are kept in process memory: run **one** API instance until a shared store is
   added (operational gap 4).
+- **Verification documents (ADR 0016)** are private files. Set `STORAGE_DRIVER` (required in
+  production):
+  - `s3` with `S3_BUCKET` and `S3_REGION` (plus `S3_ENDPOINT` for Cloudflare R2, MinIO or
+    Backblaze). The bucket must block all public access. Use least-privilege keys
+    (`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`, kept in the secret manager) or an instance role.
+  - `local` with an absolute, backed-up `STORAGE_LOCAL_DIR` outside any web root, for one
+    instance only.
+  - Files are only ever served by the API to the owning partner and to admins.
+  - Uploads are at most 10 MB; the web server refuses larger `/api/v1` bodies, matching
+    `experimental.proxyClientMaxBodySize` in `apps/web/next.config.ts`.
+  - Not yet covered: malware scanning, backup and retention (operational gaps 26–28).
 - **Run the hold-release job** (ADR 0007), otherwise abandoned trips keep their inventory held:
   either schedule `node apps/api/dist/scripts/hold-release.js` every minute with the platform's
   cron/scheduler, or run `node apps/api/dist/scripts/hold-release.js --watch` as one always-on worker

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from "../../lib/document-content.js";
 import { paginationShape, searchShape, sortShape } from "../../lib/pagination.js";
 import { isoDateSchema, uuidSchema } from "../../lib/validation.js";
 
@@ -90,33 +91,28 @@ export const DOCUMENT_TYPES = [
   "OTHER",
 ] as const;
 
-/** security-guidelines §6: allow-listed types; the file itself is not uploaded through the API yet. */
-export const DOCUMENT_MIME_TYPES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-] as const;
-export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+export { DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES } from "../../lib/document-content.js";
 
+/**
+ * POST /partner/verification-documents: ask to upload one document (ADR 0016). The server creates
+ * the record (AWAITING_UPLOAD) and its private storage key; the file itself follows with
+ * PUT …/:id/file, and must match the declared type and size exactly. `fileName` is a display
+ * name only.
+ */
 export const documentBodySchema = z
   .object({
     documentType: z.enum(DOCUMENT_TYPES),
-    /**
-     * Opaque key of the file in MeroStay's private object storage (no URLs: documents must never
-     * be on a public link). Upload/storage is not built yet (operational gap).
-     */
-    storageKey: z
-      .string()
-      .regex(/^[A-Za-z0-9][A-Za-z0-9/_.-]{0,511}$/, {
-        error: "must be an opaque storage key (letters, digits, / _ . -), not a URL",
-      })
-      .refine((key) => !key.includes(".."), { error: "must not contain .." }),
+    fileName: z.string().trim().min(1).max(255),
     mimeType: z.enum(DOCUMENT_MIME_TYPES),
     sizeBytes: z.number().int().min(1).max(MAX_DOCUMENT_BYTES),
     documentNumber: optionalText(60),
     expiresOn: isoDateSchema.nullable().optional(),
   })
+  .strict();
+
+export const documentParamsSchema = z.object({ id: uuidSchema }).strict();
+export const adminDocumentParamsSchema = z
+  .object({ id: uuidSchema, documentId: uuidSchema })
   .strict();
 
 export const adminProvidersQuerySchema = z

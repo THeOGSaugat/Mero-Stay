@@ -102,13 +102,14 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
 | 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `LOCATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED` | Conflicts with current state, availability or an existing account |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json` |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED` | Well-formed, but breaks a business rule |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
+| 413 | `PAYLOAD_TOO_LARGE` | Body over the limit (100 KB JSON; 10 MB for a document file) |
+| 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json`; a document file that is not PDF/JPEG/PNG |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED`, `CANCELLATION_POLICY_INACTIVE`, `CANCELLATION_POLICY_NOT_USABLE`, `INVALID_CANCELLATION_RULES`, `DOCUMENT_TYPE_MISMATCH`, `DOCUMENT_SIZE_MISMATCH`, `DOCUMENT_CONTENT_INVALID` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts from this client (or for this email); see `Retry-After` and [rate limits](#rate-limits-and-the-client-ip-adr-0014) |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
-| 503 | `PAYMENTS_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) |
+| 503 | `PAYMENTS_UNAVAILABLE`, `STORAGE_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) / no document storage |
 
 Database constraint violations are mapped (overbooking → 409, money checks → 422, payment/invoice
 guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never returned.
@@ -143,7 +144,13 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | POST | `/api/v1/partner/onboarding` | Create a provider; the customer becomes a partner |
 | GET / PATCH | `/api/v1/partner/profile` | Own provider: profile, status, masked payout account |
 | POST | `/api/v1/partner/verification/submit` | Ask for verification (DRAFT/REJECTED → PENDING_VERIFICATION) |
-| GET / POST | `/api/v1/partner/verification-documents` | Own verification documents (metadata + private storage key) |
+| GET / POST | `/api/v1/partner/verification-documents` | Own verification documents / request an upload (Phase 10, ADR 0016) |
+| PUT / GET | `/api/v1/partner/verification-documents/:id/file` | Upload the file (raw body) / download own file |
+| POST | `/api/v1/partner/verification-documents/:id/confirm` | Send an uploaded document for review |
+| DELETE | `/api/v1/partner/verification-documents/:id` | Delete a document that is not approved (file removed) |
+| GET / POST | `/api/v1/partner/cancellation-policies` | Own cancellation policies with usage / create one (Phase 10, ADR 0015) |
+| GET / PATCH | `/api/v1/partner/cancellation-policies/:id` | One own policy / edit it (incl. `isActive`) |
+| PUT | `/api/v1/partner/cancellation-policies/default` | The provider's default policy (`{ policyId \| null }`) |
 | GET / POST | `/api/v1/partner/listings` | Own listings (all statuses) / create a listing |
 | GET / PATCH | `/api/v1/partner/listings/:id` | One own listing / update it |
 | GET / POST / PATCH | `/api/v1/partner/listings/:id/slots` | Own inventory: list a range / create a range / update a range |
@@ -248,7 +255,8 @@ or `null`. 404 for inactive verticals, drafts and unverified providers.
   "currency": "NPR", "currencyExponent": 2, "basePriceMinor": "180000",
   "details": { "departureTime": "06:30", "durationMinutes": 300,
                "origin": { "slug": "inaruwa" }, "destination": { "slug": "shree-antu" } },
-  "cancellationPolicy": { "id": "…", "name": "Flexible", "rules": [ … ] },
+  "cancellationPolicy": { "id": "…", "name": "Flexible", "description": "…", "nonRefundable": false,
+                          "rules": [ … ], "source": "listing" },
   "children": [],
   "calendar": { "from": "…", "to": "…", "currency": "NPR", "currencyExponent": 2,
                 "slots": [{ "date": "2027-01-10", "status": "OPEN", "available": 33, "unitPriceMinor": "180000" }] }
@@ -334,7 +342,8 @@ and providers (admin/partner views come in later phases).
     "money": { "subtotalMinor": "770000", "serviceChargeRateBps": 1000, "serviceChargeMinor": "77000",
                "taxRateBps": 1300, "taxMinor": "110110", "totalMinor": "957110",
                "paidMinor": "0", "refundedMinor": "0" },
-    "cancellationPolicy": { "policyId": "…", "name": "Moderate", "rules": [ … ], "capturedAt": "…" },
+    "cancellationPolicy": { "policyId": "…", "name": "Moderate", "description": "…", "nonRefundable": false,
+                            "rules": [ … ], "source": "provider", "capturedAt": "…" },
     "attributes": {}
   }],
   "onlinePayment": { "paidMinor": "0", "dueMinor": "1260000" },
@@ -553,14 +562,49 @@ origin/destination, a listing's place); customer search still takes a slug (gap 
   "hasChildren": true } ] }
 ```
 
-### Verification documents
+### Verification documents (Phase 10, ADR 0016)
 
-`POST /partner/verification-documents` → 201 `{ documentType, storageKey, mimeType
-(application/pdf | image/jpeg | image/png | image/webp), sizeBytes (≤ 10 MB), documentNumber?,
-expiresOn? }`. `storageKey` is an opaque key in MeroStay's private storage; URLs are refused (no
-public links). Status `PENDING` until an admin decides. Audited. `GET` lists them.
+Files are private and pass through the API only: no storage key, URL or presigned link is ever
+returned. Statuses: `AWAITING_UPLOAD → UPLOADED → PENDING` (for review) `→ APPROVED | REJECTED`.
+
+| Step | Request | Response |
+|---|---|---|
+| 1. Request | `POST /partner/verification-documents` `{ documentType, fileName, mimeType (application/pdf \| image/jpeg \| image/png), sizeBytes (1 B – 10 MB), documentNumber?, expiresOn? }`, `Idempotency-Key` optional | `201 { data: document, upload: { method: "PUT", path, contentType, sizeBytes } }`; status `AWAITING_UPLOAD` |
+| 2. Upload | `PUT /partner/verification-documents/:id/file`, the raw file as the body, `Content-Type` = the declared type, `X-CSRF-Token` | `200 { data: document }`, `UPLOADED` |
+| 3. Confirm | `POST /partner/verification-documents/:id/confirm` `{}` | `200 { data: { changed, document } }`, `PENDING` (repeating changes nothing) |
+
+**Upload checks.**
+
+- **Type:** `Content-Type` other than the declared type → `422 DOCUMENT_TYPE_MISMATCH`; not
+  PDF/JPEG/PNG at all → `415 UNSUPPORTED_MEDIA_TYPE`.
+- **Size:** a length other than `sizeBytes` → `422 DOCUMENT_SIZE_MISMATCH`; over 10 MB →
+  `413 PAYLOAD_TOO_LARGE`.
+- **Content:** bytes that are not really that type → `422 DOCUMENT_CONTENT_INVALID`.
+- **Repeat:** a second upload → `409 DOCUMENT_ALREADY_UPLOADED`; confirming before the upload →
+  `409 DOCUMENT_FILE_MISSING`.
+- **Stored bytes:** JPEG/PNG metadata (EXIF/GPS, comments, text chunks) is removed before
+  storage. The stored size and SHA-256 are recorded; `sizeBytes` then shows the stored size.
+
+**Document fields:** `id, documentType, status, fileName, mimeType, sizeBytes, hasFile,
+uploadedAt, documentNumber, expiresOn, reviewedAt, rejectionReason, createdAt`. `storageKey` is no
+longer accepted or returned.
+
+**Download.** `GET /partner/verification-documents/:id/file` returns the owner's own file:
+`Content-Disposition: attachment`, `Cache-Control: private, no-store`, and a sandboxing
+`Content-Security-Policy`. A document of another provider, a deleted one, or one without a file is
+`404` (`DOCUMENT_NOT_FOUND` / `DOCUMENT_FILE_NOT_FOUND`).
+
+**Delete.** `DELETE /partner/verification-documents/:id` → `204`. The record becomes a tombstone
+and the file is removed. An approved document cannot be deleted (`409 DOCUMENT_APPROVED`), nor a
+submitted one while the provider is under review (`409 PROVIDER_UNDER_REVIEW`).
+
+**Audit and storage.** Every step is audited with metadata only. Without configured storage the
+file endpoints answer `503 STORAGE_UNAVAILABLE`.
+
+`GET /partner/verification-documents` lists live documents.
 `POST /partner/verification/submit` (body `{}`) → `{ data: { changed, provider } }`. Every required
-group of the provider type must have a PENDING or APPROVED document, otherwise `409
+group of the provider type must have a PENDING (uploaded and confirmed) or APPROVED document; at
+least one must be PENDING (`409 NO_PENDING_DOCUMENTS`), otherwise `409
 REQUIRED_DOCUMENTS_MISSING` with `details.missing: [ { requirement, acceptedDocumentTypes } ]`. The
 same check runs again when an admin approves.
 
@@ -647,6 +691,41 @@ Errors: `404 BOOKING_NOT_FOUND`, `422 ITEM_NOT_PAY_AT_PROPERTY`, `409 ITEM_NOT_C
 `providerPayoutMinor` = Σ (total − commission) per item (Phase 2 formula; commission = 15% of the
 subtotal). Nothing is paid out in this phase.
 
+### Cancellation policies (Phase 10, ADR 0015)
+
+A policy is a name, an optional description, and a structured rule:
+
+- **Refund tiers:** `rules: [{ minHoursBeforeStart, refundBps }]`, 1–10 of them. Hours are whole
+  numbers from 0 to 8760 and strictly decreasing; `refundBps` is 1–10000 and never increases.
+  Cancelling later than the last tier gets nothing.
+- **Or non-refundable:** `nonRefundable: true` with `rules: []`.
+
+No refund is ever computed here (that comes with refunds, Phase 14).
+
+| Request | Result |
+|---|---|
+| `GET /partner/cancellation-policies` | `{ data: { defaultPolicyId, policies: [ { id, name, description, nonRefundable, rules, isActive, isPlatformTemplate, createdAt, updatedAt, usage: { listings, providerDefault } } ] } }`, oldest first |
+| `POST /partner/cancellation-policies` `{ name, description?, nonRefundable?, rules? }` | `201`, the policy. Bad rules → `400 VALIDATION_ERROR` (details per tier). `Idempotency-Key` optional |
+| `GET /partner/cancellation-policies/:id` | The policy; another provider's → `404 CANCELLATION_POLICY_NOT_FOUND` |
+| `PATCH /partner/cancellation-policies/:id` `{ name?, description?, nonRefundable?, rules?, isActive? }` | The merged rule is checked again (`nonRefundable: true` alone clears the tiers). Switching off a policy that a listing or the default uses → `409 CANCELLATION_POLICY_IN_USE`, `details: { listings, providerDefault }`. Existing bookings never change |
+| `PUT /partner/cancellation-policies/default` `{ policyId \| null }` | `{ data: { changed, defaultPolicyId } }` |
+
+**Attaching.**
+
+- A listing uses `defaultCancellationPolicyId` on `POST`/`PATCH /partner/listings`.
+- Only an own, active policy can be attached: another provider's →
+  `422 UNKNOWN_CANCELLATION_POLICY`; a switched-off one → `422 CANCELLATION_POLICY_INACTIVE`.
+- The database refuses the same (`422 CANCELLATION_POLICY_NOT_USABLE`,
+  `422 INVALID_CANCELLATION_RULES`).
+
+**Resolution.** The listing's policy, else the provider's default, else none.
+
+- `GET /listings/:id` returns it as `cancellationPolicy` with `source: "listing" | "provider"`, or
+  `null` (shown as "no cancellation policy").
+- Adding an item to a trip freezes it in the item's `cancellationPolicy` snapshot
+  `{ policyId, name, description, nonRefundable, rules, source, capturedAt }`.
+- Every write is audited.
+
 ## Admin endpoints for providers, finance and audit (ADR 0008)
 
 - `GET /admin/providers?q=&status=&providerType=&sort=&page=&pageSize=` and `GET /admin/providers/:id`:
@@ -660,6 +739,11 @@ subtotal). Nothing is paid out in this phase.
 - `POST /admin/providers/:id/verification/approve|reject` body `{ reason? }` (required to reject) →
   the provider. Only from `PENDING_VERIFICATION` (else `409 PROVIDER_NOT_PENDING`); approve also
   approves pending documents and verifies the payout account. One audit row per decision.
+- `GET /admin/providers/:id/documents/:documentId/file` (Phase 10): the document's file, for
+  admins only (attachment, no-store); every view writes a `provider.document.view` audit row
+  (metadata only). Another provider's document under this id → `404 DOCUMENT_NOT_FOUND`.
+- `GET /admin/providers/:id/cancellation-policies` (Phase 10, read-only): the provider's policies
+  with usage and its default, in the partner list's shape.
 - `GET /admin/invoices?q=&providerId=&status=&from=&to=&page=` (newest first since Phase 8; `q`
   matches the invoice number or provider name) and `GET /admin/payouts?q=&providerId=&from=&to=&page=`
   (`q` matches the provider name; LIKE wildcards in `q` are literal). Partner invoices are newest

@@ -1,4 +1,6 @@
 import { currencyInfo, minorToString, toJsonSafe } from "../../lib/money-json.js";
+import { resolveCancellationPolicy } from "../../domain/cancellation-policy.js";
+import { serializeResolvedPolicy } from "../cancellation-policies/cancellation-policies.serializers.js";
 import { DETAIL_RELATIONS } from "./listings.repository.js";
 import type {
   ListingAvailability,
@@ -117,9 +119,14 @@ export function serializeListingDetail(result: DetailResult) {
       taxRateBps: listing.taxRateBps,
       details: pickDetails(listing),
       attributes: toJsonSafe(listing.attributes),
-      cancellationPolicy: listing.defaultCancellationPolicy
-        ? toJsonSafe(listing.defaultCancellationPolicy)
-        : null,
+      // The policy that applies now: the listing's, else the provider's default, else null
+      // (shown as "no cancellation policy"). A booking keeps its own frozen copy (ADR 0015).
+      cancellationPolicy: serializeResolvedPolicy(
+        resolveCancellationPolicy(
+          listing.defaultCancellationPolicy,
+          listing.provider.defaultCancellationPolicy,
+        ),
+      ),
       children: listing.children.map((child) => ({
         id: child.id,
         title: child.title,

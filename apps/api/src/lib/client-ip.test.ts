@@ -171,6 +171,8 @@ describe("TRUST_PROXY_* configuration", () => {
       DATABASE_URL: prodUrl,
       NODE_ENV: "production",
       TRUST_PROXY_HOPS: "0",
+      STORAGE_DRIVER: "local",
+      STORAGE_LOCAL_DIR: "/var/lib/merostay/documents",
     });
     expect(trustProxyConfigFromEnv(direct).hops).toBe(0);
   });

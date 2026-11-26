@@ -25,7 +25,7 @@ migrations in `apps/api/prisma/migrations/`. Design rationale: [ADR 0004](decisi
 | `users` | Customers, partners, admins (shape only; auth later) | `email` / `phone` (at least one), `full_name`, `role` |
 | `provider_types` | Lookup: hotel, bus_operator, airline, guide, tour_operator, activity_operator | `code` PK |
 | `providers` | A business or person supplying items | `provider_type_code`, `owner_user_id`, `status`, PAN/VAT/registration numbers, `commission_rate_bps` override, `integration_type`, `external_ref` |
-| `provider_documents` | Verification files (private) | `document_type`, `storage_key` (opaque private key; no URLs), `status`, reviewer |
+| `provider_documents` | Verification files (private, ADR 0016) | `document_type`, `storage_key` (server-generated private key; never sent to clients), `status` `AWAITING_UPLOAD → UPLOADED → PENDING → APPROVED \| REJECTED`, `file_name` (display only), `sha256` and `uploaded_at` of the stored bytes, `deleted_at` (tombstone), reviewer. Triggers fix the transitions, key and stored file |
 | `provider_payout_accounts` | Bank accounts for payouts | bank, account name/number (only ever returned masked), `is_default` (one per provider, partial unique index), `verified_at` (NULL after a change) |
 | `locations` | Province → District → Municipality/Area → Point of interest | `parent_id`, `kind`, `slug` |
 
@@ -42,7 +42,7 @@ migrations in `apps/api/prisma/migrations/`. Design rationale: [ADR 0004](decisi
 | `tour_details` | A `tour` / trek | days, difficulty, start location, max altitude, group size |
 | `flight_route_details` | A `flight_ticket` (modelled, not built) | airline, flight number, airports, times, cabin |
 | `inventory_slots` | Availability per listing per date | `service_date` (unique per listing), `capacity_total`, `capacity_booked` (≤ total), `price_override_minor` |
-| `cancellation_policies` | Refund tiers, per provider or platform template | `rules` JSON array `[{minHoursBeforeStart, refundBps}]` |
+| `cancellation_policies` | Refund terms a provider writes (ADR 0015); platform templates (`provider_id` NULL) are possible but none exist | `rules` JSON array `[{minHoursBeforeStart, refundBps}]` (hours decreasing, refund never increasing; checked by `cancellation_rules_valid()`), `non_refundable` (then no tiers), `is_active` (an attached policy cannot be switched off). Resolution for a booking item: `listings.default_cancellation_policy_id` → `providers.default_cancellation_policy_id` → none; frozen into `booking_items.cancellation_policy_snapshot` |
 
 Listing types in the MVP:
 

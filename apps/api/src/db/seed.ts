@@ -179,7 +179,12 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       },
     });
     await tx.cancellationPolicy.create({
-      data: { name: "Non-refundable (sample)", description: "No refund after booking.", rules: [] },
+      data: {
+        name: "Non-refundable (sample)",
+        description: "No refund after booking.",
+        nonRefundable: true,
+        rules: [],
+      },
     });
 
     // ---------------------------------------------------------------- providers
@@ -230,10 +235,14 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
       data: {
         providerId: busOperator.id,
         documentType: "PAN_CERTIFICATE",
-        storageKey: "sample/provider-documents/pan.pdf",
+        storageKey: "sample/provider-documents/pan",
         mimeType: "application/pdf",
         sizeBytes: 120_000,
         status: "APPROVED",
+        // Sample row: marked as uploaded (no object is stored for it).
+        fileName: "pan-sample.pdf",
+        uploadedAt: new Date(),
+        sha256: "0".repeat(64),
       },
     });
     await tx.providerPayoutAccount.create({

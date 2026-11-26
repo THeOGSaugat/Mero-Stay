@@ -1,3 +1,4 @@
+import type { PolicyTerms } from "./cancellation-policy";
 /**
  * Shapes of the MeroStay API responses the web app uses (docs/architecture/api.md).
  * Every `*Minor` field is a digit STRING; never convert it to a number (see money.ts).
@@ -81,7 +82,8 @@ export interface ListingDetail extends CurrencyInfo {
   taxRateBps: number;
   details: Record<string, unknown> | null;
   attributes: Record<string, unknown> | null;
-  cancellationPolicy: { name: string; description?: string; rules: unknown[] } | null;
+  /** The policy that applies now (listing → provider default), or null = none (ADR 0015). */
+  cancellationPolicy: PolicyTerms | null;
   children: (CurrencyInfo & {
     id: string;
     title: string;
@@ -121,7 +123,8 @@ export interface TripItem extends CurrencyInfo {
   paymentStatus: string;
   lines: { date: string; units: number; unitPriceMinor: string; amountMinor: string }[];
   money: MoneyBreakdown & { paidMinor: string; refundedMinor: string };
-  cancellationPolicy: { name?: string; rules?: unknown[]; capturedAt?: string } | null;
+  /** Frozen when booked (ADR 0015); null = none was attached. */
+  cancellationPolicy: PolicyTerms | null;
   confirmedAt: string | null;
   createdAt: string;
 }

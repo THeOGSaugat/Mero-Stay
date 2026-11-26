@@ -39,6 +39,17 @@ describe("required verification documents", () => {
     }
   });
 
+  it("a document counts only once its file is uploaded and confirmed (ADR 0016)", () => {
+    for (const status of ["AWAITING_UPLOAD", "UPLOADED"] as const) {
+      expect(
+        missingRequirements(hotel, [
+          { documentType: "OWNER_ID", status },
+          { documentType: "BUSINESS_REGISTRATION", status: "PENDING" },
+        ]).map((g) => g.requirement),
+      ).toEqual(["identity"]);
+    }
+  });
+
   it("a rejected document never counts", () => {
     expect(
       missingRequirements(hotel, [

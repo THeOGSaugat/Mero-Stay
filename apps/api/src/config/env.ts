@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
@@ -74,6 +75,30 @@ const envSchema = z
      * linklocal, uniquelocal). Never "true" or a /0. Required in production when hops > 0;
      * default "loopback" elsewhere.
      */
+    /**
+     * Private document storage (ADR 0016): "local" (a directory on this machine) or "s3" (any
+     * S3-compatible bucket). Required in production; default "local" elsewhere.
+     */
+    STORAGE_DRIVER: z.preprocess(emptyAsUndefined, z.enum(["local", "s3"]).optional()),
+    /** Absolute directory for the local driver, outside any web root. Default: apps/api/.storage. */
+    STORAGE_LOCAL_DIR: z.preprocess(
+      emptyAsUndefined,
+      z
+        .string()
+        .refine((dir) => isAbsolute(dir), { error: "must be an absolute directory" })
+        .optional(),
+    ),
+    S3_BUCKET: z.preprocess(emptyAsUndefined, z.string().min(3).max(63).optional()),
+    S3_REGION: z.preprocess(emptyAsUndefined, z.string().min(2).max(40).optional()),
+    /** Only for S3-compatible stores (Cloudflare R2, MinIO, Backblaze); unset for AWS S3. */
+    S3_ENDPOINT: z.preprocess(
+      emptyAsUndefined,
+      z.url({ protocol: /^https?$/, error: "must be an http(s) URL" }).optional(),
+    ),
+    /** Optional: unset = the SDK's default credential chain (e.g. an instance role). */
+    S3_ACCESS_KEY_ID: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
+    S3_SECRET_ACCESS_KEY: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
+    S3_FORCE_PATH_STYLE: z.preprocess(emptyAsUndefined, z.enum(["true", "false"]).optional()),
     TRUST_PROXY_ADDRESSES: z.preprocess(
       emptyAsUndefined,
       z
@@ -134,6 +159,43 @@ const envSchema = z
         code: "custom",
         path: ["TRUST_PROXY_ADDRESSES"],
         message: "is required in production when TRUST_PROXY_HOPS > 0 (the proxies' addresses)",
+      });
+    }
+    // Verification documents need a deliberate storage choice in production (ADR 0016).
+    if (env.NODE_ENV === "production" && env.STORAGE_DRIVER === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_DRIVER"],
+        message: 'is required in production ("local" with STORAGE_LOCAL_DIR, or "s3")',
+      });
+    }
+    if (
+      env.NODE_ENV === "production" &&
+      env.STORAGE_DRIVER === "local" &&
+      env.STORAGE_LOCAL_DIR === undefined
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_LOCAL_DIR"],
+        message: "is required in production with the local driver (a backed-up directory)",
+      });
+    }
+    if (env.STORAGE_DRIVER === "s3") {
+      for (const key of ["S3_BUCKET", "S3_REGION"] as const) {
+        if (env[key] === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: "is required with STORAGE_DRIVER=s3",
+          });
+        }
+      }
+    }
+    if ((env.S3_ACCESS_KEY_ID === undefined) !== (env.S3_SECRET_ACCESS_KEY === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["S3_SECRET_ACCESS_KEY"],
+        message: "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be set together (or both unset)",
       });
     }
   });
@@ -204,6 +266,42 @@ export function trustProxyConfigFromEnv(env: Env): TrustProxyConfig {
     hops: env.TRUST_PROXY_HOPS ?? DEFAULT_DEV_TRUST_PROXY.hops,
     addresses: env.TRUST_PROXY_ADDRESSES ?? DEFAULT_DEV_TRUST_PROXY.addresses,
   };
+}
+
+export type StorageConfig =
+  | { driver: "local"; directory: string }
+  | {
+      driver: "s3";
+      bucket: string;
+      region: string;
+      endpoint?: string;
+      forcePathStyle: boolean;
+      credentials?: { accessKeyId: string; secretAccessKey: string };
+    };
+
+/** apps/api/.storage, from both src/config (tsx) and dist/config (node). Git-ignored. */
+const DEFAULT_LOCAL_STORAGE_DIR = fileURLToPath(new URL("../../.storage", import.meta.url));
+
+/** Document storage settings (ADR 0016). parseEnv already refused incomplete settings. */
+export function storageConfigFromEnv(env: Env): StorageConfig {
+  if (env.STORAGE_DRIVER === "s3") {
+    return {
+      driver: "s3",
+      bucket: env.S3_BUCKET ?? "",
+      region: env.S3_REGION ?? "",
+      ...(env.S3_ENDPOINT ? { endpoint: env.S3_ENDPOINT } : {}),
+      forcePathStyle: env.S3_FORCE_PATH_STYLE === "true",
+      ...(env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
+        ? {
+            credentials: {
+              accessKeyId: env.S3_ACCESS_KEY_ID,
+              secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+            },
+          }
+        : {}),
+    };
+  }
+  return { driver: "local", directory: env.STORAGE_LOCAL_DIR ?? DEFAULT_LOCAL_STORAGE_DIR };
 }
 
 /** Online payment settings for the API server (ADR 0007). */
