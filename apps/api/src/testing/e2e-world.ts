@@ -213,6 +213,111 @@ async function createAdminWorld(prisma: PrismaClient, world: World) {
   };
 }
 
+/**
+ * Phase 10's world (gaps 23 and 14), for EACH Playwright project so they never collide:
+ * - a verified hotel partner with an approved, bookable room and no cancellation policy yet
+ *   (the journey creates one, attaches it, and a customer sees and books it);
+ * - a DRAFT hotel partner whose owner ID is already submitted (seeded: a file is recorded but no
+ *   object is stored) and whose registration is missing: the journey uploads it, submits for
+ *   verification, and an admin opens the file and approves.
+ * One random password for these partners (disposable database).
+ */
+async function createPhase10World(prisma: PrismaClient, world: World) {
+  const s = world.suffix;
+  const password = randomBytes(18).toString("base64url");
+  const passwordHash = await hashPassword(password);
+  const perProject = async (label: "desktop" | "mobile") => {
+    const policyOwner = await prisma.user.create({
+      data: {
+        email: `policy-${label}-${s}@test.local`,
+        fullName: `Sita Policy ${label} ${s}`,
+        role: "PARTNER",
+        passwordHash,
+      },
+    });
+    const policyProvider = await prisma.provider.create({
+      data: {
+        providerTypeCode: "hotel",
+        ownerUserId: policyOwner.id,
+        legalName: `Fewa Policy Lodge ${label} ${s} Pvt. Ltd.`,
+        displayName: `Fewa Policy Lodge ${label} ${s}`,
+        status: "VERIFIED",
+        verifiedAt: new Date(),
+      },
+    });
+    const hotel = await prisma.listing.create({
+      data: {
+        providerId: policyProvider.id,
+        listingTypeCode: "hotel",
+        title: `Fewa Policy Lodge ${label} ${s}`,
+        slug: `fewa-policy-lodge-${label}-${s}`,
+        status: "APPROVED",
+        locationId: world.locations.town.id,
+        basePriceMinor: 0n,
+      },
+    });
+    const room = await prisma.listing.create({
+      data: {
+        providerId: policyProvider.id,
+        listingTypeCode: "hotel_room",
+        title: `Fewa Policy Room ${label} ${s}`,
+        slug: `fewa-policy-room-${label}-${s}`,
+        status: "APPROVED",
+        parentId: hotel.id,
+        locationId: world.locations.village.id,
+        basePriceMinor: 300_000n,
+      },
+    });
+    await prisma.hotelRoomDetail.create({ data: { listingId: room.id, maxAdults: 2 } });
+    for (let n = 0; n < 4; n++) {
+      await prisma.inventorySlot.create({
+        data: { listingId: room.id, serviceDate: toDbDate(world.day(n)), capacityTotal: 5 },
+      });
+    }
+
+    const docsOwner = await prisma.user.create({
+      data: {
+        email: `docs-${label}-${s}@test.local`,
+        fullName: `Ram Documents ${label} ${s}`,
+        role: "PARTNER",
+        passwordHash,
+      },
+    });
+    const docsProvider = await prisma.provider.create({
+      data: {
+        providerTypeCode: "hotel",
+        ownerUserId: docsOwner.id,
+        legalName: `Annapurna Docs Homestay ${label} ${s} Pvt. Ltd.`,
+        displayName: `Annapurna Docs Homestay ${label} ${s}`,
+        status: "DRAFT",
+      },
+    });
+    await prisma.providerDocument.create({
+      data: {
+        providerId: docsProvider.id,
+        documentType: "OWNER_ID",
+        storageKey: `documents/${docsProvider.id}/seeded/owner_id`,
+        mimeType: "application/pdf",
+        sizeBytes: 90_000,
+        status: "PENDING",
+        ...seededFileFields(`e2e-docs-${label}-${s}-owner-id`),
+      },
+    });
+    return {
+      policyPartnerEmail: policyOwner.email!,
+      policyRoomId: room.id,
+      policyRoomTitle: room.title,
+      docsPartnerEmail: docsOwner.email!,
+      docsProviderId: docsProvider.id,
+      docsProviderName: docsProvider.displayName,
+    };
+  };
+  return {
+    phase10Password: password,
+    phase10: { desktop: await perProject("desktop"), mobile: await perProject("mobile") },
+  };
+}
+
 async function main(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is not set.");
@@ -238,10 +343,12 @@ async function main(): Promise<void> {
     const world = await createWorld(prisma);
     const partnerWorld = await createPartnerWorld(prisma, world);
     const adminWorld = await createAdminWorld(prisma, world);
+    const phase10World = await createPhase10World(prisma, world);
     console.log(
       JSON.stringify({
         ...partnerWorld,
         ...adminWorld,
+        ...phase10World,
         provinceSlug: world.locations.province.slug,
         roomId: world.listings.room.id,
         roomTitle: world.listings.room.title,
