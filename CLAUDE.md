@@ -199,6 +199,14 @@ mero-stay/
 - **Payments (ADR 0007):** amounts are computed on the server; one open intent per trip; confirmation is idempotent;
   database guard triggers keep allocations ≤ captured and ≤ item total, item payment status = allocations, and
   invoice amount = linked commission. The simulated gateway is refused in production. `/admin…` requires role ADMIN.
+- **Live gateways (ADR 0017):** eSewa ePay v2 and Khalti ePayment v2 behind `PaymentGatewayAdapter`
+  (`lib/payment-gateways/`; the simulated adapter stays dev/test only). Gateway units become `bigint` paisa
+  inside the adapters. **Never paid from the redirect:** eSewa = signature (constant time) + status API;
+  Khalti = lookup, `Completed` and the exact amount. `POST /payment-callbacks/:gateway` has no session.
+  `domain/gateway-outcome.ts` decides; money that cannot be applied goes to `payment_reconciliations`
+  (never dropped, never allocated). Refund requests are stored only (DB refuses execution). Production
+  refuses to start without gateway config. Tests use local fakes (`testing/fake-gateways.ts`); the real
+  sandbox only via `npm run payment:sandbox-check`.
 - **Partners and admins (ADR 0008):** `/partner…` needs role PARTNER and acts for one owned provider (`X-Provider-Id`
   when several); another provider's data is a 404. Wrong role for an area is 403 before any data is read. Admin writes
   and sensitive partner writes call `recordAudit` inside their transaction (append-only, secrets redacted). Bank
@@ -366,6 +374,7 @@ npm run test:integration     # integration tests: WIPES + migrates the TEST data
 npm run test:e2e             # build + Playwright: Phase 1 checks (uses the dev API read-only)
 E2E_DATABASE_URL=… npm run test:e2e:booking   # + booking journey on a DISPOSABLE database (never dev)
 npm run jobs:hold-release    # release abandoned inventory holds once (cron); :watch = every 60 s (dev runs it)
+npm run payment:sandbox-check -w @merostay/api   # OPT-IN: real eSewa UAT / Khalti sandbox (keys in apps/api/.env)
 ```
 
 Before committing: `npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:integration`.
@@ -388,11 +397,16 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   E2E journeys run in CI). Neon end-of-phase run not clean (a stalled connection; owner accepted). Flaky Neon runs are
   a recorded verification constraint (operational-gaps.md); never mask them with weaker tests, longer timeouts or
   retries. 18 gaps open; **no launch blocker**. Launch checklist: `docs/development/operational-gaps.md#launch-checklist`.
-- **Roadmap:** Admin moderation (gaps 9, 13, 15) is **Phase 12**; the phases after it moved down by one (live
-  gateways 13 … hardening 18).
+- **Roadmap (after Phase 9):** Admin moderation was assigned Phase 12; Phase 11's brief later set the
+  final order (see Phase 11 below).
 - **Phase 10, Cancellation policies & verification documents:** merged to `main`, tagged `v0.10.0`. Gap 23 closed (ADR 0015) and gap 14 closed (ADR 0016); Neon end-of-phase run clean (233/233, attempt 1); residual gaps 26–30 added (malware
   scanning, production storage, backup/retention, PDF metadata/re-encoding, listings without a policy). 21 gaps open;
   **no launch blocker**. Gap 27 (production storage) is on the launch checklist; gap 28 (backup/retention) is for
   Hardening (Phase 18) after the owner's decision; gap 30 (listings without a policy) for Cancellations & refunds
-  (Phase 14). Listing photos and bulk pricing are in the unscheduled "Frontend polish" roadmap row.
-- **Next:** Phase 11 only when the owner sends its prompt.
+  (now Phase 15). Listing photos and bulk pricing are in the unscheduled "Frontend polish" roadmap row.
+- **Phase 11, Live payment gateways:** on `phase/11-live-payment-gateways`, awaiting review (CI green, Neon clean 258/258). Gaps 7 and 8
+  closed (ADR 0017); residual gaps 31–34 (refund execution, production gateway accounts, money after the
+  last check, admin screens). Roadmap order set by the owner: 12 Commission & payouts, 13 Admin moderation,
+  14 Search UX, 15 Cancellations & refunds (refund clock reference decided there), 16 Reviews,
+  17 Notifications, 18 Hardening.
+- **Next:** Phase 12 only when the owner sends its prompt.

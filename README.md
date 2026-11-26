@@ -72,9 +72,14 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
 - **Run the hold-release job** (ADR 0007), otherwise abandoned trips keep their inventory held:
   either schedule `node apps/api/dist/scripts/hold-release.js` every minute with the platform's
   cron/scheduler, or run `node apps/api/dist/scripts/hold-release.js --watch` as one always-on worker
-  process. It is idempotent and safe if two runs overlap. It needs only `DATABASE_URL`.
-- **Online payments:** leave `PAYMENT_GATEWAY` unset in production (the simulated test gateway is
-  refused there; payment endpoints answer 503). Live eSewa/Khalti come in a later phase.
+  process. It is idempotent and safe if two runs overlap. It needs `DATABASE_URL` and the payment
+  settings (it asks eSewa/Khalti about payments of holds about to end; ADR 0017).
+- **Online payments (ADR 0017):** set `PAYMENT_GATEWAYS=esewa,khalti` (`simulated` is refused),
+  `PAYMENT_MODE=production`, the production eSewa product code and secret, the Khalti live secret
+  key (from the secret store, never a committed file) and `PUBLIC_WEB_URL` (the public https web
+  origin customers return to). The API refuses to start without them, or with the test URL
+  overrides. Run `npm run payment:sandbox-check -w @merostay/api` with sandbox keys first; sandbox
+  credentials: [docs/development/payments.md](docs/development/payments.md).
 - **Admins** are users with role `ADMIN`, set directly in the database by an operator (no endpoint
   grants it): `UPDATE users SET role = 'ADMIN' WHERE email = '…';`. Use it sparingly.
 - **Web app (`apps/web`):** set `API_URL` (the API's base URL) for **both** `npm run build` and
