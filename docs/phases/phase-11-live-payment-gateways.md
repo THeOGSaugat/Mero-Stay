@@ -120,7 +120,7 @@ Money columns are `BIGINT` with `> 0` CHECKs (`*_minor` count 21 → 23).
 | CI on `8284c99` (first push) | Run `45826935715`: `e2e` ✔, `verify` ✘ (integration: the concurrency race below) |
 | CI on `49c0ae5` | Run `45827753684`: `verify` ✔ (format, lint, typecheck, unit, integration, build), `e2e` ✔ |
 | **Neon integration (end of phase)** | **17/17 files, 258/258 tests**, 2,814.92 s, exit 0 (on committed `49c0ae5`, below) |
-| Opt-in sandbox check (`payment:sandbox-check`) | **Not run: no eSewa/Khalti keys in `apps/api/.env`** (checked by key name only). Run it after adding sandbox keys ([payments.md](../development/payments.md)) |
+| **Opt-in sandbox check** (`payment:sandbox-check`, real eSewa UAT + Khalti sandbox) | **Pass**: eSewa UAT accepts our signature (wrong signature refused); Khalti payment completed by the owner with a test wallet and confirmed `paid` for the exact amount (below) |
 
 ### Cases
 
@@ -161,8 +161,8 @@ Found and fixed before committing:
 - **eSewa's documented signature example does not reproduce.** With standard HMAC-SHA256, the
   printed result (`4Ov7pCI1…`) does not match the message and UAT secret shown next to it, and the
   demo form's signature does not match either. Checked with openssl and secret variants. The test
-  pins an independently computed vector instead. Whether UAT accepts our signature is the job of
-  the sandbox check.
+  pins an independently computed vector instead. The sandbox check then confirmed that UAT accepts our
+  signature and refuses a wrong one.
 - **E2E: port 4190 is a fetch "bad port".** Chromium reached the fake on 4190 but Node's `fetch`
   refused it ("bad port"), so every API → gateway call failed. Moved to 4180. Found by keeping
   gateway error causes in the server log, which is now permanent and never sent to clients.
@@ -171,6 +171,49 @@ Found and fixed before committing:
 - A refund error's `availableMinor` lacked its currency (the money-boundary checker caught it).
 - The migration folder and two "checked on" notes carried the wrong date (27 instead of 26
   November); renamed and corrected before the Neon run and before committing.
+
+## Sandbox check against the real eSewa UAT and Khalti sandbox
+
+Run after the owner added sandbox keys to `apps/api/.env` (keys never printed; Rs 10, test
+money only). Output as printed:
+
+```text
+$ npm run payment:sandbox-check -w @merostay/api
+
+== eSewa ePay v2 (UAT) ==
+transaction_uuid: d7d168d2-9a89-4fd1-9a4d-5e05a67c29ad
+signed form, our signature: {"httpStatus":302,"redirectsTo":"https://rc-epay.esewa.com.np/epay","bodyMentionsError":false}
+signed form, WRONG signature (contrast): {"httpStatus":400,"redirectsTo":null,"bodyMentionsError":true}
+status API (expect PENDING or NOT_FOUND: nothing was paid): {"status":"pending","reason":null,"amountMinor":"1000","transactionId":null,"gatewayStatus":"PENDING"}
+
+== Khalti ePayment v2 (sandbox) ==
+pidx: bXiaRGNXRSY93awH53XaN7
+expires_at: 2026-11-26T15:33:40.329Z
+payment_url: https://test-pay.khalti.com/?pidx=bXiaRGNXRSY93awH53XaN7
+lookup (expect pending / Initiated): {"status":"pending","reason":null,"amountMinor":"1000","transactionId":null,"gatewayStatus":"Pending"}
+
+# the owner paid payment_url with a Khalti test wallet, then:
+$ npm run payment:sandbox-check -w @merostay/api -- --khalti-lookup bXiaRGNXRSY93awH53XaN7
+
+== Khalti ePayment v2 (sandbox) ==
+lookup: {"status":"paid","reason":null,"amountMinor":"1000","transactionId":"WNFJqffe2Vs5BvNkAk9qrx","gatewayStatus":"Completed"}
+(exit 0)
+```
+
+What this confirms:
+
+- **eSewa accepts our signature.** Our signed form is taken (302 to the payment page); the same
+  form with a wrong signature is refused (400). This settles the doubt from eSewa's documented
+  example, which does not reproduce (ADR 0017): our HMAC-SHA256 message format is the one UAT
+  checks. The UAT status API answers for our uuid and amount (`PENDING`, Rs 10 = 1000 paisa).
+- **Khalti, end to end:** initiate in paisa with the `Key` header works; before payment the lookup
+  is not paid; after the owner's test-wallet payment the lookup is `Completed` for 1000 paisa
+  (exactly what was asked) with a transaction id, which our adapter maps to `paid`.
+- **One difference from Khalti's docs:** right after initiate the sandbox reports `Pending`, not
+  `Initiated`. Both already map to pending (never paid), so no code change was needed.
+- Not covered here: an eSewa UAT payment completed through the browser back to MeroStay (the
+  check verifies signing and the status API; the full round trip with eSewa's redirect is covered
+  against the fake in E2E).
 
 ## Neon integration run (end of phase)
 
@@ -244,9 +287,9 @@ own.
 
 ## Known limitations / follow-ups
 
-- **The sandbox check needs the owner's keys** (eSewa UAT values are public: see
-  [payments.md](../development/payments.md); a Khalti test key from test-admin.khalti.com). Its
-  output goes into the review.
+- **Sandbox check done** (above). A full eSewa UAT payment through the browser back to a running
+  MeroStay was not done; it can be tried with the UAT test IDs in
+  [payments.md](../development/payments.md) when MeroStay runs locally with the UAT settings.
 - **Refund clock reference** (for the Cancellations & refunds phase, 15): is "72+ hours before the
   start" counted from midnight Nepal time of the service date, or from the check-in or departure
   time?

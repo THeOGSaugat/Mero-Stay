@@ -103,7 +103,8 @@ The underlying cause is kept for the server log only. Every gateway request has 
   does the demo form's signature. We verified this with openssl and with key variants. The unit
   test therefore uses that message and secret with the value openssl computes independently
   (`5DZywcrT…`), and a second openssl-computed vector for the field order. Whether eSewa UAT
-  accepts our signature is what `npm run payment:sandbox-check` shows.
+  accepts our signature is what `npm run payment:sandbox-check` shows: on 2026-11-26 UAT accepted
+  our signed form and refused one with a wrong signature (Phase 11 report).
 - **No refund API and no webhook** are documented. Refunds go through the merchant portal.
 
 ### Khalti ePayment v2
@@ -125,7 +126,7 @@ The underlying cause is kept for the server log only. Every gateway request has 
   | Khalti status | Result |
   |---|---|
   | `Completed` | paid |
-  | `Pending`, `Initiated` | pending |
+  | `Pending`, `Initiated` | pending (the sandbox answers `Pending` right after initiate) |
   | `Expired` (HTTP 400 with a body) | expired |
   | `User canceled` (HTTP 400 with a body) | failed |
   | `Refunded`, `Partially Refunded` | failed |
