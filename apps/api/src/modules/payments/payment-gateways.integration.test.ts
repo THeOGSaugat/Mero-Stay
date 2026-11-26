@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../app.js";
 import type { ErrorResponseBody } from "../../lib/errors.js";
 import { inspectDatabaseError } from "../../lib/database-errors.js";
-import { createGateways } from "../../lib/payment-gateways/index.js";
+import { createGateways, createSimulatedAdapter } from "../../lib/payment-gateways/index.js";
 import { createPrismaClient } from "../../lib/prisma.js";
 import { testAuthConfig } from "../../testing/auth-config.js";
 import {
@@ -694,6 +694,62 @@ describe("customers who never come back: the hold-release check (gap 8)", () => 
         .slice(before)
         .filter((r) => (r.body as { pidx?: string }).pidx === pidxOf(checkout)),
     ).toEqual([]);
+  });
+});
+
+describe("concurrent intents while the gateway is slow", () => {
+  it("every caller gets the SAME intent and checkout (200), never PAYMENT_IN_PROGRESS", async () => {
+    // A gateway that takes 400 ms to answer: the other requests take the trip lock while the
+    // first one waits for its checkout (seen in CI as a 409 before the fix).
+    const base = createSimulatedAdapter();
+    const slow = {
+      ...base,
+      createCheckout: async (req: Parameters<typeof base.createCheckout>[0]) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return base.createCheckout(req);
+      },
+    };
+    const slowApp = createApp({
+      logger: pino({ level: "silent" }),
+      checkDatabase: () => Promise.resolve(),
+      prisma,
+      auth: testAuthConfig(),
+      payments: { gateways: { simulated: slow }, publicWebUrl: WEB, mode: "uat" },
+    });
+    const payer = request.agent(slowApp);
+    const reg = await payer.post("/api/v1/auth/register").send({
+      email: `slow-${randomUUID().slice(0, 8)}@test.local`,
+      password: "a long test passphrase",
+      fullName: "Slow payer",
+    });
+    const csrf = (reg.body as { data: { csrfToken: string } }).data.csrfToken;
+    const post = (url: string, body?: object) =>
+      payer
+        .post(url)
+        .set("X-CSRF-Token", csrf)
+        .send(body ?? {});
+    const trip = (await post("/api/v1/trips", { currency: "NPR" })).body as {
+      data: { id: string };
+    };
+    const id = trip.data.id;
+    await post(`/api/v1/trips/${id}/items`, {
+      listingId: world.listings.bus.id,
+      startDate: world.day(1),
+      quantity: 1,
+      paymentMethod: "online",
+    });
+    expect((await post(`/api/v1/trips/${id}/confirm`)).status).toBe(200);
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        post(`/api/v1/trips/${id}/payments/intent`, { gateway: "simulated" }),
+      ),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([200, 200, 200, 200, 201]);
+    const ids = new Set(results.map((r) => dataOf<IntentBody>(r).payment.id));
+    expect(ids.size).toBe(1);
+    for (const r of results) expect(dataOf<IntentBody>(r).checkout).toEqual({ type: "simulated" });
+    expect(await prisma.payment.count({ where: { tripId: id } })).toBe(1);
   });
 });
 

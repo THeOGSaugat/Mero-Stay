@@ -179,6 +179,32 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
   }
 
   /**
+   * Concurrent intent requests (ADR 0007: they share ONE intent): the first one stores the
+   * checkout after the gateway answers; the others wait for it here (at most the gateway's time
+   * limit plus a margin) and return the same intent. If it never appears, or the start failed,
+   * the caller gets 409 PAYMENT_IN_PROGRESS and can simply retry.
+   */
+  async function waitForCheckout(
+    paymentId: string,
+  ): Promise<PaymentWithAllocations & { checkout: CheckoutInstruction }> {
+    const deadline = Date.now() + 12_000;
+    for (;;) {
+      const payment = await prisma.payment.findUniqueOrThrow({
+        where: { id: paymentId },
+        include: PAYMENT_INCLUDE,
+      });
+      const open = payment.status === "INITIATED" || payment.status === "PENDING";
+      if (open && payment.checkout !== null) {
+        return { ...payment, checkout: payment.checkout as CheckoutInstruction };
+      }
+      if (!open || Date.now() > deadline) {
+        throw new AppError(409, "PAYMENT_IN_PROGRESS", "This payment is being started. Try again.");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
    * Creates the payment intent for everything still due online with the chosen gateway, or returns
    * the open intent if it covers exactly the same items and amounts with the same gateway and its
    * checkout is still valid (repeated or concurrent calls never create a second charge). An open
@@ -212,12 +238,10 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
           open.checkout !== null &&
           (!open.checkoutExpiresAt || open.checkoutExpiresAt.getTime() > at.getTime() + 60_000);
         if (usable) return { reused: true as const, payment: open, lines, trip };
+        // Another request created this intent and is fetching its checkout from the gateway
+        // (outside the lock): wait for it below and return the same intent.
         if (open.checkout === null && at.getTime() - open.createdAt.getTime() < 30_000) {
-          throw new AppError(
-            409,
-            "PAYMENT_IN_PROGRESS",
-            "This payment is being started. Try again.",
-          );
+          return { reused: "in_progress" as const, paymentId: open.id, lines };
         }
       }
       if (open) {
@@ -241,6 +265,10 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
       return { reused: false as const, payment, lines, trip };
     }, TX_OPTIONS);
 
+    if (started.reused === "in_progress") {
+      const ready = await waitForCheckout(started.paymentId);
+      return { payment: ready, lines: started.lines, created: false, checkout: ready.checkout };
+    }
     if (started.reused) {
       return {
         payment: started.payment,
