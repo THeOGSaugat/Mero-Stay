@@ -80,8 +80,15 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
   origin customers return to). The API refuses to start without them, or with the test URL
   overrides. Run `npm run payment:sandbox-check -w @merostay/api` with sandbox keys first; sandbox
   credentials: [docs/development/payments.md](docs/development/payments.md).
-- **Admins** are users with role `ADMIN`, set directly in the database by an operator (no endpoint
-  grants it): `UPDATE users SET role = 'ADMIN' WHERE email = '…';`. Use it sparingly.
+- **Admins:** the FIRST admin is created by an operator in the database (`UPDATE users SET role =
+  'ADMIN' WHERE email = '…';` for an account with a password). Further admins are added in the
+  console (Admins → Add admin): it shows a one-time setup link (24 h) to hand over in person or by
+  phone; the new admin chooses their own password (ADR 0018). The last active admin can never be
+  suspended.
+- **Payouts** (ADR 0018): once a month, Payouts → Prepare payouts for last month, Schedule each
+  batch (the provider's bank account must be verified), make the bank transfer outside MeroStay,
+  then Record as paid with the bank's reference. The hold-release job also re-checks closed
+  eSewa/Khalti payments, so it must keep running.
 - **Web app (`apps/web`):** set `API_URL` (the API's base URL) for **both** `npm run build` and
   `npm start`. Browsers call `/api/v1/*` on the web origin and Next.js proxies it to `API_URL`; the
   proxy target is fixed at build time (ADR 0010).

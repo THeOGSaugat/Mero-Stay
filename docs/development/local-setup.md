@@ -113,6 +113,7 @@ Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they 
 | `apps/api/.env` | `ESEWA_PRODUCT_CODE`, `ESEWA_SECRET_KEY` | Required when `esewa` is listed. Sandbox values: [payments.md](payments.md). Never commit real ones |
 | `apps/api/.env` | `KHALTI_SECRET_KEY` | Required when `khalti` is listed (test key from test-admin.khalti.com). Never commit it |
 | `apps/api/.env` | `PUBLIC_WEB_URL` | Required for eSewa/Khalti: the web origin gateways send customers back to (https in production) |
+| `apps/api/.env` | `AUTH_LOGIN_PER_IP_LIMIT` | *Tests only.* Raises the per-client login limit (default 30 per 15 minutes); the E2E suite sets it because all its browsers share one address. Refused in production |
 | `apps/api/.env` | `HOLD_RELEASE_INTERVAL_SECONDS` | *Optional.* Seconds between hold-release runs in watch mode (default 60) |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
@@ -146,7 +147,8 @@ the built script either from the platform's scheduler every minute
 (`node apps/api/dist/scripts/hold-release.js`, exits when done) or as one always-on worker
 (`node apps/api/dist/scripts/hold-release.js --watch`). Overlapping runs are safe: each stale trip
 is released exactly once (`FOR UPDATE SKIP LOCKED`). Before releasing, it asks eSewa/Khalti about
-open payments of holds about to end (gap 8), so it needs `DATABASE_URL` and the payment settings. CI does not run
+open payments of holds about to end (gap 8) and re-checks closed ones on a schedule (gap 33, ADR 0018),
+so it needs `DATABASE_URL` and the payment settings. CI does not run
 it on a schedule; its behaviour is covered by `src/jobs/*.test.ts`.
 
 ### Trying payments locally
