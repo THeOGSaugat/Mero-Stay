@@ -9,6 +9,13 @@ import {
 } from "../modules/auth/auth.config.js";
 import type { PaymentsConfig } from "../modules/payments/payments.config.js";
 import {
+  createGateways,
+  ESEWA_URLS,
+  GATEWAY_NAMES,
+  KHALTI_URLS,
+  type GatewayName,
+} from "../lib/payment-gateways/index.js";
+import {
   MAX_TRUST_PROXY_HOPS,
   parseTrustedAddresses,
   type TrustProxyConfig,
@@ -50,12 +57,64 @@ const envSchema = z
     ),
     /** Send the session cookie only over HTTPS. Default: true in production, false otherwise. */
     SESSION_COOKIE_SECURE: z.preprocess(emptyAsUndefined, z.enum(["true", "false"]).optional()),
+    /** Phase 5's single-gateway setting, replaced by PAYMENT_GATEWAYS: refused, never ignored. */
+    PAYMENT_GATEWAY: z.preprocess(
+      emptyAsUndefined,
+      z.undefined({ error: "was renamed to PAYMENT_GATEWAYS (ADR 0017)" }),
+    ),
     /**
-     * Online payment gateway (ADR 0007). Only "simulated" exists this phase: payments are marked
-     * succeeded by an API call instead of a real provider, so it is REFUSED in production. Unset =
-     * online payments are unavailable (payment endpoints return 503). Explicit opt-in everywhere.
+     * Online payment gateways customers may use (ADR 0017), comma-separated: esewa, khalti, and
+     * "simulated" (development and tests only: a payment is marked paid by an API call, so it is
+     * REFUSED in production). Unset = no online payments (503). Required in production.
      */
-    PAYMENT_GATEWAY: z.preprocess(emptyAsUndefined, z.enum(["simulated"]).optional()),
+    PAYMENT_GATEWAYS: z.preprocess(
+      emptyAsUndefined,
+      z
+        .string()
+        .transform((raw, ctx) => {
+          const names = [
+            ...new Set(
+              raw
+                .split(",")
+                .map((n) => n.trim().toLowerCase())
+                .filter(Boolean),
+            ),
+          ];
+          const unknown = names.filter((n) => !(GATEWAY_NAMES as readonly string[]).includes(n));
+          if (names.length === 0 || unknown.length > 0) {
+            ctx.addIssue({
+              code: "custom",
+              message: `must list esewa, khalti or simulated (unknown: ${unknown.join(", ") || "none given"})`,
+            });
+            return z.NEVER;
+          }
+          return names as GatewayName[];
+        })
+        .optional(),
+    ),
+    /** Gateway environment: "uat" (eSewa UAT, Khalti sandbox; no real money) or "production". */
+    PAYMENT_MODE: z.preprocess(emptyAsUndefined, z.enum(["uat", "production"]).optional()),
+    /** eSewa merchant (product) code, e.g. EPAYTEST in UAT. */
+    ESEWA_PRODUCT_CODE: z.preprocess(
+      emptyAsUndefined,
+      z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{2,60}$/, { error: "must be an eSewa product code" })
+        .optional(),
+    ),
+    /** eSewa HMAC secret. Never logged or echoed. */
+    ESEWA_SECRET_KEY: z.preprocess(emptyAsUndefined, z.string().min(8).max(200).optional()),
+    /** Khalti secret key (sandbox key from test-admin.khalti.com). Never logged or echoed. */
+    KHALTI_SECRET_KEY: z.preprocess(emptyAsUndefined, z.string().min(8).max(200).optional()),
+    /** The web app's public origin: gateways send customers back to it, e.g. https://merostay.com.np. */
+    PUBLIC_WEB_URL: z.preprocess(
+      emptyAsUndefined,
+      z.url({ protocol: /^https?$/, error: "must be an http(s) URL" }).optional(),
+    ),
+    /** Test-only overrides (fake gateways in tests and E2E); refused in production. */
+    ESEWA_FORM_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
+    ESEWA_STATUS_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
+    KHALTI_API_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
     /** How often the hold-release worker runs in --watch mode (default 60 s). */
     HOLD_RELEASE_INTERVAL_SECONDS: z.preprocess(
       emptyAsUndefined,
@@ -127,13 +186,9 @@ const envSchema = z
         message: "must include sslmode=require in production",
       });
     }
-    if (env.NODE_ENV === "production" && env.PAYMENT_GATEWAY === "simulated") {
-      ctx.addIssue({
-        code: "custom",
-        path: ["PAYMENT_GATEWAY"],
-        message: "cannot be simulated in production (anyone could mark their own payment as paid)",
-      });
-    }
+    paymentIssues(env).forEach(([path, message]) =>
+      ctx.addIssue({ code: "custom", path: [path], message }),
+    );
     if (env.NODE_ENV === "production" && env.SESSION_COOKIE_SECURE === "false") {
       ctx.addIssue({
         code: "custom",
@@ -201,6 +256,63 @@ const envSchema = z
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+/**
+ * Payment configuration problems as [variable, message] (ADR 0017). Production: gateways and the
+ * mode must be stated, the mode must be "production" (no sandbox money in production), never the
+ * simulated gateway, each gateway's keys present, an https PUBLIC_WEB_URL, no test overrides.
+ */
+function paymentIssues(env: {
+  NODE_ENV: string;
+  PAYMENT_GATEWAYS?: GatewayName[] | undefined;
+  PAYMENT_MODE?: "uat" | "production" | undefined;
+  ESEWA_PRODUCT_CODE?: string | undefined;
+  ESEWA_SECRET_KEY?: string | undefined;
+  KHALTI_SECRET_KEY?: string | undefined;
+  PUBLIC_WEB_URL?: string | undefined;
+  ESEWA_FORM_URL?: string | undefined;
+  ESEWA_STATUS_URL?: string | undefined;
+  KHALTI_API_URL?: string | undefined;
+}): [string, string][] {
+  const issues: [string, string][] = [];
+  const production = env.NODE_ENV === "production";
+  const names = env.PAYMENT_GATEWAYS ?? [];
+  if (production && names.length === 0) {
+    issues.push(["PAYMENT_GATEWAYS", "is required in production (esewa and/or khalti)"]);
+  }
+  if (production && names.includes("simulated")) {
+    issues.push([
+      "PAYMENT_GATEWAYS",
+      "cannot include simulated in production (anyone could mark their own payment as paid)",
+    ]);
+  }
+  if (production && env.PAYMENT_MODE !== "production") {
+    issues.push([
+      "PAYMENT_MODE",
+      "must be production in production (the UAT/sandbox gateways take no real money)",
+    ]);
+  }
+  if (names.includes("esewa")) {
+    if (!env.ESEWA_PRODUCT_CODE) issues.push(["ESEWA_PRODUCT_CODE", "is required for esewa"]);
+    if (!env.ESEWA_SECRET_KEY) issues.push(["ESEWA_SECRET_KEY", "is required for esewa"]);
+  }
+  if (names.includes("khalti") && !env.KHALTI_SECRET_KEY) {
+    issues.push(["KHALTI_SECRET_KEY", "is required for khalti"]);
+  }
+  const live = names.includes("esewa") || names.includes("khalti");
+  if (live && !env.PUBLIC_WEB_URL) {
+    issues.push(["PUBLIC_WEB_URL", "is required for esewa and khalti (where customers return)"]);
+  }
+  if (production && live && env.PUBLIC_WEB_URL && !env.PUBLIC_WEB_URL.startsWith("https://")) {
+    issues.push(["PUBLIC_WEB_URL", "must be https in production"]);
+  }
+  if (production) {
+    for (const key of ["ESEWA_FORM_URL", "ESEWA_STATUS_URL", "KHALTI_API_URL"] as const) {
+      if (env[key]) issues.push([key, "is a test-only override and is refused in production"]);
+    }
+  }
+  return issues;
+}
 
 /**
  * Parses and validates environment variables.
@@ -304,7 +416,36 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
   return { driver: "local", directory: env.STORAGE_LOCAL_DIR ?? DEFAULT_LOCAL_STORAGE_DIR };
 }
 
-/** Online payment settings for the API server (ADR 0007). */
+/**
+ * Online payment settings for the API server (ADR 0017): the enabled gateway adapters and where
+ * gateways send customers back. parseEnv has already refused anything incomplete or unsafe.
+ */
 export function paymentsConfigFromEnv(env: Env): PaymentsConfig {
-  return { gateway: env.PAYMENT_GATEWAY ?? null };
+  const names = env.PAYMENT_GATEWAYS ?? [];
+  const mode = env.PAYMENT_MODE ?? "uat";
+  return {
+    gateways: createGateways({
+      ...(names.includes("esewa") && env.ESEWA_PRODUCT_CODE && env.ESEWA_SECRET_KEY
+        ? {
+            esewa: {
+              productCode: env.ESEWA_PRODUCT_CODE,
+              secretKey: env.ESEWA_SECRET_KEY,
+              formUrl: env.ESEWA_FORM_URL ?? ESEWA_URLS[mode].formUrl,
+              statusUrl: env.ESEWA_STATUS_URL ?? ESEWA_URLS[mode].statusUrl,
+            },
+          }
+        : {}),
+      ...(names.includes("khalti") && env.KHALTI_SECRET_KEY
+        ? {
+            khalti: {
+              secretKey: env.KHALTI_SECRET_KEY,
+              apiUrl: (env.KHALTI_API_URL ?? KHALTI_URLS[mode]).replace(/\/+$/, ""),
+            },
+          }
+        : {}),
+      simulated: names.includes("simulated"),
+    }),
+    publicWebUrl: env.PUBLIC_WEB_URL ? env.PUBLIC_WEB_URL.replace(/\/+$/, "") : null,
+    mode,
+  };
 }

@@ -102,17 +102,19 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | No valid session / wrong email or password (one generic message) |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
 | 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
+| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND`, `RECONCILIATION_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT`, `PAYMENT_IN_PROGRESS`, `RECONCILIATION_ALREADY_RESOLVED`, `RECONCILIATION_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
 | 413 | `PAYLOAD_TOO_LARGE` | Body over the limit (100 KB JSON; 10 MB for a document file) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json`; a document file that is not PDF/JPEG/PNG |
-| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED`, `CANCELLATION_POLICY_INACTIVE`, `CANCELLATION_POLICY_NOT_USABLE`, `INVALID_CANCELLATION_RULES`, `DOCUMENT_TYPE_MISMATCH`, `DOCUMENT_SIZE_MISMATCH`, `DOCUMENT_CONTENT_INVALID` | Well-formed, but breaks a business rule |
+| 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED`, `CANCELLATION_POLICY_INACTIVE`, `CANCELLATION_POLICY_NOT_USABLE`, `INVALID_CANCELLATION_RULES`, `DOCUMENT_TYPE_MISMATCH`, `DOCUMENT_SIZE_MISMATCH`, `DOCUMENT_CONTENT_INVALID`, `PAYMENT_GATEWAY_NOT_AVAILABLE`, `PAYMENT_CURRENCY_NOT_SUPPORTED`, `PAYMENT_GATEWAY_REJECTED`, `PAYMENT_CALLBACK_INVALID`, `REFUND_EXCEEDS_PAID` | Well-formed, but breaks a business rule |
 | 429 | `RATE_LIMITED` | Too many login/registration attempts from this client (or for this email); see `Retry-After` and [rate limits](#rate-limits-and-the-client-ip-adr-0014) |
 | 500 | `INTERNAL_ERROR` | Unexpected; details only in server logs |
-| 503 | `PAYMENTS_UNAVAILABLE`, `STORAGE_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAY` unset) / no document storage |
+| 502 | `PAYMENT_GATEWAY_UNAVAILABLE` | eSewa/Khalti did not answer (nothing was marked paid); try again |
+| 503 | `PAYMENTS_UNAVAILABLE`, `STORAGE_UNAVAILABLE` | No payment gateway is configured (`PAYMENT_GATEWAYS` unset) / no document storage |
 
 Database constraint violations are mapped (overbooking → 409, money checks → 422, payment/invoice
-guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never returned.
+guards → 422 `PAYMENT_INVARIANT_VIOLATED`, refund guard → 422 `REFUND_EXCEEDS_PAID`, reconciliation
+records → 409 `RECONCILIATION_STATE_CONFLICT`). Raw PostgreSQL text is never returned.
 
 ## Endpoints
 
@@ -134,8 +136,10 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | DELETE | `/api/v1/trips/:id/items/:itemId` | Remove an item (releases inventory) |
 | POST | `/api/v1/trips/:id/quote` | Dry-run pricing, optionally with candidate items |
 | POST | `/api/v1/trips/:id/confirm` | Submit the trip (no payment taken; issues commission invoices) |
-| POST | `/api/v1/trips/:id/payments/intent` | Create (or reuse) the payment intent for what is due online |
-| POST | `/api/v1/trips/:id/payments/:paymentId/confirm` | Record the gateway result (simulated this phase) |
+| POST | `/api/v1/trips/:id/payments/intent` | Create (or reuse) the payment intent and checkout for the chosen gateway (ADR 0017) |
+| POST | `/api/v1/payment-callbacks/:gateway` | eSewa/Khalti return: verify with the gateway and apply (no session) |
+| POST | `/api/v1/trips/:id/payments/:paymentId/refresh` | Ask the gateway now, server to server |
+| POST | `/api/v1/trips/:id/payments/:paymentId/confirm` | Simulated gateway only: record a test result |
 | GET | `/api/v1/trips/:id/payments` | The trip's payments and their allocations |
 | POST | `/api/v1/admin/trips/:id/payments/at-property/settle` | ADMIN: record that pay-at-property items were paid on arrival |
 | GET | `/api/v1/admin/trips/:id/invoices` | ADMIN: the trip's commission invoices |
@@ -164,6 +168,9 @@ guards → 422 `PAYMENT_INVARIANT_VIOLATED`). Raw PostgreSQL text is never retur
 | GET | `/api/v1/admin/payouts` | ADMIN: payout summary across providers (read-only) |
 | GET | `/api/v1/admin/audit-log` | ADMIN: the audit log (filter actor/action/entity/date); actors by name |
 | GET | `/api/v1/admin/provider-types` | ADMIN: every provider type with its listing rules and flags (read-only, ADR 0013) |
+| GET | `/api/v1/admin/payment-reconciliations` | ADMIN: late or unusable payments to handle (gap 8, ADR 0017) |
+| POST | `/api/v1/admin/payment-reconciliations/:id/resolve` | ADMIN: mark one handled, with a note; audited |
+| GET / POST | `/api/v1/admin/refund-requests` | ADMIN: refund requests / record one (stored, **never executed**); audited |
 
 ### POST /api/v1/auth/register → 201 (+ session cookie)
 
@@ -378,13 +385,21 @@ Trip → `CONFIRMED` when every item is confirmed; otherwise `PENDING` (awaiting
 `expiresAt`. Money is not re-priced. A confirmed/pending trip can't be edited (409), so a retried
 confirm never creates a second invoice.
 
-## Payments (ADR 0007)
+## Payments (ADR 0007, ADR 0017)
 
-Online payment is a two-step flow: create an intent for what is due, then confirm it with the
-gateway's result. **This phase has only a simulated gateway** (`PAYMENT_GATEWAY=simulated`,
-refused in production); without a gateway both steps return `503 PAYMENTS_UNAVAILABLE`. Amounts
-are always computed on the server; the client never sends a price. All endpoints are owner-only
+Online payment: the customer chooses a gateway, the API creates an intent for exactly what is due
+and returns a **checkout** for the browser; the gateway sends the customer back to the web app,
+which hands the gateway's answer to the **callback** endpoint; the API verifies it **server to
+server** before anything is marked paid. Gateways (`PAYMENT_GATEWAYS`): `esewa` (ePay v2), `khalti`
+(ePayment v2), and `simulated` (development and tests only, refused in production; paid through
+`/confirm`). Without a gateway the endpoints return `503 PAYMENTS_UNAVAILABLE`. Amounts are always
+computed on the server; the client never sends a price or a status. Trip endpoints are owner-only
 (another user's trip → `404 TRIP_NOT_FOUND`) and writes need `X-CSRF-Token`.
+
+**Never paid from the redirect alone.** eSewa: the callback's `data` must carry a valid HMAC-SHA256
+signature for this payment and merchant, **and** eSewa's status API must say `COMPLETE` for the same
+amount. Khalti: the return's `pidx` only names the payment; Khalti's lookup must say `Completed`
+for exactly the amount asked. Anything else is `pending`, `failed` or `expired`.
 
 **Per-item payment status**
 
@@ -395,23 +410,32 @@ are always computed on the server; the client never sends a price. All endpoints
 | `PAID` | online | Allocations equal the item total; the item is `CONFIRMED` |
 | `PAY_AT_PROPERTY` | at property | Due to the provider on arrival |
 | `PAID_AT_PROPERTY` | at property | Settled at the property (recorded by an admin) |
-| `PARTIALLY_REFUNDED`, `REFUNDED` | online | Refunds (later phase) |
+| `PARTIALLY_REFUNDED`, `REFUNDED` | online | Refunds (Cancellations & refunds phase) |
 
 **Payment (transaction) status:** `INITIATED` (open intent) → `SUCCEEDED` / `FAILED` / `CANCELLED`
-(cancelled when replaced by a new intent or when the hold-release job sweeps the trip). A finished
-payment never changes.
+(cancelled when replaced by a new intent, when the hold-release job sweeps the trip, or when money
+arrives that can no longer be applied). A finished payment never changes.
+
+**Late or unusable money (gap 8).** Money the gateway confirms is never dropped. If it cannot be
+applied (the payment was already cancelled, e.g. the hold expired; the trip no longer waits; the
+amount due changed; the gateway took a different amount; or a second transaction on a paid
+intent), it is recorded once in `payment_reconciliations` (unique per gateway transaction) for an
+admin, and nothing is allocated. The callback answers `outcome: "reconciliation"`.
 
 ### POST /api/v1/trips/:id/payments/intent → 201 (new) / 200 (existing)
 
-Body: none or `{}`. The trip must be `PENDING` (confirmed, awaiting payment) and inside its hold
-window. Due lines = every pending online item's `total − paid`, in item order.
+Body: `{ "gateway": "esewa" | "khalti" | "simulated" }` (one of the enabled gateways, else
+`422 PAYMENT_GATEWAY_NOT_AVAILABLE`). The trip must be `PENDING` (confirmed, awaiting payment) and
+inside its hold window. Due lines = every pending online item's `total − paid`, in item order.
+eSewa and Khalti accept NPR only (`422 PAYMENT_CURRENCY_NOT_SUPPORTED`); Khalti needs at least
+Rs 10 (`422 PAYMENT_GATEWAY_REJECTED`).
 
 ```json
 { "data": {
   "created": true,
   "currency": "NPR", "currencyExponent": 2,
   "payment": {
-    "id": "…", "tripId": "…", "kind": "CHARGE", "gateway": "simulated", "status": "INITIATED",
+    "id": "…", "tripId": "…", "kind": "CHARGE", "gateway": "esewa", "status": "INITIATED",
     "currency": "NPR", "currencyExponent": 2,
     "amountMinor": "1260000", "capturedMinor": "0", "gatewayTransactionId": null,
     "allocations": [], "createdAt": "…", "completedAt": null
@@ -419,18 +443,64 @@ window. Due lines = every pending online item's `total − paid`, in item order.
   "due": {
     "lines": [ { "itemId": "…", "dueMinor": "360000" }, { "itemId": "…", "dueMinor": "900000" } ],
     "totalDueMinor": "1260000"
-  }
+  },
+  "checkout": { "type": "form", "method": "POST",
+    "url": "https://rc-epay.esewa.com.np/api/epay/main/v2/form",
+    "fields": { "amount": "12600", "tax_amount": "0", "total_amount": "12600",
+      "transaction_uuid": "<payment id>", "product_code": "EPAYTEST",
+      "product_service_charge": "0", "product_delivery_charge": "0",
+      "success_url": "https://<web>/payments/esewa/return/<payment id>",
+      "failure_url": "https://<web>/payments/esewa/failure/<payment id>",
+      "signed_field_names": "total_amount,transaction_uuid,product_code", "signature": "…" } }
 } }
 ```
 
-`payment.id` is the payment reference (send it to the gateway as the order id). **Idempotent:**
-while the due lines are unchanged, every call (also concurrent ones) returns the same open intent
-with `200` and `created: false`. A trip has at most one open intent (enforced by the database).
-Errors: `409 TRIP_NOT_CONFIRMED` (draft), `409 NOTHING_DUE`, `409 TRIP_EXPIRED`.
+`checkout` is what the browser does next and never contains a secret: eSewa = POST this signed
+form (rupees, as eSewa expects); Khalti = `{ "type": "redirect", "url": "<payment_url>" }` (the API
+called Khalti's initiate with paisa); simulated = `{ "type": "simulated" }`. **Idempotent:** while
+the due lines and the gateway are unchanged and the checkout is still valid, every call returns the
+same open intent and checkout with `200` and `created: false`. Choosing another gateway, or a
+change in what is due, cancels the open intent and starts a new one. A trip has at most one open
+intent (enforced by the database). Errors: `409 TRIP_NOT_CONFIRMED` (draft), `409 NOTHING_DUE`,
+`409 TRIP_EXPIRED`, `409 PAYMENT_IN_PROGRESS` (concurrent calls wait up to 12 s for the first
+one's checkout and get the same intent; this only when it never appeared or failed: retry),
+`502 PAYMENT_GATEWAY_UNAVAILABLE` (the gateway did not answer; the intent is closed as `FAILED`).
+
+### POST /api/v1/payment-callbacks/:gateway → 200 (no session)
+
+`:gateway` = `esewa` or `khalti`. Called by the web app's return pages
+(`/payments/<gateway>/return/<paymentId>`, `/payments/<gateway>/failure/<paymentId>`) with what the
+gateway put in the address. No session or CSRF token: nothing in it is trusted; the API verifies it
+with the gateway. Rate limited per client (30 per minute).
+
+| Gateway | Body | Verification |
+|---|---|---|
+| eSewa | `{ "paymentId": "…", "data": "<base64 from eSewa>" }` | Signature (constant-time), same `transaction_uuid` and product code, then the status API. Without `data` (failure page): the status API only |
+| Khalti | `{ "paymentId": "…", "pidx": "…" }` | `pidx` must be this payment's; then Khalti's lookup. Other return parameters are ignored |
+
+```json
+{ "data": { "tripId": "…", "outcome": "paid",
+  "payment": { "id": "…", "status": "SUCCEEDED", "capturedMinor": "1260000", "…": "…" },
+  "reconciliation": null } }
+```
+
+`outcome`: `paid`, `replayed` (already applied: the same transaction again changes nothing),
+`pending` (not confirmed yet), `failed`, `expired`, or `reconciliation` (money received that could
+not be applied; `reconciliation: { id, reason }`). Repeats, reloads and concurrent calls are safe:
+one allocation per payment, one reconciliation per gateway transaction. Errors:
+`404 PAYMENT_NOT_FOUND` (unknown payment, or not this gateway's), `422 PAYMENT_CALLBACK_INVALID`
+(forged, tampered or for another payment), `502 PAYMENT_GATEWAY_UNAVAILABLE` (try again).
+Responses carry `Cache-Control: no-store`.
+
+### POST /api/v1/trips/:id/payments/:paymentId/refresh → 200
+
+Owner only. Asks the gateway (server to server) what happened to this eSewa or Khalti payment and
+applies the result exactly like a callback (same response). Simulated payments → `409`.
 
 ### POST /api/v1/trips/:id/payments/:paymentId/confirm → 200
 
-Simulated gateway callback. Body (all optional):
+**Simulated gateway only** (development and tests): stands in for a verified callback. Body (all
+optional):
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -762,7 +832,36 @@ No refund is ever computed here (that comes with refunds, Phase 14).
 `actor` is `null` for a system action. Audit payloads never contain passwords, hashes, tokens, secrets or full bank numbers (redacted in
 code; refused by a database CHECK). Actions recorded: `provider.create`,
 `provider.payout_account.change`, `provider.document.submit`, `provider.verification.submit`,
-`provider.verification.approve|reject`, `booking_item.settle_at_property`, `trip.settle_at_property`.
+`provider.verification.approve|reject`, `booking_item.settle_at_property`, `trip.settle_at_property`,
+`payment_reconciliation.resolve`, `refund_request.create` (Phase 11).
+
+## Admin: late payments and refund requests (Phase 11, ADR 0017)
+
+- `GET /admin/payment-reconciliations?status=OPEN|RESOLVED&page=&pageSize=`, newest first: money a
+  gateway confirmed that could not be applied (gap 8). `reason`: `PAYMENT_NOT_OPEN` (the payment was
+  already cancelled, typically the hold expired), `TRIP_NOT_AWAITING_PAYMENT`, `INTENT_STALE` (the
+  amount due changed), `AMOUNT_MISMATCH` (the gateway took a different amount), `DUPLICATE_PAYMENT`
+  (a second transaction on a paid intent).
+
+```json
+{ "data": [ { "id": "…", "paymentId": "…", "trip": { "id": "…", "reference": "MS-7KQ2…" },
+  "gateway": "esewa", "gatewayTransactionId": "000AWEO", "currency": "NPR", "currencyExponent": 2,
+  "amountMinor": "360000", "reason": "PAYMENT_NOT_OPEN", "status": "OPEN",
+  "gatewayResponse": { "status": "COMPLETE", "…": "…" }, "note": null, "createdAt": "…",
+  "resolvedAt": null, "resolvedById": null } ], "page": { … } }
+```
+
+- `POST /admin/payment-reconciliations/:id/resolve` `{ "note": "…" }` (1–1000 characters): marks it
+  handled, once (`409 RECONCILIATION_ALREADY_RESOLVED`); audited. What the gateway reported can never
+  change; the database refuses edits and deletes (`payment_reconciliations_immutable_chk`).
+- `POST /admin/refund-requests` `{ "paymentId", "bookingItemId" | "paymentReconciliationId",
+  "amountMinor": "<digits>", "reason" }` → `201`: records what should go back to the customer.
+  **Nothing is executed**: no gateway call, no money moves; the database keeps every request
+  `REQUESTED` or `REJECTED` (`refund_requests_not_executed_chk`) and never above what the payment
+  paid for that item, or what the late payment recorded, across open requests
+  (`422 REFUND_EXCEEDS_PAID`, with `availableMinor`). The response includes the gateway's refund
+  capability (`gatewayRefundCapability: { api: "documented" | "none", partial, note }`) and
+  `executed: false`. Audited. `GET /admin/refund-requests?paymentId=&page=` lists them.
 
 ## Why the API is vertical-agnostic
 

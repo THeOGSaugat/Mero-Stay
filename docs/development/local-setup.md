@@ -108,7 +108,11 @@ Safety: the tests read **only** `TEST_DATABASE_URL`, never `DATABASE_URL`; they 
 | `apps/api/.env` | `SESSION_SECRET` | **Required by the API server.** ≥ 32 characters; signs CSRF tokens. Generate: `openssl rand -base64 48`. Never commit it |
 | `apps/api/.env` | `SESSION_TTL_HOURS` | *Optional.* Session lifetime in hours (default 168 = 7 days) |
 | `apps/api/.env` | `SESSION_COOKIE_SECURE` | *Optional.* HTTPS-only cookie. Default `true` in production (where `false` is refused), `false` locally |
-| `apps/api/.env` | `PAYMENT_GATEWAY` | *Optional.* `simulated` enables the test-mode payment gateway for local development (ADR 0007). Unset = online payment endpoints return 503. Refused in production |
+| `apps/api/.env` | `PAYMENT_GATEWAYS` | *Optional locally, required in production.* Comma list: `esewa`, `khalti`, `simulated` (test mode; refused in production). Unset = online payment endpoints return 503 (ADR 0017). The old `PAYMENT_GATEWAY` is refused |
+| `apps/api/.env` | `PAYMENT_MODE` | *Optional.* `uat` (default: eSewa UAT / Khalti sandbox URLs) or `production` (required in production) |
+| `apps/api/.env` | `ESEWA_PRODUCT_CODE`, `ESEWA_SECRET_KEY` | Required when `esewa` is listed. Sandbox values: [payments.md](payments.md). Never commit real ones |
+| `apps/api/.env` | `KHALTI_SECRET_KEY` | Required when `khalti` is listed (test key from test-admin.khalti.com). Never commit it |
+| `apps/api/.env` | `PUBLIC_WEB_URL` | Required for eSewa/Khalti: the web origin gateways send customers back to (https in production) |
 | `apps/api/.env` | `HOLD_RELEASE_INTERVAL_SECONDS` | *Optional.* Seconds between hold-release runs in watch mode (default 60) |
 | `apps/web/.env.local` | `API_URL` | API base URL for server-side rendering. Server-only; required in production |
 
@@ -141,16 +145,18 @@ The **hold-release job** gives back inventory held by abandoned trips (draft or 
 the built script either from the platform's scheduler every minute
 (`node apps/api/dist/scripts/hold-release.js`, exits when done) or as one always-on worker
 (`node apps/api/dist/scripts/hold-release.js --watch`). Overlapping runs are safe: each stale trip
-is released exactly once (`FOR UPDATE SKIP LOCKED`). It needs only `DATABASE_URL`. CI does not run
+is released exactly once (`FOR UPDATE SKIP LOCKED`). Before releasing, it asks eSewa/Khalti about
+open payments of holds about to end (gap 8), so it needs `DATABASE_URL` and the payment settings. CI does not run
 it on a schedule; its behaviour is covered by `src/jobs/*.test.ts`.
 
 ### Trying payments locally
 
-Set `PAYMENT_GATEWAY=simulated` in `apps/api/.env`, confirm a trip with online items, then
-`POST /api/v1/trips/:id/payments/intent` and `POST /api/v1/trips/:id/payments/:paymentId/confirm`
-(optionally `{"capturedAmountMinor": "100000"}` for a partial payment). See
-[api.md](../architecture/api.md#payments-adr-0007). To use the admin endpoints, promote your local
-user: `UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';`.
+eSewa and Khalti (local fakes or the real sandbox): [payments.md](payments.md). The simulated
+gateway: set `PAYMENT_GATEWAYS=simulated` in `apps/api/.env`, confirm a trip with online items, then
+`POST /api/v1/trips/:id/payments/intent` with `{"gateway": "simulated"}` and
+`POST /api/v1/trips/:id/payments/:paymentId/confirm` (optionally `{"capturedAmountMinor": "100000"}`
+for a partial payment). See [api.md](../architecture/api.md#payments-adr-0007-adr-0017). To use the
+admin endpoints, promote your local user: `UPDATE users SET role = 'ADMIN' WHERE email = 'you@example.com';`.
 
 ## 6. Quality checks and tests
 

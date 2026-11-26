@@ -31,6 +31,19 @@ import {
 } from "../providers/providers.serializers.js";
 import { listAllProviderTypeRules, type ProvidersService } from "../providers/providers.service.js";
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import {
+  createRefundRequestSchema,
+  reconciliationsQuerySchema,
+  refundRequestsQuerySchema,
+  resolveReconciliationSchema,
+  type RefundsService,
+} from "../refunds/refunds.service.js";
+import {
+  serializeReconciliation,
+  serializeReconciliationPage,
+  serializeRefundRequest,
+  serializeRefundRequestPage,
+} from "../refunds/refunds.serializers.js";
 
 export interface AdminRouterDeps {
   prisma: PrismaClient;
@@ -40,6 +53,7 @@ export interface AdminRouterDeps {
   finance: FinanceService;
   auditLog: AuditLogService;
   policies: CancellationPoliciesService;
+  refunds: RefundsService;
 }
 
 /**
@@ -59,6 +73,7 @@ export function createAdminRouter({
   finance,
   auditLog,
   policies,
+  refunds,
 }: AdminRouterDeps): Router {
   const router = Router();
   router.use(
@@ -140,6 +155,33 @@ export function createAdminRouter({
     const query = adminPayoutsQuerySchema.parse(req.query);
     const { rows, total } = await finance.payoutSummary(query, query.providerId);
     res.json(serializePayoutSummary(rows, total, query));
+  });
+
+  // ------------------------------------------------------------------ late payments (gap 8, ADR 0017)
+  router.get("/admin/payment-reconciliations", async (req, res) => {
+    const query = reconciliationsQuerySchema.parse(req.query);
+    const { rows, total } = await refunds.listReconciliations(query);
+    res.json(serializeReconciliationPage(rows, total, query));
+  });
+
+  router.post("/admin/payment-reconciliations/:id/resolve", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { note } = resolveReconciliationSchema.parse(req.body ?? {});
+    const row = await refunds.resolveReconciliation(auditContextOf(req), id, note);
+    res.json({ data: serializeReconciliation(row) });
+  });
+
+  // ------------------------------------------------------------------ refund requests (shape only)
+  router.get("/admin/refund-requests", async (req, res) => {
+    const query = refundRequestsQuerySchema.parse(req.query);
+    const { rows, total } = await refunds.listRefundRequests(query);
+    res.json(serializeRefundRequestPage(rows, total, query, refunds.refundCapability));
+  });
+
+  router.post("/admin/refund-requests", async (req, res) => {
+    const input = createRefundRequestSchema.parse(req.body ?? {});
+    const row = await refunds.createRefundRequest(auditContextOf(req), input);
+    res.status(201).json({ data: serializeRefundRequest(row, refunds.refundCapability) });
   });
 
   // ------------------------------------------------------------------ audit log

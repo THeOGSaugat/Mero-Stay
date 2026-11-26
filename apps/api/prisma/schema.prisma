@@ -64,15 +64,17 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  providers         Provider[]
-  trips             Trip[]
-  reviews           Review[]
-  notifications     Notification[]
-  reviewedDocuments ProviderDocument[] @relation("DocumentReviewer")
-  sessions          Session[]
-  settledItems      BookingItem[]      @relation("PaymentSettledBy")
-  auditEntries      AuditLog[]
-  idempotencyKeys   IdempotencyKey[]
+  providers               Provider[]
+  trips                   Trip[]
+  reviews                 Review[]
+  notifications           Notification[]
+  reviewedDocuments       ProviderDocument[]      @relation("DocumentReviewer")
+  sessions                Session[]
+  settledItems            BookingItem[]           @relation("PaymentSettledBy")
+  auditEntries            AuditLog[]
+  idempotencyKeys         IdempotencyKey[]
+  resolvedReconciliations PaymentReconciliation[] @relation("ReconciliationResolvedBy")
+  refundRequests          RefundRequest[]         @relation("RefundRequestedBy")
 
   @@map("users")
 }
@@ -632,11 +634,12 @@ model Trip {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  customer      User              @relation(fields: [customerId], references: [id])
-  items         BookingItem[]
-  payments      Payment[]
-  invoices      ProviderInvoice[]
-  notifications Notification[]
+  customer        User                    @relation(fields: [customerId], references: [id])
+  items           BookingItem[]
+  payments        Payment[]
+  invoices        ProviderInvoice[]
+  reconciliations PaymentReconciliation[]
+  notifications   Notification[]
 
   @@index([customerId])
   @@index([status])
@@ -753,9 +756,10 @@ model BookingItem {
   commissionInvoice  ProviderInvoice?    @relation(fields: [commissionInvoiceId], references: [id])
   paymentSettledBy   User?               @relation("PaymentSettledBy", fields: [paymentSettledById], references: [id], onDelete: Restrict)
 
-  slots       BookingItemSlot[]
-  allocations PaymentAllocation[]
-  review      Review?
+  slots          BookingItemSlot[]
+  allocations    PaymentAllocation[]
+  refundRequests RefundRequest[]
+  review         Review?
 
   @@index([tripId])
   @@index([listingId])
@@ -825,14 +829,22 @@ model Payment {
   gatewayTransactionId String?                  @map("gateway_transaction_id")
   /// Raw verification response (no secrets) for reconciliation.
   gatewayResponse      Json?                    @map("gateway_response")
+  /// The gateway's id for this checkout (ADR 0017): eSewa transaction_uuid (= this id), Khalti pidx.
+  gatewayReference     String?                  @map("gateway_reference")
+  /// What the browser needs to start paying (form fields or a redirect URL). Never a secret.
+  checkout             Json?
+  checkoutExpiresAt    DateTime?                @map("checkout_expires_at") @db.Timestamptz(3)
   completedAt          DateTime?                @map("completed_at") @db.Timestamptz(3)
   createdAt            DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  trip        Trip                @relation(fields: [tripId], references: [id])
-  allocations PaymentAllocation[]
+  trip            Trip                    @relation(fields: [tripId], references: [id])
+  allocations     PaymentAllocation[]
+  reconciliations PaymentReconciliation[]
+  refundRequests  RefundRequest[]
 
   @@unique([gateway, gatewayTransactionId])
+  @@unique([gateway, gatewayReference])
   @@unique([tripId], map: "payments_one_open_charge_per_trip", where: raw("kind = 'CHARGE' AND (status = 'INITIATED' OR status = 'PENDING')"))
   @@index([tripId])
   @@map("payments")
@@ -851,6 +863,98 @@ model PaymentAllocation {
   @@unique([paymentId, bookingItemId])
   @@index([bookingItemId])
   @@map("payment_allocations")
+}
+
+enum PaymentReconciliationReason {
+  /// The payment was no longer open (e.g. cancelled when the trip's hold expired).
+  PAYMENT_NOT_OPEN
+  /// The trip was no longer waiting for payment (expired, confirmed or cancelled).
+  TRIP_NOT_AWAITING_PAYMENT
+  /// The amount due changed after the payment started.
+  INTENT_STALE
+  /// The gateway reported a different amount.
+  AMOUNT_MISMATCH
+  /// The trip was already paid by another transaction.
+  DUPLICATE_PAYMENT
+
+  @@map("payment_reconciliation_reason")
+}
+
+enum PaymentReconciliationStatus {
+  OPEN
+  RESOLVED
+
+  @@map("payment_reconciliation_status")
+}
+
+/// Money a gateway reported as received that could not be applied to the trip (gap 8, ADR 0017).
+/// Recorded once per gateway transaction; never allocated to items; resolved by an admin later.
+model PaymentReconciliation {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  paymentId            String                      @map("payment_id") @db.Uuid
+  tripId               String                      @map("trip_id") @db.Uuid
+  gateway              String
+  gatewayTransactionId String                      @map("gateway_transaction_id")
+  amountMinor          BigInt                      @map("amount_minor")
+  currency             String                      @db.Char(3)
+  reason               PaymentReconciliationReason
+  status               PaymentReconciliationStatus @default(OPEN)
+  /// What the gateway answered (no secrets).
+  gatewayResponse      Json?                       @map("gateway_response")
+  note                 String?
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  resolvedAt           DateTime?                   @map("resolved_at") @db.Timestamptz(3)
+  resolvedById         String?                     @map("resolved_by_id") @db.Uuid
+
+  payment        Payment         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  resolvedBy     User?           @relation("ReconciliationResolvedBy", fields: [resolvedById], references: [id])
+  refundRequests RefundRequest[]
+
+  @@unique([gateway, gatewayTransactionId])
+  @@index([status])
+  @@index([tripId])
+  @@map("payment_reconciliations")
+}
+
+enum RefundRequestStatus {
+  REQUESTED
+  REJECTED
+  /// The states below belong to refund execution (a later phase); the database refuses them now.
+  APPROVED
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("refund_request_status")
+}
+
+/// What should go back to a customer (ADR 0017). Not executed this phase: the database keeps every
+/// request REQUESTED or REJECTED, and never more than was paid.
+model RefundRequest {
+  id                      String              @id @default(uuid()) @db.Uuid
+  paymentId               String              @map("payment_id") @db.Uuid
+  /// The booking item whose allocation is refunded, or NULL for an unapplied late payment.
+  bookingItemId           String?             @map("booking_item_id") @db.Uuid
+  paymentReconciliationId String?             @map("payment_reconciliation_id") @db.Uuid
+  gateway                 String
+  amountMinor             BigInt              @map("amount_minor")
+  currency                String              @db.Char(3)
+  reason                  String
+  status                  RefundRequestStatus @default(REQUESTED)
+  gatewayRefundReference  String?             @map("gateway_refund_reference")
+  requestedById           String?             @map("requested_by_id") @db.Uuid
+  createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  payment        Payment                @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  bookingItem    BookingItem?           @relation(fields: [bookingItemId], references: [id], onDelete: Restrict)
+  reconciliation PaymentReconciliation? @relation(fields: [paymentReconciliationId], references: [id], onDelete: Restrict)
+  requestedBy    User?                  @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+
+  @@index([paymentId])
+  @@index([bookingItemId])
+  @@map("refund_requests")
 }
 
 enum PayoutBatchStatus {

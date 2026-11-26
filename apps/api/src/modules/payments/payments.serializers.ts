@@ -2,7 +2,12 @@ import type { DueLine } from "../../domain/payments.js";
 import { currencyInfo, minorToString } from "../../lib/money-json.js";
 import type { InvoiceWithItems } from "../finance/invoices.service.js";
 import type { PaymentWithAllocations } from "./payments.repository.js";
-import type { PaymentConfirmation, PaymentIntent, SettledItem } from "./payments.service.js";
+import type {
+  GatewayApplication,
+  PaymentConfirmation,
+  PaymentIntent,
+  SettledItem,
+} from "./payments.service.js";
 
 /**
  * Payment and invoice response shapes. Every money field is a digit string in minor units next to
@@ -46,6 +51,29 @@ export function serializeIntent(intent: PaymentIntent) {
       ...currencyInfo(intent.payment.currency),
       payment: serializePayment(intent.payment),
       due: serializeDue(intent.lines),
+      /**
+       * What the browser does next (ADR 0017): eSewa = a signed form to POST, Khalti = a redirect,
+       * simulated = nothing (confirm through the API). Never contains a secret.
+       */
+      checkout: intent.checkout,
+    },
+  };
+}
+
+/**
+ * What a gateway callback or refresh did (ADR 0017). `outcome`: paid, replayed (already paid),
+ * pending, failed, expired, or reconciliation (money received that could not be applied: kept
+ * for MeroStay to resolve, never lost).
+ */
+export function serializeApplication(application: GatewayApplication) {
+  return {
+    data: {
+      tripId: application.tripId,
+      outcome: application.outcome,
+      payment: serializePayment(application.payment),
+      reconciliation: application.reconciliation
+        ? { id: application.reconciliation.id, reason: application.reconciliation.reason }
+        : null,
     },
   };
 }

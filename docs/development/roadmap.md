@@ -21,14 +21,14 @@ generic data model, not hotels only.
 | 9 | Rate limits behind the proxy & E2E in CI | Owner-narrowed scope: per-client login/registration limits behind the web proxy (web server appends the client address; explicit trusted-proxy chain, never `true`; spoofing tests), gap 5, ADR 0014; Playwright journeys in CI on a disposable database, gap 21 | ✅ Done (v0.9.0) |
 | 10 | Cancellation policies & verification documents | Owner-narrowed scope: partner-authored cancellation policies (refund tiers or non-refundable), provider default and listing override, frozen per booking item, shown on listings and bookings (gap 23, ADR 0015); real, private verification document uploads with a storage abstraction (local disk, S3-compatible), type checked from the bytes, metadata stripped, owner/admin-only downloads, deletion (gap 14, ADR 0016) | ✅ Done (v0.10.0) |
 | — | Frontend polish (not yet scheduled) | Listing photos (public images on the Phase 10 storage abstraction: upload, resizing, re-encoding, display) and bulk pricing tools for partners (moved here from the old Phase 10 row, owner decision after Phase 10). The owner sets the phase | Not scheduled |
-| 11 | Search UX & locations | Province → town picker (or type-ahead) in customer search over the `GET /locations` endpoint added in Phase 7, richer filters per vertical | Planned |
-| 12 | Admin moderation | The rest of the original Phase 8 scope: listing review queue with approve/reject (gap 15), provider and listing suspension, admin user management (gap 9), settlement corrections (gap 13). The owner sets its phase; approval re-checks the listing-type rule (ADR 0013) | Planned |
-| 13 | Live payment gateways | eSewa + Khalti (sandbox, then production) behind the Phase 5 payment API: server-to-server verification, signed callbacks, late-success handling | Planned |
-| 14 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refunds per item (`REFUND` payments); decide whether a listing must have a cancellation policy (gap 30) and the clock reference for "hours before the start" (ADR 0015) | Planned |
-| 15 | Commission & payouts | Payout execution for online-paid items, invoice payment tracking, sequential invoice numbering and payment terms (after the tax advisor), settlement reconciliation | Planned |
+| 11 | Live payment gateways | eSewa ePay v2 + Khalti ePayment v2 behind one gateway interface (amounts normalised to paisa in the adapters), server-to-server verification (eSewa signature + status API, Khalti lookup), no-session callback endpoint, idempotent repeats, late success recorded for reconciliation (gaps 7 and 8), refund request shape and gateway refund capability (not executed), production refuses to start without gateway config, local fake gateways for tests, opt-in UAT/sandbox check (ADR 0017) | ✅ Done (pending review) |
+| 12 | Commission & payouts | Payout execution for online-paid items, invoice payment tracking, sequential invoice numbering and payment terms (after the tax advisor), settlement reconciliation | Planned |
+| 13 | Admin moderation | The rest of the original Phase 8 scope: listing review queue with approve/reject (gap 15), provider and listing suspension, admin user management (gap 9), settlement corrections (gap 13); approval re-checks the listing-type rule (ADR 0013) | Planned |
+| 14 | Search UX & locations | Province → town picker (or type-ahead) in customer search over the `GET /locations` endpoint added in Phase 7, richer filters per vertical (gap 20) | Planned |
+| 15 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refund EXECUTION per item on the Phase 11 refund-request shape (`REFUND` payments, Khalti refund API, eSewa by merchant portal); decide whether a listing must have a cancellation policy (gap 30) and the clock reference for "hours before the start": midnight Nepal time of the service date or the check-in/departure time (ADR 0015, ADR 0017) | Planned |
 | 16 | Reviews & ratings | Verified (completed-item) reviews, ratings on listings, partner replies, moderation | Planned |
 | 17 | Notifications | `NotificationService` with Sparrow SMS + Amazon SES; email verification and password reset | Planned |
-| 18 | Hardening & launch prep | Security review, 2FA (admins/partners), shared rate-limit store (gap 4), document malware scanning (gap 26), production document storage (gap 27, on the launch checklist), document backup and retention after the owner's decision (gap 28), PDF metadata and image re-encoding (gap 29), performance, accessibility, deployment plan | Planned |
+| 18 | Hardening & launch prep | Security review, 2FA (admins/partners), shared rate-limit store (gap 4), document malware scanning (gap 26), production document storage (gap 27, on the launch checklist), document backup and retention after the owner's decision (gap 28), PDF metadata and image re-encoding (gap 29), Content-Security-Policy (must allow eSewa in `form-action`), performance, accessibility, deployment plan | Planned |
 
 The owner's Phase 5 brief put payments (simulated gateway) before provider onboarding; the
 phases after 4 were renumbered. Phase 6 (owner's brief: partner and admin backend) covered the old
@@ -42,6 +42,9 @@ After Phase 9 the owner assigned Admin moderation (gaps 9, 13, 15) to Phase 12; 
 live gateways on moved down by one (live gateways 13 … hardening 18).
 Phase 10 was narrowed by the owner to gaps 23 and 14; listing photos and bulk pricing are in the
 unscheduled "Frontend polish" row (no renumbering).
+The owner's Phase 11 brief (live payment gateways) set the order of the rest: 11 Live payment
+gateways, 12 Commission & payouts, 13 Admin moderation, 14 Search UX, 15 Cancellations & refunds,
+16 Reviews, 17 Notifications, 18 Hardening. Gap targets in operational-gaps.md follow it.
 The next phase is whichever the owner approves.
 
 Business decisions behind these phases: [requirements §6](../product/requirements.md#6-business-decisions).
@@ -50,6 +53,7 @@ Business decisions behind these phases: [requirements §6](../product/requiremen
 
 | Item | How it fits the data model |
 |---|---|
+| More payment gateways (Fonepay, Stripe) | One more adapter each behind the Phase 11 gateway interface; `payments.gateway` gains a value (CHECK). What each needs: ADR 0017 §Future adapters. Documented only; no code until approved |
 | Flight booking | `flight_ticket` listing type and `flight_route_details` already exist; set the type active and build the flow |
 | Partner API integrations (airlines, bus operators, channel managers) | `providers.integration_type`, `listings.external_id`, `last_synced_at`, `booking_items.external_booking_ref` |
 | New verticals (e.g. permits, vehicle rental, packages) | New `listing_types` row (+ optional `*_details` table); see [data-model.md](../architecture/data-model.md#adding-a-new-vertical) |

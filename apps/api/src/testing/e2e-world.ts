@@ -318,6 +318,33 @@ async function createPhase10World(prisma: PrismaClient, world: World) {
   };
 }
 
+/**
+ * The online payment journeys' world (Phase 11, ADR 0017): one customer per Playwright project and
+ * gateway, so parallel journeys never share a trip basket. One random password (disposable
+ * database); logging in spends no registration quota.
+ */
+async function createPaymentsWorld(prisma: PrismaClient) {
+  const password = randomBytes(18).toString("base64url");
+  const passwordHash = await hashPassword(password);
+  const s = randomBytes(4).toString("hex");
+  const paymentCustomers: Record<string, Record<string, string>> = {};
+  for (const project of ["desktop-chromium", "mobile-chromium"]) {
+    paymentCustomers[project] = {};
+    for (const gateway of ["esewa", "khalti"]) {
+      const user = await prisma.user.create({
+        data: {
+          email: `pay-${gateway}-${project}-${s}@test.local`,
+          fullName: `Payer ${gateway} ${project}`,
+          passwordHash,
+          role: "CUSTOMER",
+        },
+      });
+      paymentCustomers[project][gateway] = user.email!;
+    }
+  }
+  return { paymentCustomers, paymentPassword: password };
+}
+
 async function main(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is not set.");
@@ -344,11 +371,13 @@ async function main(): Promise<void> {
     const partnerWorld = await createPartnerWorld(prisma, world);
     const adminWorld = await createAdminWorld(prisma, world);
     const phase10World = await createPhase10World(prisma, world);
+    const paymentsWorld = await createPaymentsWorld(prisma);
     console.log(
       JSON.stringify({
         ...partnerWorld,
         ...adminWorld,
         ...phase10World,
+        ...paymentsWorld,
         provinceSlug: world.locations.province.slug,
         roomId: world.listings.room.id,
         roomTitle: world.listings.room.title,

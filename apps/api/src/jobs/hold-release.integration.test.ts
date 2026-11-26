@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { simulatedPayments } from "../modules/payments/payments.config.js";
 import { pino } from "pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -27,7 +28,7 @@ const app = createApp({
   checkDatabase: () => Promise.resolve(),
   prisma,
   auth: testAuthConfig(),
-  payments: { gateway: "simulated" },
+  payments: simulatedPayments(),
 });
 const silent = pino({ level: "silent" });
 let world: World;
@@ -69,7 +70,9 @@ async function trip(items: Spec[], confirm: boolean): Promise<{ id: string; item
 }
 
 async function pay(tripId: string, capturedAmountMinor?: string): Promise<string> {
-  const intent = (await post(`/api/v1/trips/${tripId}/payments/intent`)) as {
+  const intent = (await post(`/api/v1/trips/${tripId}/payments/intent`, {
+    gateway: "simulated",
+  })) as {
     payment: { id: string };
   };
   await post(
@@ -142,7 +145,7 @@ describe("scheduled hold release", () => {
         ],
         true,
       ).then(async (t) => {
-        await post(`/api/v1/trips/${t.id}/payments/intent`);
+        await post(`/api/v1/trips/${t.id}/payments/intent`, { gateway: "simulated" });
         return t;
       }),
       trip([{ listing: "bus", start: 1, paymentMethod: "online" }], true).then(async (t) => {
@@ -225,7 +228,9 @@ describe("scheduled hold release", () => {
       ],
     ]);
     // ...and the customer can still pay the remainder.
-    const rest = (await post(`/api/v1/trips/${partly.id}/payments/intent`)) as {
+    const rest = (await post(`/api/v1/trips/${partly.id}/payments/intent`, {
+      gateway: "simulated",
+    })) as {
       payment: { amountMinor: string };
     };
     expect(rest.payment.amountMinor).toBe("899000");

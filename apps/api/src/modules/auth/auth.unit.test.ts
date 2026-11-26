@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { PRODUCTION_PAYMENT_ENV } from "../../testing/production-env.js";
 import { describe, expect, it, vi } from "vitest";
 import { authConfigFromEnv, parseEnv } from "../../config/env.js";
 import type { AppError } from "../../lib/errors.js";
@@ -165,6 +166,7 @@ describe("auth configuration from the environment", () => {
         TRUST_PROXY_ADDRESSES: "loopback",
         STORAGE_DRIVER: "local",
         STORAGE_LOCAL_DIR: "/var/lib/merostay/documents",
+        ...PRODUCTION_PAYMENT_ENV,
       }),
     );
     expect(prod.cookieSecure).toBe(true);

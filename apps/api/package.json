@@ -21,7 +21,9 @@
     "db:seed": "prisma db seed",
     "db:check": "tsx src/scripts/db-check.ts",
     "jobs:hold-release": "tsx src/scripts/hold-release.ts",
-    "jobs:hold-release:watch": "tsx src/scripts/hold-release.ts --watch"
+    "jobs:hold-release:watch": "tsx src/scripts/hold-release.ts --watch",
+    "fake-gateways": "tsx src/scripts/fake-gateways.ts",
+    "payment:sandbox-check": "tsx src/scripts/payment-sandbox-check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1178.0",

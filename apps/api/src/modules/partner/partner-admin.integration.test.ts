@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { simulatedPayments } from "../../modules/payments/payments.config.js";
 import { pino } from "pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -29,7 +30,7 @@ const app = createApp({
   checkDatabase: () => Promise.resolve(),
   prisma,
   auth: testAuthConfig(),
-  payments: { gateway: "simulated" },
+  payments: simulatedPayments(),
   storage: testStorage().storage,
 });
 let world: World;
@@ -805,7 +806,9 @@ describe("invoices and payout summaries", () => {
   it("payout summary: online-paid items, total − commission per item, grouped per month", async () => {
     // Pay the online stay (night of day 2), and book + pay one night in the next month (day 40).
     const intent = dataOf<{ payment: { id: string } }>(
-      await call(customer, "post", `/api/v1/trips/${onlineTrip}/payments/intent`, {}),
+      await call(customer, "post", `/api/v1/trips/${onlineTrip}/payments/intent`, {
+        gateway: "simulated",
+      }),
     );
     await call(
       customer,
@@ -817,7 +820,9 @@ describe("invoices and payout summaries", () => {
     const next = await bookRoom({ start: later, end: addDays(later, 1), method: "online" });
     await call(customer, "post", `/api/v1/trips/${next.tripId}/confirm`);
     const nextIntent = dataOf<{ payment: { id: string } }>(
-      await call(customer, "post", `/api/v1/trips/${next.tripId}/payments/intent`, {}),
+      await call(customer, "post", `/api/v1/trips/${next.tripId}/payments/intent`, {
+        gateway: "simulated",
+      }),
     );
     await call(
       customer,

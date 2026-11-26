@@ -60,8 +60,16 @@ The binding summary lives in [CLAUDE.md §4](../../CLAUDE.md). This document add
 - Make callback handlers idempotent (unique provider transaction ID; repeated callbacks are no-ops).
 - Store provider references and raw verification responses (without secrets) for reconciliation.
 - Use sandbox credentials in development; never commit merchant secrets.
-- Phase 5 (ADR 0007): the only gateway is a **simulated** one for development; the API refuses to
-  start with `PAYMENT_GATEWAY=simulated` in production. Intents are idempotent per trip (one open
+- Phase 11 (ADR 0017): eSewa and Khalti are verified **server to server** (eSewa: HMAC-SHA256
+  signature on the callback, compared in constant time, plus the status API; Khalti: lookup by
+  `pidx`); the browser's redirect alone never marks a payment paid, and amounts must match exactly
+  (in paisa). The callback endpoint needs no session (nothing in it is trusted) and is rate
+  limited. Gateway secrets are server-only, never sent in a checkout, never logged; production
+  refuses to start without them, with the simulated gateway, or with test URL overrides. Late or
+  unusable money is recorded for reconciliation, never dropped; refunds are recorded, not
+  executed. The legacy `PAYMENT_GATEWAY` setting is refused.
+- Phase 5 (ADR 0007): the simulated gateway is for development and tests; the API refuses to
+  start with it in production. Intents are idempotent per trip (one open
   charge per trip, enforced by a unique index); confirmations are idempotent (a succeeded payment is
   returned unchanged); database triggers stop over-allocation and keep each item's payment status
   equal to its allocations.

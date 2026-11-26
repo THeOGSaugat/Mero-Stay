@@ -147,6 +147,17 @@ export function mapDatabaseError(err: unknown): AppError | null {
       "The document cannot change that way in its current state.",
     );
   }
+  // Refund requests and late payments (ADR 0017): the API checks first; the database is the backstop.
+  if (sqlState === "23514" && constraint === "refund_requests_within_payment_chk") {
+    return new AppError(422, "REFUND_EXCEEDS_PAID", "This refund is more than was paid.");
+  }
+  if (sqlState === "23514" && constraint === "payment_reconciliations_immutable_chk") {
+    return new AppError(
+      409,
+      "RECONCILIATION_STATE_CONFLICT",
+      "This late payment record cannot change that way.",
+    );
+  }
   if (sqlState === "23514") {
     return new AppError(422, "CONSTRAINT_VIOLATED", "The request violates a data rule.");
   }

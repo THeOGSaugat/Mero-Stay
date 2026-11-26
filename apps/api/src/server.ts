@@ -54,7 +54,9 @@ const server = app.listen(env.PORT, (error) => {
     {
       port: env.PORT,
       env: env.NODE_ENV,
-      paymentGateway: env.PAYMENT_GATEWAY ?? "none",
+      // Names and mode only: never a key.
+      paymentGateways: (env.PAYMENT_GATEWAYS ?? []).join(",") || "none",
+      paymentMode: env.PAYMENT_MODE ?? "uat",
       trustProxy: { hops: trustProxy.hops, addresses: trustProxy.addresses.join(",") },
       // The driver only: never a directory, bucket credential or key.
       documentStorage: storageConfig.driver,

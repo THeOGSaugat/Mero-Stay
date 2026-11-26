@@ -9,6 +9,7 @@
 | [architecture/frontend.md](architecture/frontend.md) | Web app: routes, API proxy, auth/CSRF, money display, tests (Phase 7) |
 | [architecture/decisions/](architecture/decisions/) | Architecture Decision Records (ADRs) |
 | [development/local-setup.md](development/local-setup.md) | **Install, configure, run, test, troubleshoot** |
+| [development/payments.md](development/payments.md) | Online payments locally: fake gateways, eSewa UAT and Khalti sandbox credentials, the opt-in sandbox check |
 | [development/roadmap.md](development/roadmap.md) | Phase-by-phase development plan |
 | [development/operational-gaps.md](development/operational-gaps.md) | **Known operational gaps before launch** |
 | [development/ci.md](development/ci.md) | CI jobs: verify, and the E2E journeys on a disposable database (Phase 9) |
