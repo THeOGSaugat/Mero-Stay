@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import { randomBytes } from "node:crypto";
-import { toDbDate } from "../domain/dates.js";
+import { toDbDate, todayInKathmandu } from "../domain/dates.js";
+import { calculateItemCharges, resolveCommissionRateBps, summarizeTrip } from "../domain/money.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { ProviderDocumentType } from "../generated/prisma/enums.js";
 import { createPrismaClient } from "../lib/prisma.js";
@@ -345,6 +346,209 @@ async function createPaymentsWorld(prisma: PrismaClient) {
   return { paymentCustomers, paymentPassword: password };
 }
 
+/**
+ * Phase 12 journeys (ADR 0018), per Playwright project: an admin of its own (login limits are per
+ * email), a partner (one provider, a VERIFIED bank account) with
+ * - a listing waiting for review;
+ * - a booking paid online whose service ended last month (eligible for that month's payout);
+ * and a late payment (recorded by Phase 11's reconciliation) with a refund request on it.
+ */
+async function createPhase12World(prisma: PrismaClient, world: World) {
+  const password = randomBytes(18).toString("base64url");
+  const passwordHash = await hashPassword(password);
+  const today = todayInKathmandu();
+  // The 10th of last month: its service is over, and it is in last month's payout.
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  const lastMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  const serviceDate = `${lastMonth}-10`;
+  const out: Record<string, unknown> = {};
+  for (const [project, lateAmount] of [
+    ["desktop", 123_400n],
+    ["mobile", 234_500n],
+  ] as const) {
+    const s = `${world.suffix}-${project}`;
+    const admin = await prisma.user.create({
+      data: {
+        email: `p12-admin-${s}@test.local`,
+        fullName: `Phase 12 Admin ${project}`,
+        role: "ADMIN",
+        passwordHash,
+      },
+    });
+    const owner = await prisma.user.create({
+      data: {
+        email: `p12-partner-${s}@test.local`,
+        fullName: `Guide owner ${project}`,
+        role: "PARTNER",
+        passwordHash,
+      },
+    });
+    const provider = await prisma.provider.create({
+      data: {
+        providerTypeCode: "guide",
+        ownerUserId: owner.id,
+        legalName: `Phase 12 Guides ${s}`,
+        displayName: `Phase 12 Guides ${project} ${world.suffix}`,
+        status: "VERIFIED",
+        verifiedAt: new Date(),
+      },
+    });
+    await prisma.providerPayoutAccount.create({
+      data: {
+        providerId: provider.id,
+        bankName: "Nabil Bank",
+        accountName: `Phase 12 Guides ${project}`,
+        accountNumber: project === "desktop" ? "0100000000001111" : "0100000000002222",
+        isDefault: true,
+        verifiedAt: new Date(),
+      },
+    });
+    const guide = await prisma.listing.create({
+      data: {
+        providerId: provider.id,
+        listingTypeCode: "guide_service",
+        title: `Annapurna guide ${project} ${world.suffix}`,
+        slug: `p12-guide-${s}`,
+        basePriceMinor: 400_000n,
+        status: "APPROVED",
+        locationId: world.locations.town.id,
+      },
+    });
+    const pending = await prisma.listing.create({
+      data: {
+        providerId: provider.id,
+        listingTypeCode: "guide_service",
+        title: `Langtang guide ${project} ${world.suffix}`,
+        slug: `p12-pending-${s}`,
+        basePriceMinor: 350_000n,
+        status: "PENDING_REVIEW",
+        locationId: world.locations.town.id,
+      },
+    });
+
+    // A completed, online-paid booking last month (one guide day).
+    const charges = calculateItemCharges({
+      lines: [{ units: 1, unitPriceMinor: guide.basePriceMinor }],
+      commissionRateBps: resolveCommissionRateBps({}),
+    });
+    const totals = summarizeTrip("NPR", [{ ...charges, currency: "NPR" }]);
+    const trip = await prisma.trip.create({
+      data: {
+        reference: `MS-P12${randomBytes(4).toString("hex").toUpperCase()}`,
+        customerId: world.users.customer.id,
+        status: "COMPLETED",
+        currency: "NPR",
+        subtotalMinor: totals.subtotalMinor,
+        serviceChargeMinor: totals.serviceChargeMinor,
+        taxMinor: totals.taxMinor,
+        totalMinor: totals.totalMinor,
+        commissionTotalMinor: totals.commissionTotalMinor,
+        confirmedAt: new Date(),
+      },
+    });
+    const item = await prisma.bookingItem.create({
+      data: {
+        tripId: trip.id,
+        listingId: guide.id,
+        providerId: provider.id,
+        listingTypeCode: "guide_service",
+        status: "COMPLETED",
+        startDate: toDbDate(serviceDate),
+        quantity: charges.quantity,
+        subtotalMinor: charges.subtotalMinor,
+        serviceChargeRateBps: charges.serviceChargeRateBps,
+        serviceChargeMinor: charges.serviceChargeMinor,
+        taxRateBps: charges.taxRateBps,
+        taxMinor: charges.taxMinor,
+        totalMinor: charges.totalMinor,
+        commissionRateBps: charges.commissionRateBps,
+        commissionMinor: charges.commissionMinor,
+        providerPayoutMinor: charges.providerPayoutMinor,
+        confirmedAt: new Date(),
+        completedAt: new Date(),
+        slots: {
+          create: charges.lines.map((line) => ({
+            serviceDate: toDbDate(serviceDate),
+            units: line.units,
+            unitPriceMinor: line.unitPriceMinor,
+            amountMinor: line.amountMinor,
+          })),
+        },
+      },
+    });
+    await prisma.payment.create({
+      data: {
+        tripId: trip.id,
+        gateway: "simulated",
+        status: "SUCCEEDED",
+        amountMinor: charges.totalMinor,
+        capturedMinor: charges.totalMinor,
+        gatewayTransactionId: `P12-SIM-${s}`,
+        completedAt: new Date(),
+        allocations: { create: [{ bookingItemId: item.id, amountMinor: charges.totalMinor }] },
+      },
+    });
+    await prisma.bookingItem.update({ where: { id: item.id }, data: { paymentStatus: "PAID" } });
+
+    // A late Khalti payment: the hold had expired; recorded for reconciliation, with a refund request.
+    const lateTrip = await prisma.trip.create({
+      data: {
+        reference: `MS-P12${randomBytes(4).toString("hex").toUpperCase()}`,
+        customerId: world.users.customer.id,
+        status: "EXPIRED",
+        currency: "NPR",
+      },
+    });
+    const latePayment = await prisma.payment.create({
+      data: {
+        tripId: lateTrip.id,
+        gateway: "khalti",
+        status: "CANCELLED",
+        amountMinor: lateAmount,
+        gatewayReference: `p12pidx${randomBytes(6).toString("hex")}`,
+        completedAt: new Date(),
+      },
+    });
+    const reconciliation = await prisma.paymentReconciliation.create({
+      data: {
+        paymentId: latePayment.id,
+        tripId: lateTrip.id,
+        gateway: "khalti",
+        gatewayTransactionId: `P12-KT-${s}`,
+        amountMinor: lateAmount,
+        currency: "NPR",
+        reason: "PAYMENT_NOT_OPEN",
+        gatewayResponse: { status: "Completed" },
+      },
+    });
+    await prisma.refundRequest.create({
+      data: {
+        paymentId: latePayment.id,
+        paymentReconciliationId: reconciliation.id,
+        gateway: "khalti",
+        amountMinor: lateAmount,
+        currency: "NPR",
+        reason: `Paid after the hold expired (${project} ${world.suffix})`,
+        requestedById: admin.id,
+      },
+    });
+
+    out[project] = {
+      adminEmail: admin.email,
+      partnerEmail: owner.email,
+      providerId: provider.id,
+      pendingListingId: pending.id,
+      pendingListingTitle: pending.title,
+      payoutPeriod: lastMonth,
+      payoutNetMinor: charges.providerPayoutMinor.toString(),
+      lateAmountMinor: lateAmount.toString(),
+      lateTripReference: lateTrip.reference,
+      lateRefundReason: `Paid after the hold expired (${project} ${world.suffix})`,
+    };
+  }
+  return { phase12Password: password, phase12: out };
+}
+
 async function main(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is not set.");
@@ -372,12 +576,14 @@ async function main(): Promise<void> {
     const adminWorld = await createAdminWorld(prisma, world);
     const phase10World = await createPhase10World(prisma, world);
     const paymentsWorld = await createPaymentsWorld(prisma);
+    const phase12World = await createPhase12World(prisma, world);
     console.log(
       JSON.stringify({
         ...partnerWorld,
         ...adminWorld,
         ...phase10World,
         ...paymentsWorld,
+        ...phase12World,
         provinceSlug: world.locations.province.slug,
         roomId: world.listings.room.id,
         roomTitle: world.listings.room.title,

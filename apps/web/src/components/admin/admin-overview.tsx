@@ -36,8 +36,24 @@ export function AdminOverview() {
           {
             href: "/admin/payouts",
             title: "Payouts",
-            text: "What MeroStay owes providers (read-only)",
+            text: "Prepare, schedule and record bank transfers to providers",
           },
+          {
+            href: "/admin/listings",
+            title: "Listings to review",
+            text: "Approve or reject submitted listings",
+          },
+          {
+            href: "/admin/late-payments",
+            title: "Late payments",
+            text: "Money that could not be applied",
+          },
+          {
+            href: "/admin/refund-requests",
+            title: "Refund requests",
+            text: "Refunds waiting to be made",
+          },
+          { href: "/admin/admins", title: "Admins", text: "Add, suspend and reactivate admins" },
           { href: "/admin/audit-log", title: "Audit log", text: "Who changed what, and when" },
         ].map((card) => (
           <Link

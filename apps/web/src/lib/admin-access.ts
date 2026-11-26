@@ -48,6 +48,29 @@ export function describeAdminError(error: unknown): string {
       }
       case "PROVIDER_NOT_PENDING":
         return "This provider is not waiting for a decision (it was already decided). Reload to see its status.";
+      // Phase 12 (ADR 0018)
+      case "PAYOUT_ACCOUNT_NOT_VERIFIED":
+        return "The provider's bank account is not verified. Verify it on the provider's page first.";
+      case "PAYOUT_EMPTY":
+        return "This payout has no bookings left to pay (they were cancelled or are being refunded).";
+      case "PAYOUT_ALREADY_PAID":
+        return "This payout was already recorded as paid with another reference. Nothing was changed.";
+      case "PAYOUT_NOT_SCHEDULED":
+      case "PAYOUT_NOT_SCHEDULABLE":
+        return "This payout cannot do that in its current state. Reload to see where it is.";
+      case "LISTING_TYPE_NOT_ALLOWED":
+      case "LISTING_TYPE_NOT_OFFERED":
+        return "Approval is blocked: this listing's type is not allowed for this kind of business. Nothing was changed.";
+      case "LISTING_NOT_IN_REVIEW":
+        return "This listing is not waiting for review (it was already decided). Reload to see its status.";
+      case "LAST_ADMIN":
+        return "At least one active admin must remain, so this admin cannot be suspended.";
+      case "ADMIN_SELF_LOCKOUT":
+        return "You cannot suspend your own account.";
+      case "EMAIL_TAKEN":
+        return "An account with this email already exists.";
+      case "RECONCILIATION_ALREADY_RESOLVED":
+        return "This late payment was already marked as handled.";
       case "VALIDATION_ERROR":
         if (JSON.stringify(error.details ?? "").includes("reason")) {
           return "Give a reason (at least 3 characters) to reject.";
