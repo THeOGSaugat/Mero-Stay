@@ -59,7 +59,8 @@ taking real users (details: README deployment notes).
   (never `simulated`), `PAYMENT_MODE=production`, the production eSewa product code and secret and
   Khalti live secret key from the secret store, `PUBLIC_WEB_URL` = the public https web origin, no
   `ESEWA_FORM_URL`/`ESEWA_STATUS_URL`/`KHALTI_API_URL` overrides (all enforced at start-up).
-  `npm run payment:sandbox-check` passed with the sandbox keys first. A Content-Security-Policy, if
+  `npm run payment:sandbox-check` passed with the sandbox keys first: sandbox check passed
+  2026-11-26 (eSewa UAT + Khalti sandbox). A Content-Security-Policy, if
   added, allows eSewa's form URL in `form-action`.
 - [ ] **The hold-release job runs with the payment settings** (it asks eSewa/Khalti about payments
   before releasing holds; gap 8).
