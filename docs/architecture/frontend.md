@@ -123,6 +123,17 @@ area). Logic: `lib/admin-access.ts`, `lib/audit-display.ts`, types in `lib/admin
 - **`/admin/listing-rules`:** a read-only table of every provider type, whether it is offered, its
   mapped listing types with flags, and what is usable now.
 
+### Phase 10 additions (gaps 23 and 14)
+
+| Where | What |
+|---|---|
+| `/partner/cancellation-policies` (new) | The business's policies (summary, on/off, where used), the default for listings, and a form with a tier editor (hours + refund %; or non-refundable). The tier rules are checked in the browser (`lib/cancellation-policy.ts`) and again by the API |
+| `/partner/listings/[id]` | "Cancellation policy" panel on bookable listings: this listing's policy, "use my default (…)" or none. When none applies, a warning (booking is not blocked) |
+| Listing page, trip, partner booking | One `CancellationTerms` component. A listing shows the policy that applies **now**, with its source ("This listing's policy" / "The provider's standard policy"). A trip item or a partner booking shows the copy **fixed when booked**. No policy is said explicitly |
+| `/partner/verification` | Upload: choose a PDF/JPEG/PNG up to 10 MB → request → `PUT` the file (`apiRequest` `rawBody`) → confirm, with step labels. Rows show file name and status; "Open" (fetched with the session and `X-Provider-Id`, saved as a download), "Send for review" (uploaded, not confirmed), "Delete" (not approved, not under review) |
+| `/admin/providers/[id]` | "Open file" per uploaded document (a plain link: the API checks the admin role and audits the view), and a read-only cancellation policies panel |
+| `server.mts` | Refuses `/api/v1` bodies above 10 MB + 64 KB with 413 before Next.js buffers them (Next would cut them; `experimental.proxyClientMaxBodySize` is the same number) |
+
 ## Admin guard and audit handling in the UI
 
 - **Guard = navigation.** `adminAccess()`: a visitor goes to login. A logged-in customer or

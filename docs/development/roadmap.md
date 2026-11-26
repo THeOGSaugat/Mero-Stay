@@ -19,7 +19,8 @@ generic data model, not hotels only.
 | 7 | Web frontend | Customer site (Track A, ADR 0010), partner dashboard (Track B, ADR 0011), admin console (Track C, ADR 0012); gaps 18–19 closed (ADR 0009) | ✅ Done (v0.7.0) |
 | 8 | Listing rules & admin lists | Owner-narrowed scope: data-driven provider-type → listing-type rule with DB guard, partner form limited to allowed types, read-only admin rules page (gap 22, ADR 0013); admin search, stable ordering, paging past 100, audit actor names (gap 25) | ✅ Done (v0.8.0) |
 | 9 | Rate limits behind the proxy & E2E in CI | Owner-narrowed scope: per-client login/registration limits behind the web proxy (web server appends the client address; explicit trusted-proxy chain, never `true`; spoofing tests), gap 5, ADR 0014; Playwright journeys in CI on a disposable database, gap 21 | ✅ Done (v0.9.0) |
-| 10 | Listing media & documents | Private object storage and uploads for listing photos and verification documents (MIME sniffing, EXIF stripping), cancellation-policy management, bulk pricing | Planned |
+| 10 | Cancellation policies & verification documents | Owner-narrowed scope: partner-authored cancellation policies (refund tiers or non-refundable), provider default and listing override, frozen per booking item, shown on listings and bookings (gap 23, ADR 0015); real, private verification document uploads with a storage abstraction (local disk, S3-compatible), type checked from the bytes, metadata stripped, owner/admin-only downloads, deletion (gap 14, ADR 0016) | ✅ Done (awaiting review) |
+| — | Listing photos & bulk pricing (not yet scheduled) | The rest of the old Phase 10 row: listing photos (public images, resizing, re-encoding) on the Phase 10 storage abstraction, and bulk pricing tools. The owner sets the phase | Not scheduled |
 | 11 | Search UX & locations | Province → town picker (or type-ahead) in customer search over the `GET /locations` endpoint added in Phase 7, richer filters per vertical | Planned |
 | 12 | Admin moderation | The rest of the original Phase 8 scope: listing review queue with approve/reject (gap 15), provider and listing suspension, admin user management (gap 9), settlement corrections (gap 13). The owner sets its phase; approval re-checks the listing-type rule (ADR 0013) | Planned |
 | 13 | Live payment gateways | eSewa + Khalti (sandbox, then production) behind the Phase 5 payment API: server-to-server verification, signed callbacks, late-success handling | Planned |
@@ -39,6 +40,8 @@ Phase 9 (owner's brief: gaps 5 and 21) was inserted, so every later row moved do
 (listing media 10 … hardening 17).
 After Phase 9 the owner assigned Admin moderation (gaps 9, 13, 15) to Phase 12; the rows from
 live gateways on moved down by one (live gateways 13 … hardening 18).
+Phase 10 was narrowed by the owner to gaps 23 and 14; listing photos and bulk pricing became an
+unscheduled row (no renumbering).
 The next phase is whichever the owner approves.
 
 Business decisions behind these phases: [requirements §6](../product/requirements.md#6-business-decisions).

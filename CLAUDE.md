@@ -213,6 +213,15 @@ mero-stay/
   `trust proxy` is a function, **never `true`**: an entry counts only within `TRUST_PROXY_HOPS` and from
   `TRUST_PROXY_ADDRESSES` (both required in production). Rate limits are per client (IPv6 by /64); audit rows use
   the same IP (`lib/client-ip.ts`).
+- **Cancellation policies (ADR 0015):** partner-authored only (no presets). Rule = refund tiers or non-refundable,
+  re-checked by the database. Resolution **listing → provider default → none**, frozen onto each booking item with its
+  source; edits never change bookings; nothing computes a refund. The DB refuses attaching an inactive or foreign
+  policy and switching off an attached one. No policy is shown explicitly, never blocked (gap 30).
+- **Verification documents (ADR 0016):** private files behind `DocumentStorage` (`lib/storage/`: local disk for dev,
+  tests and CI, no secrets; S3-compatible in production; `STORAGE_DRIVER` required there). request → PUT the file →
+  confirm; type checked from the bytes, exact size, 10 MB, JPEG/PNG metadata stripped; server-generated keys never
+  sent to clients; only the owner and admins download, through the API (admin views audited; audit rows metadata
+  only). Delete = tombstone + object removed; approved documents cannot be deleted.
 
 ### 3.4 Multi-vertical design (ADR 0004)
 
@@ -381,4 +390,8 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   retries. 18 gaps open; **no launch blocker**. Launch checklist: `docs/development/operational-gaps.md#launch-checklist`.
 - **Roadmap:** Admin moderation (gaps 9, 13, 15) is **Phase 12**; the phases after it moved down by one (live
   gateways 13 … hardening 18).
-- **Next:** Phase 10, Listing media & documents (gaps 23 and 14), approved by the owner.
+- **Phase 10, Cancellation policies & verification documents:** complete on branch `phase/10-policies-documents`,
+  awaiting owner review. Gap 23 closed (ADR 0015) and gap 14 closed (ADR 0016); Neon end-of-phase run clean (233/233, attempt 1); residual gaps 26–30 added (malware
+  scanning, production storage, backup/retention, PDF metadata/re-encoding, listings without a policy). 21 gaps open;
+  **no launch blocker**. Listing photos and bulk pricing are an unscheduled roadmap row.
+- **Next:** owner review of Phase 10. Phase 11 only after approval.
