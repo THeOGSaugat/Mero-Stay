@@ -97,7 +97,7 @@ which is the deployment today. Across several instances each would count separat
 would multiply, and a restart resets them.
 
 That limitation is the existing **gap 4**: "shared store before scaling out", targeted at Hardening
-(Phase 17). It is not a launch blocker for a single-instance launch. The limiter's
+(Phase 17 when written; Phase 18 after admin moderation became Phase 12). It is not a launch blocker for a single-instance launch. The limiter's
 `consume(key)` interface is what a Redis-backed store would implement; no new dependency is added
 now.
 

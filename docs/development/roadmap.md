@@ -18,16 +18,16 @@ generic data model, not hotels only.
 | 6 | Partner & admin backend | Partner onboarding, profile, masked payout account, verification documents (metadata), listings and per-date inventory per vertical, bookings (customer masked), invoices, read-only payout summary, idempotent partner settle-at-property; admin provider list and verification decisions, invoices, payouts, audit log; role guards and provider scoping (ADR 0008) | ✅ Done (v0.6.0) |
 | 7 | Web frontend | Customer site (Track A, ADR 0010), partner dashboard (Track B, ADR 0011), admin console (Track C, ADR 0012); gaps 18–19 closed (ADR 0009) | ✅ Done (v0.7.0) |
 | 8 | Listing rules & admin lists | Owner-narrowed scope: data-driven provider-type → listing-type rule with DB guard, partner form limited to allowed types, read-only admin rules page (gap 22, ADR 0013); admin search, stable ordering, paging past 100, audit actor names (gap 25) | ✅ Done (v0.8.0) |
-| 9 | Rate limits behind the proxy & E2E in CI | Owner-narrowed scope: per-client login/registration limits behind the web proxy (web server appends the client address; explicit trusted-proxy chain, never `true`; spoofing tests), gap 5, ADR 0014; Playwright journeys in CI on a disposable database, gap 21 | ✅ Done (awaiting review) |
-| — | Admin moderation (not yet scheduled) | The rest of the original Phase 8 scope: listing review queue with approve/reject (gap 15), provider and listing suspension, admin user management (gap 9), settlement corrections (gap 13). The owner sets its phase | Not scheduled |
+| 9 | Rate limits behind the proxy & E2E in CI | Owner-narrowed scope: per-client login/registration limits behind the web proxy (web server appends the client address; explicit trusted-proxy chain, never `true`; spoofing tests), gap 5, ADR 0014; Playwright journeys in CI on a disposable database, gap 21 | ✅ Done (v0.9.0) |
 | 10 | Listing media & documents | Private object storage and uploads for listing photos and verification documents (MIME sniffing, EXIF stripping), cancellation-policy management, bulk pricing | Planned |
 | 11 | Search UX & locations | Province → town picker (or type-ahead) in customer search over the `GET /locations` endpoint added in Phase 7, richer filters per vertical | Planned |
-| 12 | Live payment gateways | eSewa + Khalti (sandbox, then production) behind the Phase 5 payment API: server-to-server verification, signed callbacks, late-success handling | Planned |
-| 13 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refunds per item (`REFUND` payments) | Planned |
-| 14 | Commission & payouts | Payout execution for online-paid items, invoice payment tracking, sequential invoice numbering and payment terms (after the tax advisor), settlement reconciliation | Planned |
-| 15 | Reviews & ratings | Verified (completed-item) reviews, ratings on listings, partner replies, moderation | Planned |
-| 16 | Notifications | `NotificationService` with Sparrow SMS + Amazon SES; email verification and password reset | Planned |
-| 17 | Hardening & launch prep | Security review, 2FA (admins/partners), shared rate-limit store (gap 4), performance, accessibility, deployment plan | Planned |
+| 12 | Admin moderation | The rest of the original Phase 8 scope: listing review queue with approve/reject (gap 15), provider and listing suspension, admin user management (gap 9), settlement corrections (gap 13). The owner sets its phase; approval re-checks the listing-type rule (ADR 0013) | Planned |
+| 13 | Live payment gateways | eSewa + Khalti (sandbox, then production) behind the Phase 5 payment API: server-to-server verification, signed callbacks, late-success handling | Planned |
+| 14 | Cancellations & refunds | Item cancellation using the frozen policy snapshot, refunds per item (`REFUND` payments) | Planned |
+| 15 | Commission & payouts | Payout execution for online-paid items, invoice payment tracking, sequential invoice numbering and payment terms (after the tax advisor), settlement reconciliation | Planned |
+| 16 | Reviews & ratings | Verified (completed-item) reviews, ratings on listings, partner replies, moderation | Planned |
+| 17 | Notifications | `NotificationService` with Sparrow SMS + Amazon SES; email verification and password reset | Planned |
+| 18 | Hardening & launch prep | Security review, 2FA (admins/partners), shared rate-limit store (gap 4), performance, accessibility, deployment plan | Planned |
 
 The owner's Phase 5 brief put payments (simulated gateway) before provider onboarding; the
 phases after 4 were renumbered. Phase 6 (owner's brief: partner and admin backend) covered the old
@@ -37,6 +37,8 @@ the old customer-web and dashboards rows; the rows after it were restated (admin
 listing media 9, search UX 10, live gateways 11, cancellations 12, commission & payouts 13).
 Phase 9 (owner's brief: gaps 5 and 21) was inserted, so every later row moved down by one
 (listing media 10 … hardening 17).
+After Phase 9 the owner assigned Admin moderation (gaps 9, 13, 15) to Phase 12; the rows from
+live gateways on moved down by one (live gateways 13 … hardening 18).
 The next phase is whichever the owner approves.
 
 Business decisions behind these phases: [requirements §6](../product/requirements.md#6-business-decisions).

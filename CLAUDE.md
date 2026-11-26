@@ -375,12 +375,10 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Phase 6, Partner & admin backend:** merged to `main`, tagged `v0.6.0`.
 - **Phase 7, Web frontend:** merged to `main`, tagged `v0.7.0` (customer, partner and admin; ADRs 0009–0012).
 - **Phase 8, Listing rules & admin lists:** merged to `main`, tagged `v0.8.0` (gaps 22 and 25, ADR 0013).
-- **Phase 9, Rate limits behind the proxy & E2E in CI:** complete on branch `phase/09-rate-limits-e2e-ci`; result
-  accepted by the owner, awaiting the merge prompt. Gap 5 closed (per-client limits behind the web proxy, ADR 0014) and gap 21 closed (Playwright
-  journeys in CI on a disposable database, `docs/development/ci.md`). Neon end-of-phase run not clean: attempt 1 lost the
-  endpoint; attempt 2 199/209 (one stalled request in partner-admin plus 9 dependent failures; that file passed 22/22 on
-  Neon in attempt 1; local and CI integration green; gap 5's tests 9/9 on Neon). Flaky Neon runs are a recorded
-  verification constraint (operational-gaps.md); never mask them with weaker tests, longer timeouts or retries. Roadmap rows after 8 moved down by one
-  (Hardening is Phase 17). 18 gaps open; **no launch blocker** (gap 4, the in-memory rate-limit store, matters only
-  with more than one API instance). Admin moderation (gaps 9, 13, 15) is not yet scheduled.
-- **Next:** the owner's v0.9.0 merge-and-tag prompt for Phase 9. Phase 10 only after approval.
+- **Phase 9, Rate limits behind the proxy & E2E in CI:** merged to `main`, tagged `v0.9.0` (gaps 5 and 21, ADR 0014;
+  E2E journeys run in CI). Neon end-of-phase run not clean (a stalled connection; owner accepted). Flaky Neon runs are
+  a recorded verification constraint (operational-gaps.md); never mask them with weaker tests, longer timeouts or
+  retries. 18 gaps open; **no launch blocker**. Launch checklist: `docs/development/operational-gaps.md#launch-checklist`.
+- **Roadmap:** Admin moderation (gaps 9, 13, 15) is **Phase 12**; the phases after it moved down by one (live
+  gateways 13 … hardening 18).
+- **Next:** Phase 10, Listing media & documents (gaps 23 and 14), approved by the owner.
