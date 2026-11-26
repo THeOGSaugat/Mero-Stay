@@ -1,5 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client.js";
 import { toDbDate } from "../../domain/dates.js";
+import { summarizeTrip } from "../../domain/money.js";
 import type { Db } from "../listings/listings.repository.js";
 
 /** Prisma queries for trips and booking items. No business rules here (see trips.service.ts). */
@@ -169,4 +170,38 @@ export async function findTripsOfCustomer(
     db.trip.count({ where }),
   ]);
   return { trips, total };
+}
+
+/**
+ * Trip totals = sums of its active items (CLAUDE.md §3.5), written together with any other trip
+ * fields. The caller holds the trip lock. Shared by the trips service and admin voids (ADR 0018).
+ */
+export async function recalculateTripTotals(
+  tx: Prisma.TransactionClient,
+  trip: { id: string; currency: string },
+  extra: Prisma.TripUpdateInput = {},
+): Promise<void> {
+  const items = await tx.bookingItem.findMany({
+    where: { tripId: trip.id, status: { in: [...ACTIVE_ITEM_STATUSES] } },
+    select: {
+      currency: true,
+      subtotalMinor: true,
+      serviceChargeMinor: true,
+      taxMinor: true,
+      totalMinor: true,
+      commissionMinor: true,
+    },
+  });
+  const totals = summarizeTrip(trip.currency, items);
+  await tx.trip.update({
+    where: { id: trip.id },
+    data: {
+      subtotalMinor: totals.subtotalMinor,
+      serviceChargeMinor: totals.serviceChargeMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
+      commissionTotalMinor: totals.commissionTotalMinor,
+      ...extra,
+    },
+  });
 }

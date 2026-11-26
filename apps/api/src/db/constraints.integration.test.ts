@@ -243,7 +243,8 @@ describe("64-bit money columns", () => {
       WHERE table_schema = 'public' AND column_name LIKE '%\_minor'
       ORDER BY table_name, column_name`;
     // + payments.captured_minor (Phase 5); + payment_reconciliations and refund_requests amount_minor (Phase 11)
-    expect(rows.length).toBe(23);
+    // + payouts.gross_minor, payouts.commission_minor, provider_invoice_adjustments.amount_minor (Phase 12)
+    expect(rows.length).toBe(26);
     expect(rows.filter((row) => row.data_type !== "bigint")).toEqual([]);
   });
 

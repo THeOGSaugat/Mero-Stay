@@ -33,6 +33,10 @@ export function serializeManagedListing(listing: ManagedListing) {
     attributes: toJsonSafe(listing.attributes),
     details,
     publishedAt: listing.publishedAt?.toISOString() ?? null,
+    /** MeroStay's last review decision (Phase 12): a rejection always carries its reason. */
+    review: listing.reviewedAt
+      ? { reviewedAt: listing.reviewedAt.toISOString(), note: listing.reviewNote }
+      : null,
     createdAt: listing.createdAt.toISOString(),
     updatedAt: listing.updatedAt.toISOString(),
   };

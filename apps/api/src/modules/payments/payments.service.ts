@@ -10,6 +10,7 @@ import {
   type DueLine,
 } from "../../domain/payments.js";
 import { decideGatewayOutcome } from "../../domain/gateway-outcome.js";
+import { nextRecheckAt, RECHECK_WINDOW_MS } from "../../domain/gateway-recheck.js";
 import { AppError } from "../../lib/errors.js";
 import {
   GatewayError,
@@ -733,6 +734,80 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
     return { checked: candidates.length, applied, unavailable };
   }
 
+  /**
+   * Gap 33 (ADR 0018): eSewa/Khalti payments that closed WITHOUT money (cancelled when the hold
+   * expired, replaced, failed) are asked again a few times after closing (5 min, 65 min, 6 h,
+   * 25 h): a customer can still finish on a gateway page that was open. Money found is recorded
+   * for reconciliation through the same decision as callbacks (never applied to the trip).
+   * Idempotent: a payment with a reconciliation is never picked again, and each check is counted.
+   */
+  async function recheckClosedPayments(
+    limit: number,
+  ): Promise<{ checked: number; recorded: number; unavailable: number }> {
+    const live = Object.keys(config.gateways).filter((name) => name !== "simulated");
+    if (live.length === 0) return { checked: 0, recorded: 0, unavailable: 0 };
+    const at = now();
+    const candidates = await prisma.payment.findMany({
+      where: {
+        kind: "CHARGE",
+        status: { in: ["CANCELLED", "FAILED"] },
+        gateway: { in: live },
+        gatewayReference: { not: null },
+        completedAt: { gte: new Date(at.getTime() - RECHECK_WINDOW_MS), lte: at },
+        reconciliations: { none: {} },
+        OR: [{ gatewayCheck: null }, { gatewayCheck: { nextCheckAt: { lte: at } } }],
+      },
+      include: { gatewayCheck: true },
+      orderBy: { completedAt: "asc" },
+      take: limit,
+    });
+    let checked = 0;
+    let recorded = 0;
+    let unavailable = 0;
+    for (const payment of candidates) {
+      const closedAt = payment.completedAt ?? payment.updatedAt;
+      const done = payment.gatewayCheck?.checks ?? 0;
+      const due = payment.gatewayCheck
+        ? payment.gatewayCheck.nextCheckAt
+        : nextRecheckAt(closedAt, 0);
+      if (!due || due.getTime() > at.getTime()) continue;
+      checked += 1;
+      let lastResult: string;
+      let next: Date | null;
+      let count = done;
+      try {
+        const result = await adapterFor(payment.gateway).lookup({
+          paymentId: payment.id,
+          amountMinor: payment.amountMinor,
+          gatewayReference: payment.gatewayReference,
+        });
+        const application = await applyGatewayResult(payment.id, result);
+        if (application.reconciliation?.created) recorded += 1;
+        count = done + 1;
+        lastResult = result.status;
+        next = application.reconciliation ? null : nextRecheckAt(closedAt, count);
+      } catch (err) {
+        if (!(err instanceof GatewayError)) throw err;
+        unavailable += 1;
+        lastResult = `unavailable:${err.code}`;
+        // Not counted: try again in 5 minutes while the window lasts.
+        next = new Date(at.getTime() + 5 * 60_000);
+      }
+      await prisma.paymentGatewayCheck.upsert({
+        where: { paymentId: payment.id },
+        create: {
+          paymentId: payment.id,
+          checks: count,
+          lastCheckedAt: at,
+          lastResult,
+          nextCheckAt: next,
+        },
+        update: { checks: count, lastCheckedAt: at, lastResult, nextCheckAt: next },
+      });
+    }
+    return { checked, recorded, unavailable };
+  }
+
   return {
     createIntent,
     confirmPayment,
@@ -740,6 +815,7 @@ export function createPaymentsService({ prisma, now, config }: PaymentsServiceDe
     refreshPayment,
     applyGatewayResult,
     checkExpiringPayments,
+    recheckClosedPayments,
     listPayments,
     settleAtProperty,
     listTripInvoices,

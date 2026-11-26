@@ -116,6 +116,15 @@ const envSchema = z
     ESEWA_STATUS_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
     KHALTI_API_URL: z.preprocess(emptyAsUndefined, z.url().optional()),
     /** How often the hold-release worker runs in --watch mode (default 60 s). */
+    /**
+     * TESTS ONLY (refused in production): logins allowed per client per 15 minutes (default 30,
+     * ADR 0006/0014). The E2E suite drives every browser from one address, so it raises this; the
+     * per-email limit is never changed. ADR 0018.
+     */
+    AUTH_LOGIN_PER_IP_LIMIT: z.preprocess(
+      emptyAsUndefined,
+      z.coerce.number().int().min(1).max(10_000).optional(),
+    ),
     HOLD_RELEASE_INTERVAL_SECONDS: z.preprocess(
       emptyAsUndefined,
       z.coerce.number().int().min(5).max(3600).default(60),
@@ -174,6 +183,13 @@ const envSchema = z
     ),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === "production" && env.AUTH_LOGIN_PER_IP_LIMIT !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["AUTH_LOGIN_PER_IP_LIMIT"],
+        message: "is for tests only and is refused in production",
+      });
+    }
     // Neon only accepts TLS connections. In production, refuse to start without it
     // so credentials are never sent over an unencrypted link.
     if (
@@ -362,7 +378,13 @@ export function authConfigFromEnv(env: Env): AuthConfig {
       env.SESSION_COOKIE_SECURE === undefined
         ? env.NODE_ENV === "production"
         : env.SESSION_COOKIE_SECURE === "true",
-    rateLimits: DEFAULT_RATE_LIMITS,
+    rateLimits:
+      env.AUTH_LOGIN_PER_IP_LIMIT === undefined
+        ? DEFAULT_RATE_LIMITS
+        : {
+            ...DEFAULT_RATE_LIMITS,
+            loginPerIp: { ...DEFAULT_RATE_LIMITS.loginPerIp, limit: env.AUTH_LOGIN_PER_IP_LIMIT },
+          },
   };
 }
 

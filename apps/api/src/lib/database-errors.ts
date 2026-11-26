@@ -96,6 +96,41 @@ export function mapDatabaseError(err: unknown): AppError | null {
       "This kind of business cannot list this type.",
     );
   }
+  // Phase 12 (ADR 0018). Checked before the generic money prefixes ("booking_items_").
+  if (sqlState === "23514" && constraint === "users_last_admin_chk") {
+    return new AppError(409, "LAST_ADMIN", "At least one active admin must remain.");
+  }
+  if (sqlState === "23514" && constraint === "listings_approval_type_rule_chk") {
+    return new AppError(
+      422,
+      "LISTING_TYPE_NOT_ALLOWED",
+      "This listing's type is not allowed for this kind of business, so it cannot be approved.",
+    );
+  }
+  if (
+    sqlState === "23514" &&
+    constraint &&
+    (constraint.startsWith("payouts_") ||
+      constraint === "booking_items_payout_link_chk" ||
+      constraint === "booking_items_payout_paid_chk")
+  ) {
+    return new AppError(
+      409,
+      "PAYOUT_STATE_CONFLICT",
+      "The payout cannot change that way in its current state.",
+    );
+  }
+  if (
+    sqlState === "23514" &&
+    (constraint?.startsWith("provider_invoice_adjustments_") ||
+      constraint === "booking_items_void_chk")
+  ) {
+    return new AppError(
+      409,
+      "VOID_STATE_CONFLICT",
+      "The booking or invoice cannot change that way in its current state.",
+    );
+  }
   if (
     sqlState === "23514" &&
     constraint &&

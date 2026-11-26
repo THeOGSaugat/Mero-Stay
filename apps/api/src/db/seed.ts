@@ -537,8 +537,10 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         endDate: date("2026-10-06"),
         ...itemMoney(guideCharges),
         paymentStatus: "UNPAID", // PAID below, once the payment is allocated
-        commissionStatus: "PAID",
-        payoutStatus: "PAID",
+        // Paid online and completed, not yet paid out: an admin can include it in the October
+        // payout (Phase 12). Commission is collected when the payout is paid (ADR 0018).
+        commissionStatus: "PENDING",
+        payoutStatus: "PENDING",
         completedAt: new Date(),
         slots: {
           create: guideCharges.lines.map((line, i) => ({

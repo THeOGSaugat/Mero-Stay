@@ -31,6 +31,10 @@ import { NO_PAYMENTS, type PaymentsConfig } from "./modules/payments/payments.co
 import { createPaymentsRouter } from "./modules/payments/payments.routes.js";
 import { createPaymentsService } from "./modules/payments/payments.service.js";
 import { createRefundsService } from "./modules/refunds/refunds.service.js";
+import { createAdminAccountsService } from "./modules/admin-accounts/admin-accounts.service.js";
+import { createAdminSetupRouter } from "./modules/admin-accounts/admin-setup.routes.js";
+import { createModerationService } from "./modules/moderation/moderation.service.js";
+import { createPayoutsService } from "./modules/payouts/payouts.service.js";
 
 export interface AppDependencies {
   logger: Logger;
@@ -139,6 +143,10 @@ export function createApp(deps: AppDependencies): Express {
     });
     const policiesService = createCancellationPoliciesService({ prisma: deps.prisma });
     const financeService = createFinanceService({ prisma: deps.prisma });
+    const payoutsService = createPayoutsService({ prisma: deps.prisma, now });
+    const adminAccountsService = createAdminAccountsService({ prisma: deps.prisma, now });
+    // Invited admins set their password with a one-time link (no session).
+    v1.use(createAdminSetupRouter({ service: adminAccountsService }));
     // Partners: role PARTNER, scoped to their own provider (ADR 0008). Onboarding: any logged-in customer.
     v1.use(
       createPartnerRouter({
@@ -150,6 +158,7 @@ export function createApp(deps: AppDependencies): Express {
         bookings: createProviderBookingsService({ prisma: deps.prisma, now }),
         finance: financeService,
         policies: policiesService,
+        payouts: payoutsService,
       }),
     );
     // MeroStay staff only: role ADMIN on the session user; writes audited.
@@ -163,6 +172,9 @@ export function createApp(deps: AppDependencies): Express {
         auditLog: createAuditLogService({ prisma: deps.prisma }),
         policies: policiesService,
         refunds: createRefundsService({ prisma: deps.prisma, gateways: paymentsConfig.gateways }),
+        payouts: payoutsService,
+        adminAccounts: adminAccountsService,
+        moderation: createModerationService({ prisma: deps.prisma, now }),
       }),
     );
     app.use("/api/v1", v1);
