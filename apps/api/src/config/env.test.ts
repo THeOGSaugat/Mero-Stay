@@ -60,6 +60,8 @@ describe("parseEnv", () => {
         NODE_ENV: "production",
         TRUST_PROXY_HOPS: "1",
         TRUST_PROXY_ADDRESSES: "loopback",
+        STORAGE_DRIVER: "local",
+        STORAGE_LOCAL_DIR: "/var/lib/merostay/documents",
       }).NODE_ENV,
     ).toBe("production");
   });

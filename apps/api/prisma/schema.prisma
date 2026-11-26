@@ -202,43 +202,47 @@ enum IntegrationType {
 }
 
 model Provider {
-  id                     String          @id @default(uuid()) @db.Uuid
-  providerTypeCode       String          @map("provider_type_code")
-  ownerUserId            String          @map("owner_user_id") @db.Uuid
-  legalName              String          @map("legal_name")
-  displayName            String          @map("display_name")
-  description            String?
-  status                 ProviderStatus  @default(DRAFT)
-  contactEmail           String?         @map("contact_email")
-  contactPhone           String?         @map("contact_phone")
-  addressLine            String?         @map("address_line")
+  id                          String          @id @default(uuid()) @db.Uuid
+  providerTypeCode            String          @map("provider_type_code")
+  ownerUserId                 String          @map("owner_user_id") @db.Uuid
+  legalName                   String          @map("legal_name")
+  displayName                 String          @map("display_name")
+  description                 String?
+  status                      ProviderStatus  @default(DRAFT)
+  contactEmail                String?         @map("contact_email")
+  contactPhone                String?         @map("contact_phone")
+  addressLine                 String?         @map("address_line")
   /// Tax/registration numbers. Supporting files live in provider_documents.
-  panNumber              String?         @map("pan_number")
-  vatNumber              String?         @map("vat_number")
-  businessRegistrationNo String?         @map("business_registration_no")
+  panNumber                   String?         @map("pan_number")
+  vatNumber                   String?         @map("vat_number")
+  businessRegistrationNo      String?         @map("business_registration_no")
   /// Overrides the platform default commission for all of this provider's listings (NULL = default).
-  commissionRateBps      Int?            @map("commission_rate_bps")
-  integrationType        IntegrationType @default(MANUAL) @map("integration_type")
+  commissionRateBps           Int?            @map("commission_rate_bps")
+  integrationType             IntegrationType @default(MANUAL) @map("integration_type")
   /// Provider's ID in an external system (future integrations).
-  externalRef            String?         @map("external_ref")
-  verifiedAt             DateTime?       @map("verified_at") @db.Timestamptz(3)
-  rejectionReason        String?         @map("rejection_reason")
-  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  externalRef                 String?         @map("external_ref")
+  verifiedAt                  DateTime?       @map("verified_at") @db.Timestamptz(3)
+  rejectionReason             String?         @map("rejection_reason")
+  /// Used when a listing has no policy of its own (ADR 0015). Must be one of this provider's active policies.
+  defaultCancellationPolicyId String?         @map("default_cancellation_policy_id") @db.Uuid
+  createdAt                   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  providerType         ProviderType            @relation(fields: [providerTypeCode], references: [code])
-  owner                User                    @relation(fields: [ownerUserId], references: [id])
-  documents            ProviderDocument[]
-  payoutAccounts       ProviderPayoutAccount[]
-  listings             Listing[]
-  cancellationPolicies CancellationPolicy[]
-  bookingItems         BookingItem[]
-  payouts              Payout[]
-  invoices             ProviderInvoice[]
-  reviews              Review[]
+  providerType              ProviderType            @relation(fields: [providerTypeCode], references: [code])
+  defaultCancellationPolicy CancellationPolicy?     @relation("ProviderDefaultCancellationPolicy", fields: [defaultCancellationPolicyId], references: [id])
+  owner                     User                    @relation(fields: [ownerUserId], references: [id])
+  documents                 ProviderDocument[]
+  payoutAccounts            ProviderPayoutAccount[]
+  listings                  Listing[]
+  cancellationPolicies      CancellationPolicy[]    @relation("CancellationPolicyOwner")
+  bookingItems              BookingItem[]
+  payouts                   Payout[]
+  invoices                  ProviderInvoice[]
+  reviews                   Review[]
 
   @@index([ownerUserId])
   @@index([providerTypeCode, status])
+  @@index([defaultCancellationPolicyId])
   @@map("providers")
 }
 
@@ -259,6 +263,11 @@ enum ProviderDocumentType {
 }
 
 enum DocumentStatus {
+  /// Requested; the file has not been uploaded yet.
+  AWAITING_UPLOAD
+  /// The file is stored; the partner has not confirmed it yet.
+  UPLOADED
+  /// Confirmed by the partner: awaiting the admin's review.
   PENDING
   APPROVED
   REJECTED
@@ -271,10 +280,18 @@ model ProviderDocument {
   id              String               @id @default(uuid()) @db.Uuid
   providerId      String               @map("provider_id") @db.Uuid
   documentType    ProviderDocumentType @map("document_type")
+  /// Server-generated key in private storage (ADR 0016); never a URL, never sent to clients.
   storageKey      String               @map("storage_key")
   mimeType        String               @map("mime_type")
   sizeBytes       Int                  @map("size_bytes")
-  status          DocumentStatus       @default(PENDING)
+  status          DocumentStatus       @default(AWAITING_UPLOAD)
+  /// Display name only (sanitised); never used as a path.
+  fileName        String?              @map("file_name")
+  /// SHA-256 (hex) of the stored bytes; set once, at upload.
+  sha256          String?
+  uploadedAt      DateTime?            @map("uploaded_at") @db.Timestamptz(3)
+  /// Tombstone: the object is removed and the document is never shown or counted again.
+  deletedAt       DateTime?            @map("deleted_at") @db.Timestamptz(3)
   documentNumber  String?              @map("document_number")
   expiresOn       DateTime?            @map("expires_on") @db.Date
   reviewedById    String?              @map("reviewed_by_id") @db.Uuid
@@ -552,17 +569,23 @@ model InventorySlot {
 // ============================================================================
 
 model CancellationPolicy {
-  id          String   @id @default(uuid()) @db.Uuid
+  id            String   @id @default(uuid()) @db.Uuid
   /// NULL = platform template any provider may use.
-  providerId  String?  @map("provider_id") @db.Uuid
-  name        String
-  description String
-  /// Ordered tiers: [{ "minHoursBeforeStart": 48, "refundBps": 10000 }, ...]. Validated by the app.
-  rules       Json
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  providerId    String?  @map("provider_id") @db.Uuid
+  name          String
+  description   String
+  /// Ordered tiers: [{ "minHoursBeforeStart": 48, "refundBps": 10000 }, ...] (hours decreasing, refund
+  /// never increasing); empty when non-refundable. Checked by the app and by cancellation_rules_valid().
+  rules         Json
+  /// No refund at any time (then `rules` is empty).
+  nonRefundable Boolean  @default(false) @map("non_refundable")
+  /// Inactive policies cannot be attached; an attached policy cannot be deactivated (ADR 0015).
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  provider     Provider?     @relation(fields: [providerId], references: [id])
+  provider     Provider?     @relation("CancellationPolicyOwner", fields: [providerId], references: [id])
+  defaultFor   Provider[]    @relation("ProviderDefaultCancellationPolicy")
   listings     Listing[]
   bookingItems BookingItem[]
 

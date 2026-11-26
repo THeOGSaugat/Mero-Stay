@@ -5,10 +5,12 @@ import {
   loadEnvFileIfPresent,
   parseEnv,
   paymentsConfigFromEnv,
+  storageConfigFromEnv,
   trustProxyConfigFromEnv,
   type Env,
 } from "./config/env.js";
 import { createLogger } from "./lib/logger.js";
+import { createDocumentStorage } from "./lib/storage/index.js";
 import { checkDatabaseConnection, createPrismaClient } from "./lib/prisma.js";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -30,6 +32,8 @@ const { env, auth } = readConfig();
 const logger = createLogger(env);
 const prisma = createPrismaClient(env.DATABASE_URL);
 const trustProxy = trustProxyConfigFromEnv(env);
+const storageConfig = storageConfigFromEnv(env);
+const storage = createDocumentStorage(storageConfig);
 
 const app = createApp({
   logger,
@@ -38,6 +42,7 @@ const app = createApp({
   auth,
   payments: paymentsConfigFromEnv(env),
   trustProxy,
+  storage,
 });
 
 const server = app.listen(env.PORT, (error) => {
@@ -51,6 +56,8 @@ const server = app.listen(env.PORT, (error) => {
       env: env.NODE_ENV,
       paymentGateway: env.PAYMENT_GATEWAY ?? "none",
       trustProxy: { hops: trustProxy.hops, addresses: trustProxy.addresses.join(",") },
+      // The driver only: never a directory, bucket credential or key.
+      documentStorage: storageConfig.driver,
     },
     "MeroStay API listening",
   );

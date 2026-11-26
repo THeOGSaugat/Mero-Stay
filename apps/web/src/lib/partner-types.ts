@@ -1,3 +1,4 @@
+import type { CancellationTier, PolicyTerms } from "./cancellation-policy";
 import type { CurrencyInfo, PaymentMethod } from "./api-types";
 
 /**
@@ -21,7 +22,8 @@ export interface Paged<T> {
 export type ProviderStatus =
   "DRAFT" | "PENDING_VERIFICATION" | "VERIFIED" | "REJECTED" | "SUSPENDED";
 
-export type DocumentStatus = "PENDING" | "APPROVED" | "REJECTED";
+/** ADR 0016: AWAITING_UPLOAD → UPLOADED → PENDING (confirmed, for review) → APPROVED | REJECTED. */
+export type DocumentStatus = "AWAITING_UPLOAD" | "UPLOADED" | "PENDING" | "APPROVED" | "REJECTED";
 
 export interface RequiredDocumentGroup {
   requirement: string;
@@ -84,13 +86,35 @@ export interface PartnerProfile {
   updatedAt: string;
 }
 
+/** A partner's own cancellation policy (ADR 0015). */
+export interface CancellationPolicy {
+  id: string;
+  name: string;
+  description: string;
+  nonRefundable: boolean;
+  rules: CancellationTier[];
+  isActive: boolean;
+  isPlatformTemplate: boolean;
+  createdAt: string;
+  updatedAt: string;
+  usage?: { listings: number; providerDefault: boolean };
+}
+
+export interface PolicyList {
+  defaultPolicyId: string | null;
+  policies: CancellationPolicy[];
+}
+
 export interface VerificationDocument {
   id: string;
   documentType: string;
   status: DocumentStatus;
+  /** Display name only. The file itself is fetched through the API, never by a storage key. */
+  fileName: string | null;
   mimeType: string;
   sizeBytes: number;
-  storageKey: string;
+  hasFile: boolean;
+  uploadedAt: string | null;
   documentNumber: string | null;
   expiresOn: string | null;
   reviewedAt: string | null;
@@ -192,7 +216,7 @@ export interface ProviderBooking extends CurrencyInfo {
 
 export interface ProviderBookingDetail extends ProviderBooking {
   lines: { date: string; units: number; unitPriceMinor: string; amountMinor: string }[];
-  cancellationPolicy: { name?: string; rules?: unknown[]; capturedAt?: string } | null;
+  cancellationPolicy: PolicyTerms | null;
   attributes: Record<string, unknown> | null;
 }
 

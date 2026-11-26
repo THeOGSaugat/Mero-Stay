@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const isCI = Boolean(process.env.CI);
@@ -19,9 +22,20 @@ const WEB_PORT = bookingDatabase ? 3100 : 3000;
 // The web server (apps/web/server.mts) runs on this machine and appends the browser's address to
 // X-Forwarded-For; the API trusts it for exactly one hop from loopback (ADR 0014, gap 5).
 const trustWebServer = { TRUST_PROXY_HOPS: "1", TRUST_PROXY_ADDRESSES: "loopback" };
+// Verification documents (ADR 0016) go to a fresh temporary directory: local disk, no secrets,
+// never the developer's apps/api/.storage. Only the main process starts the servers, so test
+// workers (which load this file too) do not create directories.
+const documentStorage = {
+  STORAGE_DRIVER: "local",
+  STORAGE_LOCAL_DIR:
+    process.env.TEST_WORKER_INDEX === undefined
+      ? mkdtempSync(join(tmpdir(), "merostay-e2e-docs-"))
+      : join(tmpdir(), "merostay-e2e-docs-unused"),
+};
 const apiEnv: Record<string, string> = bookingDatabase
   ? {
       ...trustWebServer,
+      ...documentStorage,
       NODE_ENV: "test",
       PORT: String(API_PORT),
       LOG_LEVEL: "warn",
@@ -32,7 +46,13 @@ const apiEnv: Record<string, string> = bookingDatabase
       // booking for the payout summary. The customer UI still offers no online payment.
       PAYMENT_GATEWAY: "simulated",
     }
-  : { ...trustWebServer, NODE_ENV: "production", PORT: String(API_PORT), LOG_LEVEL: "warn" };
+  : {
+      ...trustWebServer,
+      ...documentStorage,
+      NODE_ENV: "production",
+      PORT: String(API_PORT),
+      LOG_LEVEL: "warn",
+    };
 
 /**
  * End-to-end tests run against PRODUCTION builds of the API and web app.

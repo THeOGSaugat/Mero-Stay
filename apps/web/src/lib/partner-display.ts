@@ -114,6 +114,8 @@ export function providerStatusLabel(status: string): string {
 }
 
 const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  AWAITING_UPLOAD: "Waiting for the file",
+  UPLOADED: "Uploaded, not confirmed",
   PENDING: "Under review",
   APPROVED: "Approved",
   REJECTED: "Rejected",

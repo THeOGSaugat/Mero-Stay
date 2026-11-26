@@ -32,6 +32,7 @@ import {
 } from "../ui/primitives";
 import { InventoryManager } from "./inventory-manager";
 import { LocationPicker } from "./location-picker";
+import { ListingPolicyPanel } from "./policies-view";
 import { usePartner } from "./partner-context";
 import {
   Facts,
@@ -568,6 +569,9 @@ export function ListingDetailView() {
           ))}
         </div>
       </Panel>
+      {listing.listingType.isBookable ? (
+        <ListingPolicyPanel listing={listing} onSaved={(saved) => setData({ data: saved })} />
+      ) : null}
       {listing.listingType.isBookable ? <InventoryManager listing={listing} /> : null}
       {listing.status !== "SUSPENDED" ? (
         <Panel title="Edit listing">

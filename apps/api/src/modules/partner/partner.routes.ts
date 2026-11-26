@@ -1,6 +1,7 @@
-import { Router, type RequestHandler, type Response } from "express";
+import { raw, Router, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import { AppError } from "../../lib/errors.js";
 import { idempotencyKeyOf, type IdempotentResult } from "../../lib/idempotency.js";
 import { idParamsSchema, uuidSchema } from "../../lib/validation.js";
 import { auditContextOf } from "../audit/audit.js";
@@ -39,7 +40,18 @@ import {
 } from "../listings/listing-management.serializers.js";
 import type { ListingManagementService } from "../listings/listing-management.service.js";
 import {
+  createPolicyBodySchema,
+  defaultPolicyBodySchema,
+  updatePolicyBodySchema,
+} from "../cancellation-policies/cancellation-policies.schemas.js";
+import { serializePolicy } from "../cancellation-policies/cancellation-policies.serializers.js";
+import type { CancellationPoliciesService } from "../cancellation-policies/cancellation-policies.service.js";
+import { sendDocumentFile } from "../providers/document-download.js";
+import {
+  DOCUMENT_MIME_TYPES,
   documentBodySchema,
+  documentParamsSchema,
+  MAX_DOCUMENT_BYTES,
   onboardingBodySchema,
   profilePatchSchema,
 } from "../providers/providers.schemas.js";
@@ -55,6 +67,7 @@ export interface PartnerRouterDeps {
   inventory: InventoryService;
   bookings: ProviderBookingsService;
   finance: FinanceService;
+  policies: CancellationPoliciesService;
 }
 
 const itemParamsSchema = z.object({ itemId: uuidSchema }).strict();
@@ -73,7 +86,7 @@ function markReplay(res: Response, result: IdempotentResult): void {
  *   provider (partner-context.ts); another provider's data is a 404.
  */
 export function createPartnerRouter(deps: PartnerRouterDeps): Router {
-  const { auth, providers, listings, inventory, bookings, finance } = deps;
+  const { auth, providers, listings, inventory, bookings, finance, policies } = deps;
   const router = Router();
   router.use("/partner", auth.loadSession, auth.requireAuth, auth.requireCsrf);
 
@@ -120,10 +133,12 @@ export function createPartnerRouter(deps: PartnerRouterDeps): Router {
     res.json({ data: docs.map(serializeDocument) });
   });
 
+  // Verification documents (ADR 0016): request → upload the file → confirm. Private: the owner
+  // (and admins) can fetch the file through the API; no storage key or URL is ever sent.
   router.post("/partner/verification-documents", async (req, res) => {
     const body = documentBodySchema.parse(req.body ?? {});
     const partner = currentPartner(req);
-    const result = await providers.submitDocument(
+    const result = await providers.requestDocumentUpload(
       auditContextOf(req),
       partner.providerId,
       partner.providerStatus,
@@ -132,7 +147,139 @@ export function createPartnerRouter(deps: PartnerRouterDeps): Router {
     );
     markReplay(res, result);
     const doc = await providers.getDocument(partner.providerId, result.resourceId);
-    res.status(result.status).json({ data: serializeDocument(doc) });
+    res.status(result.status).json({
+      data: serializeDocument(doc),
+      upload: {
+        method: "PUT",
+        path: `/api/v1/partner/verification-documents/${doc.id}/file`,
+        contentType: doc.mimeType,
+        sizeBytes: doc.sizeBytes,
+      },
+    });
+  });
+
+  router.put(
+    "/partner/verification-documents/:id/file",
+    raw({ type: [...DOCUMENT_MIME_TYPES], limit: MAX_DOCUMENT_BYTES }),
+    async (req, res) => {
+      const { id } = documentParamsSchema.parse(req.params);
+      if (!Buffer.isBuffer(req.body)) {
+        throw new AppError(
+          415,
+          "UNSUPPORTED_MEDIA_TYPE",
+          "Send the file itself as application/pdf, image/jpeg or image/png.",
+        );
+      }
+      const partner = currentPartner(req);
+      await providers.uploadDocumentFile(
+        auditContextOf(req),
+        partner.providerId,
+        partner.providerStatus,
+        id,
+        req.body,
+        req.headers["content-type"],
+      );
+      res.json({ data: serializeDocument(await providers.getDocument(partner.providerId, id)) });
+    },
+  );
+
+  router.post("/partner/verification-documents/:id/confirm", async (req, res) => {
+    const { id } = documentParamsSchema.parse(req.params);
+    z.object({})
+      .strict()
+      .parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const { changed } = await providers.confirmDocument(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      id,
+    );
+    const doc = await providers.getDocument(partner.providerId, id);
+    res.json({ data: { changed, document: serializeDocument(doc) } });
+  });
+
+  router.get("/partner/verification-documents/:id/file", async (req, res) => {
+    const { id } = documentParamsSchema.parse(req.params);
+    const { doc, body } = await providers.readDocumentFile(currentPartner(req).providerId, id);
+    sendDocumentFile(res, doc, body);
+  });
+
+  router.delete("/partner/verification-documents/:id", async (req, res) => {
+    const { id } = documentParamsSchema.parse(req.params);
+    const partner = currentPartner(req);
+    const { objectRemoved } = await providers.deleteDocument(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      id,
+    );
+    if (!objectRemoved) {
+      // The record is a tombstone either way; the orphaned object is left for a clean-up.
+      req.log.warn({ documentId: id }, "Deleted document's stored object could not be removed");
+    }
+    res.status(204).end();
+  });
+
+  // Cancellation policies (ADR 0015): the provider's own, with where each is used.
+  router.get("/partner/cancellation-policies", async (req, res) => {
+    const { defaultPolicyId, policies: rows } = await policies.listOwn(
+      currentPartner(req).providerId,
+    );
+    res.json({
+      data: {
+        defaultPolicyId,
+        policies: rows.map(({ policy, usage }) => serializePolicy(policy, usage)),
+      },
+    });
+  });
+
+  router.post("/partner/cancellation-policies", async (req, res) => {
+    const body = createPolicyBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const result = await policies.create(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      body,
+      idempotencyKeyOf(req, false),
+    );
+    markReplay(res, result);
+    const { policy, usage } = await policies.getOwn(partner.providerId, result.resourceId);
+    res.status(result.status).json({ data: serializePolicy(policy, usage) });
+  });
+
+  router.put("/partner/cancellation-policies/default", async (req, res) => {
+    const { policyId } = defaultPolicyBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    const { changed } = await policies.setProviderDefault(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      policyId,
+    );
+    res.json({ data: { changed, defaultPolicyId: policyId } });
+  });
+
+  router.get("/partner/cancellation-policies/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { policy, usage } = await policies.getOwn(currentPartner(req).providerId, id);
+    res.json({ data: serializePolicy(policy, usage) });
+  });
+
+  router.patch("/partner/cancellation-policies/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const patch = updatePolicyBodySchema.parse(req.body ?? {});
+    const partner = currentPartner(req);
+    await policies.update(
+      auditContextOf(req),
+      partner.providerId,
+      partner.providerStatus,
+      id,
+      patch,
+    );
+    const { policy, usage } = await policies.getOwn(partner.providerId, id);
+    res.json({ data: serializePolicy(policy, usage) });
   });
 
   // -------------------------------------------------------------- listings and inventory

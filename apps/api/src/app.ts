@@ -5,6 +5,8 @@ import type { Logger } from "pino";
 import { pinoHttp } from "pino-http";
 import type { PrismaClient } from "./generated/prisma/client.js";
 import { createProxyTrust, NO_TRUSTED_PROXY, type TrustProxyConfig } from "./lib/client-ip.js";
+import type { DocumentStorage } from "./lib/storage/index.js";
+import { createCancellationPoliciesService } from "./modules/cancellation-policies/cancellation-policies.service.js";
 import type { AuthConfig } from "./modules/auth/auth.config.js";
 import { createAuthMiddleware } from "./modules/auth/auth.middleware.js";
 import { createAuthRouter } from "./modules/auth/auth.routes.js";
@@ -48,6 +50,11 @@ export interface AppDependencies {
    * none, so `req.ip` is the socket peer. Never Express's `true`.
    */
   trustProxy?: TrustProxyConfig;
+  /**
+   * Private storage for verification documents (ADR 0016). Without it the document file endpoints
+   * answer 503 STORAGE_UNAVAILABLE (tests that do not touch files can omit it).
+   */
+  storage?: DocumentStorage;
 }
 
 /**
@@ -123,7 +130,12 @@ export function createApp(deps: AppDependencies): Express {
     });
     // Always authenticated; owner-scoped (ADR 0007).
     v1.use(createPaymentsRouter({ service: paymentsService, auth: authMiddleware }));
-    const providersService = createProvidersService({ prisma: deps.prisma, now });
+    const providersService = createProvidersService({
+      prisma: deps.prisma,
+      now,
+      ...(deps.storage ? { storage: deps.storage } : {}),
+    });
+    const policiesService = createCancellationPoliciesService({ prisma: deps.prisma });
     const financeService = createFinanceService({ prisma: deps.prisma });
     // Partners: role PARTNER, scoped to their own provider (ADR 0008). Onboarding: any logged-in customer.
     v1.use(
@@ -135,6 +147,7 @@ export function createApp(deps: AppDependencies): Express {
         inventory: createInventoryService({ prisma: deps.prisma }),
         bookings: createProviderBookingsService({ prisma: deps.prisma, now }),
         finance: financeService,
+        policies: policiesService,
       }),
     );
     // MeroStay staff only: role ADMIN on the session user; writes audited.
@@ -146,6 +159,7 @@ export function createApp(deps: AppDependencies): Express {
         providers: providersService,
         finance: financeService,
         auditLog: createAuditLogService({ prisma: deps.prisma }),
+        policies: policiesService,
       }),
     );
     app.use("/api/v1", v1);

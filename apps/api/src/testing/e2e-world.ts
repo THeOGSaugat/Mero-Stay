@@ -8,6 +8,7 @@ import type { PrismaClient } from "../generated/prisma/client.js";
 import type { ProviderDocumentType } from "../generated/prisma/enums.js";
 import { createPrismaClient } from "../lib/prisma.js";
 import { hashPassword } from "../modules/auth/password.js";
+import { seededFileFields } from "./documents.js";
 import { createWorld, type World } from "./fixtures.js";
 import { API_ROOT, databaseIdentity } from "./test-database.js";
 
@@ -62,7 +63,8 @@ async function createPartnerWorld(prisma: PrismaClient, world: World) {
         providerId: provider.id,
         documentType,
         status: "APPROVED",
-        storageKey: `not-uploaded/e2e-${s}-${documentType.toLowerCase()}`,
+        storageKey: `documents/e2e-${s}/${documentType.toLowerCase()}`,
+        ...seededFileFields(`e2e-${s}-${documentType.toLowerCase()}`),
         mimeType: "application/pdf",
         sizeBytes: 120_000,
         reviewedAt: new Date(),
@@ -167,9 +169,11 @@ async function createAdminWorld(prisma: PrismaClient, world: World) {
         data: {
           providerId: provider.id,
           documentType,
-          storageKey: `not-uploaded/e2e-${provider.id}-${documentType.toLowerCase()}`,
+          storageKey: `documents/${provider.id}/seeded/${documentType.toLowerCase()}`,
           mimeType: "application/pdf",
           sizeBytes: 90_000,
+          status: "PENDING",
+          ...seededFileFields(`e2e-${provider.id}-${documentType.toLowerCase()}`),
         },
       });
     }

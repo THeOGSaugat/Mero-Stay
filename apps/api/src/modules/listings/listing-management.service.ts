@@ -6,6 +6,7 @@ import { decideListingType, type ProviderTypeRules } from "../../domain/listing-
 import { AppError } from "../../lib/errors.js";
 import { withIdempotency, type IdempotentResult } from "../../lib/idempotency.js";
 import { skipTake } from "../../lib/pagination.js";
+import { assertAttachable } from "../cancellation-policies/cancellation-policies.service.js";
 import { assertProviderWritable, type PartnerContext } from "../partner/partner-context.js";
 import { detailLocationIds, detailSpecFor } from "./listing-details.js";
 import type {
@@ -168,13 +169,8 @@ export function createListingManagementService({ prisma }: { prisma: PrismaClien
       }
     }
     if (refs.policyId) {
-      // The provider's own policies, or platform-wide templates (provider_id NULL).
-      const policy = await tx.cancellationPolicy.findFirst({
-        where: { id: refs.policyId, OR: [{ providerId }, { providerId: null }] },
-      });
-      if (!policy) {
-        throw new AppError(422, "UNKNOWN_CANCELLATION_POLICY", "Cancellation policy not found.");
-      }
+      // The provider's own active policies, or platform templates (ADR 0015; the DB re-checks).
+      await assertAttachable(tx, providerId, refs.policyId);
     }
   }
 

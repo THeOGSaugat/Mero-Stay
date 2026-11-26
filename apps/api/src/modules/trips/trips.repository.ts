@@ -68,15 +68,31 @@ export async function lockTrip(
   return rows.length === 1;
 }
 
+/** What a booking snapshot and a listing page need from a policy (ADR 0015). */
+export const CANCELLATION_POLICY_SELECT = {
+  id: true,
+  name: true,
+  description: true,
+  rules: true,
+  nonRefundable: true,
+  isActive: true,
+} as const;
+
 export async function findListingForBooking(db: Db, id: string) {
   return db.listing.findUnique({
     where: { id },
     include: {
-      provider: { select: { id: true, status: true, commissionRateBps: true } },
-      listingType: { select: { code: true, isActive: true, isBookable: true } },
-      defaultCancellationPolicy: {
-        select: { id: true, name: true, description: true, rules: true },
+      provider: {
+        select: {
+          id: true,
+          status: true,
+          commissionRateBps: true,
+          // Used when the listing has no policy of its own (ADR 0015).
+          defaultCancellationPolicy: { select: CANCELLATION_POLICY_SELECT },
+        },
       },
+      listingType: { select: { code: true, isActive: true, isBookable: true } },
+      defaultCancellationPolicy: { select: CANCELLATION_POLICY_SELECT },
     },
   });
 }

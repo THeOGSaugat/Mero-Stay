@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { CANCELLATION_POLICY_SELECT } from "../trips/trips.repository.js";
 import { toDbDate } from "../../domain/dates.js";
 
 /** Prisma queries for listings. No business rules here (see listings.service.ts). */
@@ -121,10 +122,15 @@ export async function findVisibleListingDetail(db: Db, id: string) {
     include: {
       ...SUMMARY_INCLUDE,
       ...DETAIL_INCLUDE,
-      provider: { select: { id: true, displayName: true, providerTypeCode: true } },
-      defaultCancellationPolicy: {
-        select: { id: true, name: true, description: true, rules: true },
+      provider: {
+        select: {
+          id: true,
+          displayName: true,
+          providerTypeCode: true,
+          defaultCancellationPolicy: { select: CANCELLATION_POLICY_SELECT },
+        },
       },
+      defaultCancellationPolicy: { select: CANCELLATION_POLICY_SELECT },
       children: {
         where: bookableWhere,
         orderBy: { basePriceMinor: "asc" },

@@ -121,6 +121,32 @@ export function mapDatabaseError(err: unknown): AppError | null {
       "The booking amounts failed a consistency check and were not saved.",
     );
   }
+  // Cancellation policies (ADR 0015): the API checks these first; the database is the backstop.
+  if (sqlState === "23514" && constraint === "cancellation_policies_in_use_chk") {
+    return new AppError(
+      409,
+      "CANCELLATION_POLICY_IN_USE",
+      "This policy is in use. Choose another policy for those listings (and the default) first.",
+    );
+  }
+  if (sqlState === "23514" && constraint === "cancellation_policies_attach_chk") {
+    return new AppError(
+      422,
+      "CANCELLATION_POLICY_NOT_USABLE",
+      "That cancellation policy cannot be used here (switched off, or not this business's).",
+    );
+  }
+  if (sqlState === "23514" && constraint === "cancellation_policies_rules_valid_chk") {
+    return new AppError(422, "INVALID_CANCELLATION_RULES", "The cancellation rule is not valid.");
+  }
+  // Verification documents (ADR 0016): status moves, tombstones and stored files are fixed.
+  if (sqlState === "23514" && constraint?.startsWith("provider_documents_")) {
+    return new AppError(
+      409,
+      "DOCUMENT_STATE_CONFLICT",
+      "The document cannot change that way in its current state.",
+    );
+  }
   if (sqlState === "23514") {
     return new AppError(422, "CONSTRAINT_VIOLATED", "The request violates a data rule.");
   }

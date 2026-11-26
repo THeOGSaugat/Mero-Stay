@@ -34,6 +34,9 @@ import {
   labelClass,
   StatusPill,
 } from "../ui/primitives";
+import { adminDocumentFileHref } from "@/lib/document-upload";
+import { policySummary } from "@/lib/cancellation-policy";
+import type { PolicyList } from "@/lib/partner-types";
 import { AdminError, useAdminData, useAdminRequest } from "./admin-ui";
 
 const STATUSES = ["", "PENDING_VERIFICATION", "DRAFT", "VERIFIED", "REJECTED", "SUSPENDED"];
@@ -469,12 +472,20 @@ export function ProviderReview() {
                       ) : null}
                     </td>
                     <td className={tdClass}>
-                      {formatFileSize(doc.sizeBytes)}
-                      {doc.storageKey.startsWith("not-uploaded/") ? (
-                        <span className="block text-slate-600">
-                          File not uploaded (uploads come later)
-                        </span>
-                      ) : null}
+                      {doc.fileName ? <span className="block">{doc.fileName}</span> : null}
+                      <span className="block text-slate-600">{formatFileSize(doc.sizeBytes)}</span>
+                      {doc.hasFile ? (
+                        // Private: the API checks the admin role; each view is audited (ADR 0016).
+                        <a
+                          href={adminDocumentFileHref(p.id, doc.id)}
+                          className="mt-1 inline-block font-medium text-navy underline"
+                          data-testid="admin-document-file"
+                        >
+                          Open file
+                        </a>
+                      ) : (
+                        <span className="block text-slate-600">No file uploaded yet</span>
+                      )}
                     </td>
                     <td className={tdClass}>{formatTimestamp(doc.createdAt)}</td>
                   </tr>
@@ -484,6 +495,8 @@ export function ProviderReview() {
           </div>
         )}
       </Panel>
+
+      <ProviderPoliciesPanel providerId={p.id} />
 
       {p.status === "PENDING_VERIFICATION" ? (
         <DecisionPanel
@@ -497,5 +510,39 @@ export function ProviderReview() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** A provider's cancellation policies, read-only (ADR 0015): editing is the partner's. */
+function ProviderPoliciesPanel({ providerId }: { providerId: string }) {
+  const { data, error } = useAdminData<{ data: PolicyList }>(
+    `/providers/${encodeURIComponent(providerId)}/cancellation-policies`,
+  );
+  return (
+    <Panel title="Cancellation policies (read-only)">
+      {error ? (
+        <p className="text-sm text-slate-600">The policies could not be loaded.</p>
+      ) : !data ? (
+        <p className="text-sm text-slate-600">Loading…</p>
+      ) : data.data.policies.length === 0 ? (
+        <p className="text-sm text-slate-600" data-testid="admin-no-policies">
+          This business has no cancellation policies: its listings show customers that none applies.
+        </p>
+      ) : (
+        <ul className="space-y-2" data-testid="admin-policy-list">
+          {data.data.policies.map((policy) => (
+            <li key={policy.id} className="rounded-lg border border-mist p-3 text-sm">
+              <span className="font-medium text-navy">{policy.name}</span>
+              {policy.id === data.data.defaultPolicyId ? " · default" : ""}
+              {policy.isActive ? "" : " · off"}
+              <span className="block text-ink">{policySummary(policy)}</span>
+              <span className="block text-xs text-slate-500">
+                Used by {policy.usage?.listings ?? 0} listing(s)
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
