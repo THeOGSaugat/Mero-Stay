@@ -204,7 +204,7 @@ mero-stay/
   inside the adapters. **Never paid from the redirect:** eSewa = signature (constant time) + status API;
   Khalti = lookup, `Completed` and the exact amount. `POST /payment-callbacks/:gateway` has no session.
   `domain/gateway-outcome.ts` decides; money that cannot be applied goes to `payment_reconciliations`
-  (never dropped, never allocated). Refund requests are stored only (DB refuses execution). Production
+  (never dropped, never allocated). Refunds are executed since Phase 14 (ADR 0020, below). Production
   refuses to start without gateway config. Tests use local fakes (`testing/fake-gateways.ts`); the real
   sandbox only via `npm run payment:sandbox-check`.
 - **Payouts and moderation (ADR 0018):** payouts are batches per provider/month/currency paid by MANUAL
@@ -213,9 +213,20 @@ mero-stay/
   Scheduling needs a verified bank account; bank references are only ever returned/audited masked. Admins
   add admins with a one-time setup link (SHA-256 stored, 24 h, fragment); never yourself, never the last
   usable admin (service + DB trigger). Listing approval re-checks the ADR 0013 rule (service + DB). Voids:
-  CANCELLED, inventory released, commission WAIVED, online money → refund REQUESTS (not executed),
+  CANCELLED, inventory released, commission WAIVED, online money → refund REQUESTS,
   invoiced commission → append-only invoice adjustment (issued invoices never change). Closed eSewa/Khalti
   payments are re-checked at 5 min/65 min/6 h/25 h by the hold-release job.
+- **Cancellations, refunds and clawbacks (ADR 0020):** the refund clock is `booking_items.service_starts_at`
+  (start date at the listing's check-in/departure/start time, Nepal time, frozen per item; `DEFAULT_MIDNIGHT`
+  when the listing has none); tiers compare exact instants (exactly 72 h meets "72 h"). Customers cancel
+  CONFIRMED items before the start (`expectedRefundMinor` must match, else 409): refund = total × tier,
+  commission on the part kept, none kept → WAIVED; no policy = refund 0. Refunds: REQUESTED → APPROVED →
+  PROCESSING (committed BEFORE the gateway call) → COMPLETED | FAILED, or REJECTED; Khalti by its refund API
+  (adapter `refund`/`checkRefund`), eSewa by hand + recorded reference; one PROCESSING per payment; refunded =
+  completed refunds (deferred DB check). Customer-cancelled items are paid out what was kept. Voiding a PAID-out
+  item = full refund + commission waived + an append-only clawback deducted from later batches (never below
+  zero; net = gross − commission − deductions). Settlement mismatches are computed; resolutions are notes.
+  No `REFUND` rows in `payments`.
 - **Partners and admins (ADR 0008):** `/partner…` needs role PARTNER and acts for one owned provider (`X-Provider-Id`
   when several); another provider's data is a 404. Wrong role for an area is 403 before any data is read. Admin writes
   and sensitive partner writes call `recordAudit` inside their transaction (append-only, secrets redacted). Bank
@@ -438,5 +449,13 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
 - **Refund clock rule (owner decision 2026-11-27):** "hours before the start" in a cancellation policy counts from
   the **actual start of the service** (hotel check-in, bus/flight departure, guide/tour/activity start time), not
   midnight of the service date. The start is stored as an exact timestamp on each booking item (UTC, compared in
-  Nepal time); implemented in the Cancellations & refunds phase.
-- **Next:** Phase 14 only when the owner sends its prompt.
+  Nepal time); implemented in Phase 14.
+- **Phase 14, Cancellations & refunds:** on `phase/14-cancellations-refunds`, awaiting review (ADR 0020). Gaps 31
+  (refund execution), 36 (settlement reconciliation) and 39 (paid-out voids, clawbacks) closed; residual gaps 40
+  (clawback with no later payouts) and 41 (partial refunds on live items; payout estimate). Owner decisions
+  2026-11-27: partners set start times for guides/tours/activities (midnight fallback), commission on the part
+  kept, clawbacks deducted from next payouts, no policy = cancel with refund 0 (gap 30 stays open). Launch
+  checklist: confirm Khalti's refund amount unit in the sandbox. 22 gaps open; **no launch blocker**. Gap 10
+  (invoice numbering) still waits for the tax advisor. Roadmap (owner): 14 Cancellations & refunds, 15 Search
+  UX, 16 Reviews, 17 Notifications, 18 Hardening.
+- **Next:** Phase 15 only when the owner sends its prompt.

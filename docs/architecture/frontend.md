@@ -254,6 +254,20 @@ area). Logic: `lib/admin-access.ts`, `lib/audit-display.ts`, types in `lib/admin
 | `/admin/providers/[id]` | "Open file" per uploaded document (a plain link: the API checks the admin role and audits the view), and a read-only cancellation policies panel |
 | `server.mts` | Refuses `/api/v1` bodies above 10 MB + 64 KB with 413 before Next.js buffers them (Next would cut them; `experimental.proxyClientMaxBodySize` is the same number) |
 
+### Phase 14 additions (gaps 31, 36, 39; ADR 0020)
+
+| Where | What |
+|---|---|
+| `/trips/[id]` | Each booking shows when it starts ("Starts 20 Dec 2026, 14:00 (Nepal time)", or "no start time given"). A confirmed booking has "Cancel this booking…" (`components/trip/cancel-item.tsx`): the API's preview (policy line, notice, the exact refund), then "Cancel and get Rs. … back" / "Cancel without refund", sending the amount shown; a changed refund (a tier boundary passed) reloads the preview. A cancelled booking says what is being refunded. No commission anywhere |
+| `/admin/refund-requests` | Status filters; per refund the steps that can work (`refundActions`): Approve, "Refund through Khalti" / "Start a manual refund (eSewa merchant portal)", record the reference, ask Khalti about a lost answer, Reject with a note. The gateway reference is shown masked |
+| `/admin/settlements` (new) | Pay-at-property settlement mismatches, to look into / handled, with a note per mismatch |
+| `/admin/payouts`, `/partner/payouts` | Clawbacks (what is owed back, recovered, still owed; `components/admin/clawbacks-view.tsx`) and the deductions in each batch; a cancelled booking's kept part is labelled in the batch |
+| Partner listing forms | Guides, tours and activities ask for a start time (Nepal time): the refund clock counts from it |
+
+Display logic: `src/lib/refunds-display.ts` (start labels, percentages from basis points, notice in
+words, the cancellation summary, refund statuses and actions, settlement labels, clawbacks); money
+only through `formatMoney`.
+
 ## Admin guard and audit handling in the UI
 
 - **Guard = navigation.** `adminAccess()`: a visitor goes to login. A logged-in customer or
@@ -298,8 +312,8 @@ Forms use native inputs and `FormData`.
 
 | Kind | Where | Covers |
 |---|---|---|
-| Unit (Vitest) | `src/lib/*.test.ts` | Phase 13 (`phase13-logic.test.ts`): categories (never flights), search titles, illustrative images, trip steps, `Rs.` formatting. Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
-| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/admin-ops.spec.ts`, `e2e/payments.spec.ts`, `e2e/policies-documents.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks. Phase 9: the admin journey sends a forged `X-Forwarded-For` on every request and checks the audit row shows the address the web server saw. **Runs in CI on every push** ([ci.md](../development/ci.md)) |
+| Unit (Vitest) | `src/lib/*.test.ts` | Phase 14 (`phase14-logic.test.ts`): Nepal start labels, percentages, notice, the cancellation summary (no policy, non-refundable, too late, pay at property, midnight fallback), start-time fields, refund actions per state and gateway, labels, clawbacks and deductions. Phase 13 (`phase13-logic.test.ts`): categories (never flights), search titles, illustrative images, trip steps, `Rs.` formatting. Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
+| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/admin-ops.spec.ts`, `e2e/payments.spec.ts`, `e2e/policies-documents.spec.ts`, `e2e/refunds.spec.ts`, `e2e/home.spec.ts` | Phase 14 (`refunds.spec.ts`): a customer cancels a paid stay and sees the exact refund, an admin approves and executes it and sees it refunded, a customer cannot open the refund queue. The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks. Phase 9: the admin journey sends a forged `X-Forwarded-For` on every request and checks the audit row shows the address the web server saw. **Runs in CI on every push** ([ci.md](../development/ci.md)) |
 
 Run the booking journey against a **disposable** database (never dev):
 
