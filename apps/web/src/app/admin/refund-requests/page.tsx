@@ -12,7 +12,7 @@ export default function AdminRefundRequestsPage() {
   return (
     <>
       <PageHeading title="Refund requests" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RefundRequestsQueue />
       </Suspense>
     </>

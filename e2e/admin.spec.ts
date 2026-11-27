@@ -241,13 +241,13 @@ test.describe("admin console journey", () => {
     await expect(page).toHaveURL(/status=ISSUED/);
     await expect(page.getByTestId("admin-invoice-row").first()).toContainText("Issued");
 
-    // Payouts: this project's night only → total − commission = Rs 4,350.50 − Rs 525.00.
+    // Payouts: this project's night only → total − commission = Rs. 4,350.50 − Rs. 525.00.
     await page.goto(`/admin/payouts?providerId=${w.hotelProviderId}&from=${night}&to=${morning}`);
     const payout = page.getByTestId("admin-payout-row");
     await expect(payout).toHaveCount(1);
-    await expect(payout).toContainText("Rs 4,350.50");
-    await expect(payout).toContainText("Rs 525.00");
-    await expect(payout.getByTestId("admin-payout-amount")).toHaveText("Rs 3,825.50");
+    await expect(payout).toContainText("Rs. 4,350.50");
+    await expect(payout).toContainText("Rs. 525.00");
+    await expect(payout.getByTestId("admin-payout-amount")).toHaveText("Rs. 3,825.50");
     await expect(payout).toContainText("Pending · not paid out");
   });
 

@@ -10,7 +10,7 @@ export default function TripPage() {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
       <PageHeading title="My trip" subtitle="Everything you are booking, in one place." />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RequireAuth>
           <TripBuilder />
         </RequireAuth>

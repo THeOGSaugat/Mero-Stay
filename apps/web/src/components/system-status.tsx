@@ -5,7 +5,7 @@ import { getApiBaseUrl } from "@/lib/config";
 const STATE_STYLES: Record<ServiceState, { label: string; dot: string; text: string }> = {
   up: { label: "Operational", dot: "bg-emerald-500", text: "text-emerald-700" },
   down: { label: "Unavailable", dot: "bg-red-500", text: "text-red-700" },
-  unknown: { label: "Unknown", dot: "bg-slate-400", text: "text-slate-600" },
+  unknown: { label: "Unknown", dot: "bg-slate-400", text: "text-muted" },
 };
 
 const kathmanduTime = new Intl.DateTimeFormat("en-GB", {

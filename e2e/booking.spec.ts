@@ -77,12 +77,12 @@ test.describe("customer booking journey", () => {
     const roomCard = page
       .getByRole("listitem")
       .filter({ has: page.getByRole("link", { name: w.roomTitle }) });
-    await expect(roomCard.getByText("Rs 7,700.00 for 1 × 2 nights")).toBeVisible();
+    await expect(roomCard.getByText("Rs. 7,700.00 for 1 × 2 nights")).toBeVisible();
     await page.getByRole("link", { name: w.roomTitle }).click();
 
     // Listing detail: priced calendar (the festival price on the first night), then add to trip.
     await expect(page.getByRole("heading", { level: 1, name: w.roomTitle })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "Rs 4,200.00" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Rs. 4,200.00" })).toBeVisible();
     await page.getByLabel("Payment").selectOption("pay_at_property");
     await page.getByRole("button", { name: "Add to trip" }).click();
     await expect(page.getByText(`${w.roomTitle} was added to your trip.`)).toBeVisible();
@@ -96,14 +96,14 @@ test.describe("customer booking journey", () => {
     await page.goto("/trip");
     await expect(page.getByTestId("trip-item")).toHaveCount(2);
     const totals = page.getByTestId("trip-totals");
-    await expect(totals).toContainText("Rs 13,171.10"); // 9,571.10 + 3,600.00
-    await expect(totals).toContainText("Rs 9,571.10"); // pay at the property
-    await expect(totals).toContainText("Rs 3,600.00"); // pay online
+    await expect(totals).toContainText("Rs. 13,171.10"); // 9,571.10 + 3,600.00
+    await expect(totals).toContainText("Rs. 9,571.10"); // pay at the property
+    await expect(totals).toContainText("Rs. 3,600.00"); // pay online
     await page.getByRole("button", { name: "Get quote" }).click();
     const quote = page.getByTestId("quote-table");
-    await expect(quote).toContainText("Rs 7,700.00");
-    await expect(quote).toContainText("Rs 1,101.10");
-    await expect(page.getByTestId("quote-totals")).toContainText("Rs 13,171.10");
+    await expect(quote).toContainText("Rs. 7,700.00");
+    await expect(quote).toContainText("Rs. 1,101.10");
+    await expect(page.getByTestId("quote-totals")).toContainText("Rs. 13,171.10");
 
     // Confirm: the stay is confirmed (pay at property); the bus waits for online payment.
     await page.getByRole("button", { name: "Confirm trip" }).click();
@@ -116,9 +116,9 @@ test.describe("customer booking journey", () => {
     await page.goto("/trips");
     const entry = page.getByRole("listitem").filter({ hasText: w.roomTitle });
     await expect(entry).toContainText("Awaiting payment");
-    await expect(entry).toContainText("Rs 13,171.10");
+    await expect(entry).toContainText("Rs. 13,171.10");
     await entry.getByRole("link").click();
-    await expect(page.getByTestId("trip-totals")).toContainText("Rs 13,171.10");
+    await expect(page.getByTestId("trip-totals")).toContainText("Rs. 13,171.10");
 
     // Log out → home.
     await page.getByRole("button", { name: "Log out" }).click();

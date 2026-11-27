@@ -25,7 +25,7 @@ export function ListingReviewQueue() {
     "/listings?status=PENDING_REVIEW&pageSize=50",
   );
   if (error) return <AdminError view={error} />;
-  if (!data) return <p className="text-sm text-slate-600">Loading listings to review…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading listings to review…</p>;
   if (data.data.length === 0) return <Alert tone="info">No listings are waiting for review.</Alert>;
   return (
     <ul className="space-y-3">
@@ -60,14 +60,14 @@ function ReviewCard({ listing, onDecided }: { listing: ReviewListing; onDecided:
 
   return (
     <li
-      className="rounded-xl border border-mist bg-white p-4 shadow-sm"
+      className="rounded-card border border-line bg-white p-4 shadow-card"
       data-testid="review-listing"
       data-listing={listing.id}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="font-semibold text-navy">{listing.title}</h2>
-          <p className="text-sm text-slate-600">
+          <h2 className="font-semibold text-primary">{listing.title}</h2>
+          <p className="text-sm text-muted">
             {listing.listingType.code.replace(/_/g, " ")} · {listing.provider.name} (
             {listing.provider.providerType.replace(/_/g, " ")}) ·{" "}
             {listing.location?.name ?? "no location"} · submitted{" "}

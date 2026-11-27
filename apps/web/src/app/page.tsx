@@ -13,13 +13,13 @@ async function HomeSearch() {
 export default function HomePage() {
   return (
     <>
-      <section className="bg-mist">
+      <section className="bg-surface">
         <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
           <div className="max-w-2xl">
-            <p className="text-sm font-semibold tracking-wide text-navy uppercase">
+            <p className="text-sm font-semibold tracking-wide text-primary uppercase">
               Stays · Buses · Guides · Tours
             </p>
-            <h1 className="mt-3 text-4xl font-bold tracking-tight text-balance text-navy sm:text-5xl">
+            <h1 className="mt-3 text-4xl font-bold tracking-tight text-balance text-primary sm:text-5xl">
               Find your stay anywhere in Nepal
             </h1>
             <p className="mt-4 text-lg text-pretty text-ink">
@@ -28,7 +28,7 @@ export default function HomePage() {
             </p>
           </div>
           <div className="mt-8">
-            <Suspense fallback={<p className="text-sm text-slate-600">Loading search…</p>}>
+            <Suspense fallback={<p className="text-sm text-muted">Loading search…</p>}>
               <HomeSearch />
             </Suspense>
           </div>
@@ -38,9 +38,9 @@ export default function HomePage() {
       <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
         <section
           aria-labelledby="system-status-heading"
-          className="max-w-md rounded-xl border border-mist p-5 shadow-sm"
+          className="max-w-md rounded-card border border-line p-5 shadow-card"
         >
-          <h2 id="system-status-heading" className="text-base font-semibold text-navy">
+          <h2 id="system-status-heading" className="text-base font-semibold text-primary">
             System status
           </h2>
           <Suspense fallback={<SystemStatusSkeleton />}>

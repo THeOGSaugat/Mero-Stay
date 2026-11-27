@@ -30,7 +30,7 @@ export function AddToTrip({ listing }: { listing: AddToTripListing }) {
   const [busy, setBusy] = useState(false);
   const range = usesDateRange(listing.unitLabel);
 
-  if (state.status === "loading") return <p className="text-sm text-slate-600">Loading…</p>;
+  if (state.status === "loading") return <p className="text-sm text-muted">Loading…</p>;
   if (state.status === "anonymous") {
     const query = search.toString();
     return (

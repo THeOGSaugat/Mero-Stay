@@ -11,12 +11,12 @@ import {
 
 describe("formatMoney: minor-unit strings to display text", () => {
   it("formats NPR with Nepali grouping", () => {
-    expect(formatMoney("115500", "NPR", 2)).toBe("Rs 1,155.00");
-    expect(formatMoney("957110", "NPR", 2)).toBe("Rs 9,571.10");
-    expect(formatMoney("123456700", "NPR", 2)).toBe("Rs 12,34,567.00");
-    expect(formatMoney("0", "NPR", 2)).toBe("Rs 0.00");
-    expect(formatMoney("5", "NPR", 2)).toBe("Rs 0.05");
-    expect(formatMoney("100", "NPR", 2)).toBe("Rs 1.00");
+    expect(formatMoney("115500", "NPR", 2)).toBe("Rs. 1,155.00");
+    expect(formatMoney("957110", "NPR", 2)).toBe("Rs. 9,571.10");
+    expect(formatMoney("123456700", "NPR", 2)).toBe("Rs. 12,34,567.00");
+    expect(formatMoney("0", "NPR", 2)).toBe("Rs. 0.00");
+    expect(formatMoney("5", "NPR", 2)).toBe("Rs. 0.05");
+    expect(formatMoney("100", "NPR", 2)).toBe("Rs. 1.00");
   });
 
   it("formats other currencies with their code and thousands grouping", () => {
@@ -26,7 +26,7 @@ describe("formatMoney: minor-unit strings to display text", () => {
 
   it("stays exact far above Number.MAX_SAFE_INTEGER (no float, no precision loss)", () => {
     // 2^53 + 1 = 9007199254740993: as a JS number it would become ...992.
-    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs 9,00,71,99,25,47,409.93");
+    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs. 9,00,71,99,25,47,409.93");
     expect(formatMoney("9223372036854775807", "USD", 2)).toBe("USD 92,233,720,368,547,758.07");
     expect(Number("9007199254740993")).toBe(9007199254740992); // what a number would lose
   });
@@ -40,7 +40,7 @@ describe("formatMoney: minor-unit strings to display text", () => {
 
   it("formatAmount shows a dash for an absent optional amount", () => {
     const npr = { currency: "NPR", currencyExponent: 2 };
-    expect(formatAmount("350000", npr)).toBe("Rs 3,500.00");
+    expect(formatAmount("350000", npr)).toBe("Rs. 3,500.00");
     expect(formatAmount(null, npr)).toBe("—");
   });
 });

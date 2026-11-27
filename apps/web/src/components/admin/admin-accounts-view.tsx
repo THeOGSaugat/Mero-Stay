@@ -122,9 +122,9 @@ export function AdminAccounts() {
       ) : null}
       {problem ? <Alert>{problem}</Alert> : null}
       {!data ? (
-        <p className="text-sm text-slate-600">Loading admins…</p>
+        <p className="text-sm text-muted">Loading admins…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="admin-accounts">
             <thead>
               <tr>
@@ -137,7 +137,7 @@ export function AdminAccounts() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((admin) => (
                 <tr key={admin.id} data-testid="admin-account-row" data-email={admin.email ?? ""}>
                   <td className={tdClass}>
@@ -158,7 +158,7 @@ export function AdminAccounts() {
                     {admin.setupPending && admin.status === "ACTIVE" ? (
                       <button
                         type="button"
-                        className="text-sm font-semibold text-navy underline"
+                        className="text-sm font-semibold text-primary underline"
                         disabled={busy}
                         onClick={() => void reissue(admin)}
                       >

@@ -67,11 +67,11 @@ export function LoginForm() {
       <button type="submit" disabled={busy} className={`${buttonPrimary} w-full`}>
         {busy ? "Logging in…" : "Log in"}
       </button>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted">
         New to MeroStay?{" "}
         <Link
           href={`/register?next=${encodeURIComponent(next)}`}
-          className="font-semibold text-navy underline"
+          className="font-semibold text-primary underline"
         >
           Create an account
         </Link>
@@ -153,11 +153,11 @@ export function RegisterForm() {
       <button type="submit" disabled={busy} className={`${buttonPrimary} w-full`}>
         {busy ? "Creating your account…" : "Create account"}
       </button>
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted">
         Already have an account?{" "}
         <Link
           href={`/login?next=${encodeURIComponent(next)}`}
-          className="font-semibold text-navy underline"
+          className="font-semibold text-primary underline"
         >
           Log in
         </Link>

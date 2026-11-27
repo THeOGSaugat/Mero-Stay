@@ -23,14 +23,14 @@ function DetailList({ title, values }: { title: string; values: Record<string, u
   const entries = Object.entries(values ?? {}).filter(([key]) => !key.endsWith("Id"));
   if (entries.length === 0) return null;
   return (
-    <section aria-labelledby={`${title}-heading`} className="rounded-xl border border-mist p-4">
-      <h2 id={`${title}-heading`} className="text-base font-semibold text-navy">
+    <section aria-labelledby={`${title}-heading`} className="rounded-card border border-line p-4">
+      <h2 id={`${title}-heading`} className="text-base font-semibold text-primary">
         {title}
       </h2>
       <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
         {entries.map(([key, value]) => (
-          <div key={key} className="flex justify-between gap-3 border-b border-mist py-1 text-sm">
-            <dt className="text-slate-600">{humanizeKey(key)}</dt>
+          <div key={key} className="flex justify-between gap-3 border-b border-line py-1 text-sm">
+            <dt className="text-muted">{humanizeKey(key)}</dt>
             <dd className="text-right font-medium text-ink">{detailValueText(value)}</dd>
           </div>
         ))}
@@ -68,13 +68,13 @@ export async function ListingDetail({
   return (
     <article className="space-y-6">
       <header>
-        <p className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+        <p className="text-xs font-semibold tracking-wide text-muted uppercase">
           {listing.listingType.name}
         </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-navy sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-primary sm:text-3xl">
           {listing.title}
         </h1>
-        <p className="mt-2 text-slate-600">
+        <p className="mt-2 text-muted">
           {listing.parent ? (
             <>
               <Link href={`/listings/${listing.parent.id}`} className="underline">
@@ -87,9 +87,9 @@ export async function ListingDetail({
           {listing.location ? ` · ${listing.location.name}` : ""}
         </p>
         {listing.listingType.isBookable ? (
-          <p className="mt-3 text-lg font-bold text-navy">
+          <p className="mt-3 text-lg font-bold text-primary">
             {formatMoney(listing.basePriceMinor, listing.currency, listing.currencyExponent)}{" "}
-            <span className="text-sm font-normal text-slate-600">
+            <span className="text-sm font-normal text-muted">
               per {listing.listingType.unitLabel}, before service charge (
               {listing.serviceChargeRateBps / 100}%) and VAT ({listing.taxRateBps / 100}%)
             </span>
@@ -103,22 +103,22 @@ export async function ListingDetail({
 
       {listing.children.length > 0 ? (
         <section aria-labelledby="children-heading">
-          <h2 id="children-heading" className="text-base font-semibold text-navy">
+          <h2 id="children-heading" className="text-base font-semibold text-primary">
             Rooms and options
           </h2>
           <ul className="mt-3 space-y-2">
             {listing.children.map((child) => (
               <li
                 key={child.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-mist p-3"
+                className="flex items-center justify-between gap-3 rounded-control border border-line p-3"
               >
                 <Link
                   href={`/listings/${child.id}${childQuery}`}
-                  className="font-medium text-navy underline"
+                  className="font-medium text-primary underline"
                 >
                   {child.title}
                 </Link>
-                <span className="text-sm font-semibold text-navy">
+                <span className="text-sm font-semibold text-primary">
                   {formatMoney(child.basePriceMinor, child.currency, child.currencyExponent)}
                 </span>
               </li>
@@ -129,15 +129,15 @@ export async function ListingDetail({
 
       {listing.calendar && listing.listingType.isBookable ? (
         <section aria-labelledby="calendar-heading">
-          <h2 id="calendar-heading" className="text-base font-semibold text-navy">
+          <h2 id="calendar-heading" className="text-base font-semibold text-primary">
             Availability and prices
           </h2>
           {listing.calendar.slots.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-600">No dates are open in this period.</p>
+            <p className="mt-2 text-sm text-muted">No dates are open in this period.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-72 text-left text-sm">
-                <thead className="bg-mist text-slate-700">
+                <thead className="bg-surface text-slate-700">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-semibold">
                       Date
@@ -152,7 +152,7 @@ export async function ListingDetail({
                 </thead>
                 <tbody>
                   {listing.calendar.slots.map((slot) => (
-                    <tr key={slot.date} className="border-b border-mist">
+                    <tr key={slot.date} className="border-b border-line">
                       <td className="px-3 py-2">{formatServiceDate(slot.date)}</td>
                       <td className="px-3 py-2">
                         {slot.status === "OPEN" ? slot.available : "Closed"}
@@ -174,9 +174,9 @@ export async function ListingDetail({
       {listing.listingType.isBookable ? (
         <section
           aria-labelledby="book-heading"
-          className="rounded-xl border border-teal/40 bg-mist/60 p-4"
+          className="rounded-card border border-primary-light/40 bg-surface/60 p-4"
         >
-          <h2 id="book-heading" className="mb-3 text-base font-semibold text-navy">
+          <h2 id="book-heading" className="mb-3 text-base font-semibold text-primary">
             Add to your trip
           </h2>
           <AddToTrip

@@ -92,14 +92,16 @@ export function OnboardingForm() {
         </div>
       ) : null}
       <fieldset className="space-y-3">
-        <legend className="text-base font-semibold text-navy">What kind of business is it?</legend>
-        {types === null && !error ? <p className="text-sm text-slate-600">Loading…</p> : null}
+        <legend className="text-base font-semibold text-primary">
+          What kind of business is it?
+        </legend>
+        {types === null && !error ? <p className="text-sm text-muted">Loading…</p> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {types?.map((type) => (
             <label
               key={type.code}
-              className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${
-                typeCode === type.code ? "border-navy bg-mist" : "border-slate-300 bg-white"
+              className={`flex cursor-pointer gap-3 rounded-control border p-3 text-sm ${
+                typeCode === type.code ? "border-primary bg-surface" : "border-slate-300 bg-white"
               }`}
             >
               <input
@@ -109,12 +111,12 @@ export function OnboardingForm() {
                 checked={typeCode === type.code}
                 onChange={() => setTypeCode(type.code)}
                 required
-                className="mt-1 accent-navy"
+                className="mt-1 accent-primary"
               />
               <span>
-                <span className="block font-semibold text-navy">{type.name}</span>
+                <span className="block font-semibold text-primary">{type.name}</span>
                 {type.description ? (
-                  <span className="mt-0.5 block text-slate-600">{type.description}</span>
+                  <span className="mt-0.5 block text-muted">{type.description}</span>
                 ) : null}
               </span>
             </label>

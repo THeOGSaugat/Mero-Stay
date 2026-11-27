@@ -10,8 +10,8 @@ import { PartnerNav } from "@/components/partner/partner-ui";
 export default function PartnerDashboardLayout({ children }: LayoutProps<"/partner">) {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
-      <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600">Partner</p>
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">Partner</p>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RequireAuth>
           <PartnerGate>
             <PartnerNav />

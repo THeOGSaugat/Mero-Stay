@@ -15,7 +15,7 @@ export default function AdminListingsPage() {
         title="Listings to review"
         subtitle="Approve or reject what partners submitted."
       />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <ListingReviewQueue />
       </Suspense>
     </>

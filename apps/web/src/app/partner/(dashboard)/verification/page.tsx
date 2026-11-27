@@ -9,7 +9,7 @@ export default function PartnerVerificationPage() {
   return (
     <>
       <PageHeading title="Verification" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <VerificationView />
       </Suspense>
     </>

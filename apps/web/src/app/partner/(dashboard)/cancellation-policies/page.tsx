@@ -12,7 +12,7 @@ export default function PartnerPoliciesPage() {
         title="Cancellation policies"
         subtitle="Your refund terms. Each booking keeps the terms it was booked with."
       />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <PoliciesView />
       </Suspense>
     </>

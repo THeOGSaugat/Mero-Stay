@@ -9,7 +9,7 @@ export default function PartnerProfilePage() {
   return (
     <>
       <PageHeading title="Business profile" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <PartnerProfileView />
       </Suspense>
     </>

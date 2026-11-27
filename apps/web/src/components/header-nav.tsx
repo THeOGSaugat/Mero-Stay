@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useAuth } from "./auth/auth-provider";
 
 const link =
-  "rounded-md px-2 py-1.5 text-sm font-medium text-ink hover:bg-mist hover:text-navy focus-visible:outline-2 focus-visible:outline-teal";
+  "inline-flex min-h-10 items-center rounded-control px-3 py-1.5 text-sm font-medium text-white/90 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60";
 
 /** Navigation that depends on whether someone is logged in. */
 export function HeaderNav() {
@@ -49,7 +49,7 @@ export function HeaderNav() {
               Admin
             </Link>
           ) : null}
-          <span className="hidden px-2 text-sm text-slate-600 sm:inline" data-testid="signed-in-as">
+          <span className="hidden px-2 text-sm text-white/80 sm:inline" data-testid="signed-in-as">
             {state.user.fullName}
           </span>
           <button type="button" onClick={onLogout} disabled={leaving} className={link}>
@@ -58,12 +58,12 @@ export function HeaderNav() {
         </>
       ) : state.status === "anonymous" ? (
         <>
-          <Link href="/login" className={link}>
+          <Link href="/login" className={`${link} ring-1 ring-white/60 ring-inset`}>
             Log in
           </Link>
           <Link
             href="/register"
-            className="rounded-md bg-navy px-3 py-1.5 text-sm font-semibold text-white hover:bg-navy-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+            className="inline-flex min-h-10 items-center rounded-control bg-accent-strong px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Sign up
           </Link>

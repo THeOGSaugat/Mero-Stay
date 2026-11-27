@@ -13,14 +13,14 @@ import { AdminError, useAdminData } from "./admin-ui";
 export function ListingRulesView() {
   const { data, error } = useAdminData<{ data: AdminProviderType[] }>("/provider-types");
   if (error) return <AdminError view={error} />;
-  if (!data) return <p className="text-sm text-slate-600">Loading the rules…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading the rules…</p>;
   return (
     <div className="space-y-4">
       <Alert tone="info">
         Read-only. A listing type can be listed only when it is mapped to the kind of business and
         both are offered. The API enforces this on every create and update.
       </Alert>
-      <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+      <div className="overflow-x-auto rounded-card border border-line bg-white">
         <table className={tableClass} data-testid="listing-rules">
           <thead>
             <tr>
@@ -30,12 +30,12 @@ export function ListingRulesView() {
               <th className={thClass}>Usable now</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-mist">
+          <tbody className="divide-y divide-line">
             {data.data.map((type) => (
               <tr key={type.code} data-provider-type={type.code}>
                 <td className={tdClass}>
-                  <span className="font-semibold text-navy">{type.name}</span>
-                  <span className="block font-mono text-xs text-slate-600">{type.code}</span>
+                  <span className="font-semibold text-primary">{type.name}</span>
+                  <span className="block font-mono text-xs text-muted">{type.code}</span>
                 </td>
                 <td className={tdClass}>
                   <StatusPill
@@ -48,7 +48,7 @@ export function ListingRulesView() {
                     {type.listingTypes.map((lt) => (
                       <li key={lt.code}>
                         {lt.name}{" "}
-                        <span className="text-xs text-slate-600">
+                        <span className="text-xs text-muted">
                           {lt.isActive ? "" : "(listing type not offered)"}
                         </span>
                       </li>

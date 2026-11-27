@@ -9,7 +9,7 @@ import { RequireAuth } from "@/components/auth/require-auth";
 export default function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RequireAuth>
           <AdminGate>{children}</AdminGate>
         </RequireAuth>

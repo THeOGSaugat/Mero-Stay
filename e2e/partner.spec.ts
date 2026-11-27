@@ -170,7 +170,7 @@ test.describe("partner dashboard journey", () => {
     await add.getByRole("button", { name: "Add dates" }).click();
     await expect(page.getByTestId("inventory-result")).toContainText("Added 1 date");
     const table = page.getByTestId("inventory-table");
-    await expect(table.locator(`tr[data-date="${from}"]`)).toContainText("Rs 2,800.00");
+    await expect(table.locator(`tr[data-date="${from}"]`)).toContainText("Rs. 2,800.00");
     await expect(table.locator(`tr[data-date="${from}"]`)).toContainText("date price");
     await expectNoHorizontalScroll(page);
 
@@ -195,9 +195,9 @@ test.describe("partner dashboard journey", () => {
     // The pay-at-property night: frozen money, masked contact, then settle with a lost response.
     await page.goto(`/partner/bookings/${booked.payAtPropertyItemId}`);
     const money = page.getByTestId("booking-money");
-    await expect(money).toContainText("Rs 2,500.00"); // subtotal and total
-    await expect(money).toContainText("Rs 375.00"); // 15% commission
-    await expect(money).toContainText("Rs 2,125.00"); // the partner's share
+    await expect(money).toContainText("Rs. 2,500.00"); // subtotal and total
+    await expect(money).toContainText("Rs. 375.00"); // 15% commission
+    await expect(money).toContainText("Rs. 2,125.00"); // the partner's share
     await expect(page.getByText(/^g•••@e•••\.com$/)).toBeVisible();
     await expectNoHorizontalScroll(page);
 
@@ -249,13 +249,13 @@ test.describe("partner dashboard journey", () => {
 
     // The online night: the API's payout figure, shown as it is.
     await page.goto(`/partner/bookings/${booked.onlineItemId}`);
-    await expect(page.getByTestId("booking-money")).toContainText("Rs 2,125.00");
+    await expect(page.getByTestId("booking-money")).toContainText("Rs. 2,125.00");
     await expect(page.getByTestId("settle-action")).toHaveCount(0);
 
     // Invoices: the commission invoice of the pay-at-property night.
     await page.goto("/partner/invoices");
     const invoice = page.getByTestId("partner-invoice").filter({ hasText: invoiceNumber! });
-    await expect(invoice.getByTestId("invoice-amount")).toHaveText("Rs 375.00");
+    await expect(invoice.getByTestId("invoice-amount")).toHaveText("Rs. 375.00");
 
     // Payouts: pending, and exactly the API's string (total − commission per ADR 0008).
     await page.goto("/partner/payouts");

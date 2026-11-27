@@ -25,7 +25,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   if (state.status !== "authenticated") {
     return (
-      <p className="py-8 text-sm text-slate-600" aria-live="polite">
+      <p className="py-8 text-sm text-muted" aria-live="polite">
         {state.status === "loading" ? "Loading your account…" : "Redirecting to log in…"}
       </p>
     );

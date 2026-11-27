@@ -63,12 +63,12 @@ export function PayOnline({ trip }: { trip: Trip }) {
   return (
     <section
       aria-labelledby="pay-online-heading"
-      className="rounded-xl border border-mist bg-white p-4 shadow-sm"
+      className="rounded-card border border-line bg-white p-4 shadow-card"
     >
-      <h2 id="pay-online-heading" className="font-semibold text-navy">
+      <h2 id="pay-online-heading" className="font-semibold text-primary">
         Pay online
       </h2>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-sm text-muted">
         Due online now: <span className="font-semibold text-ink">{due}</span>. You will be sent to
         the payment gateway and back here when you are done.
       </p>
@@ -78,7 +78,7 @@ export function PayOnline({ trip }: { trip: Trip }) {
           {ONLINE_GATEWAYS.map((g) => (
             <label
               key={g.id}
-              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-mist px-3 py-2 text-sm has-checked:border-navy"
+              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-line px-3 py-2 text-sm has-checked:border-primary"
             >
               <input
                 type="radio"

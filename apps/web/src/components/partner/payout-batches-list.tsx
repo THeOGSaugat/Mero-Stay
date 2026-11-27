@@ -14,9 +14,9 @@ export function PartnerPayoutBatches() {
   return (
     <Panel title="Payout transfers">
       {error ? <PartnerError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading transfers…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading transfers…</p> : null}
       {data && data.data.length === 0 ? (
-        <p className="text-sm text-slate-600">No payout transfers yet.</p>
+        <p className="text-sm text-muted">No payout transfers yet.</p>
       ) : null}
       {data && data.data.length > 0 ? (
         <div className="overflow-x-auto">
@@ -30,12 +30,12 @@ export function PartnerPayoutBatches() {
                 <th className={thClass}>Reference</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((batch) => (
                 <tr key={batch.id} data-testid="partner-payout-batch">
                   <td className={tdClass}>{formatPeriod(batch.period)}</td>
                   <td className={tdClass}>{batch.itemCount}</td>
-                  <td className={`${tdClass} font-semibold text-navy`}>
+                  <td className={`${tdClass} font-semibold text-primary`}>
                     {formatMoney(batch.netMinor, batch.currency, batch.currencyExponent)}
                   </td>
                   <td className={tdClass}>

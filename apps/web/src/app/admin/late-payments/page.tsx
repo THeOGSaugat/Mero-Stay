@@ -15,7 +15,7 @@ export default function AdminLatePaymentsPage() {
         title="Late payments"
         subtitle="Money a gateway confirmed that could not be applied to a booking."
       />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <LatePaymentsQueue />
       </Suspense>
     </>

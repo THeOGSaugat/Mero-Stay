@@ -60,7 +60,7 @@ export function PaymentReturn() {
   }
   if (!view) {
     return (
-      <p className="text-sm text-slate-600" role="status">
+      <p className="text-sm text-muted" role="status">
         Checking your {gatewayLabel(params.gateway)} payment…
       </p>
     );

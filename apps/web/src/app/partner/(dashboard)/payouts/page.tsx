@@ -10,7 +10,7 @@ export default function PartnerPayoutsPage() {
   return (
     <>
       <PageHeading title="Payouts" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <div className="space-y-6">
           <PayoutSummary />
           <PartnerPayoutBatches />

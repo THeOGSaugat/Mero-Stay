@@ -15,10 +15,10 @@ export function AdminOverview() {
   return (
     <div className="space-y-4">
       <Panel title="Waiting for verification">
-        <p className="text-3xl font-bold text-navy" data-testid="pending-count">
+        <p className="text-3xl font-bold text-primary" data-testid="pending-count">
           {data ? data.page.total : "…"}
         </p>
-        <p className="mt-1 text-sm text-slate-600">providers asked to be verified</p>
+        <p className="mt-1 text-sm text-muted">providers asked to be verified</p>
         <Link
           href="/admin/providers?status=PENDING_VERIFICATION"
           className={`${buttonPrimary} mt-4`}
@@ -59,10 +59,10 @@ export function AdminOverview() {
           <Link
             key={card.href}
             href={card.href}
-            className="rounded-xl border border-mist bg-white p-4 shadow-sm hover:border-teal focus-visible:outline-2 focus-visible:outline-teal"
+            className="rounded-card border border-line bg-white p-4 shadow-card hover:border-primary-light focus-visible:outline-2 focus-visible:outline-accent-strong"
           >
-            <span className="block font-semibold text-navy">{card.title}</span>
-            <span className="mt-1 block text-sm text-slate-600">{card.text}</span>
+            <span className="block font-semibold text-primary">{card.title}</span>
+            <span className="mt-1 block text-sm text-muted">{card.text}</span>
           </Link>
         ))}
       </div>

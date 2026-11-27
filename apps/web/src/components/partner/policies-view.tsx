@@ -35,7 +35,7 @@ export function PoliciesView() {
   const [busy, setBusy] = useState(false);
 
   if (error) return <PartnerError view={error} backHref="/partner" backLabel="Back to overview" />;
-  if (!data) return <p className="text-sm text-slate-600">Loading policies…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading policies…</p>;
   const { policies, defaultPolicyId } = data.data;
   const active = policies.filter((p) => p.isActive);
 
@@ -60,7 +60,7 @@ export function PoliciesView() {
       {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       <Panel title="Default policy">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           Used for every listing that has no policy of its own. A listing&apos;s own policy always
           wins.
         </p>
@@ -121,7 +121,7 @@ export function PoliciesView() {
           />
         ) : null}
         {policies.length === 0 && editing === null ? (
-          <p className="text-sm text-slate-600" data-testid="no-policies">
+          <p className="text-sm text-muted" data-testid="no-policies">
             You have no cancellation policies yet. Add one so customers know their terms.
           </p>
         ) : null}
@@ -129,12 +129,12 @@ export function PoliciesView() {
           {policies.map((p) => (
             <li
               key={p.id}
-              className="rounded-lg border border-mist p-3"
+              className="rounded-control border border-line p-3"
               data-testid="policy-row"
               data-policy={p.id}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium text-navy">{p.name}</p>
+                <p className="font-medium text-primary">{p.name}</p>
                 <div className="flex flex-wrap gap-2">
                   {p.usage?.providerDefault ? <StatusPill label="Default" tone="good" /> : null}
                   <StatusPill
@@ -240,7 +240,7 @@ function PolicyForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-3 rounded-lg border border-teal/40 bg-mist/40 p-3"
+      className="space-y-3 rounded-control border border-primary-light/40 bg-surface/40 p-3"
       data-testid="policy-form"
     >
       {problem ? <Alert>{problem}</Alert> : null}

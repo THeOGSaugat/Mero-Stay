@@ -25,11 +25,11 @@ export function CancellationTerms({
   if (!terms) {
     return (
       <section
-        className="rounded-xl border border-mist p-4"
+        className="rounded-card border border-line p-4"
         data-testid="cancellation-terms"
         data-state="none"
       >
-        <Heading className="text-base font-semibold text-navy">Cancellation</Heading>
+        <Heading className="text-base font-semibold text-primary">Cancellation</Heading>
         <p className="mt-1 text-sm text-slate-700" data-testid="no-cancellation-policy">
           {context === "listing" ? NO_POLICY_LISTING : NO_POLICY_BOOKING}
         </p>
@@ -39,11 +39,11 @@ export function CancellationTerms({
   const source = context === "listing" ? sourceLabel(terms.source) : null;
   return (
     <section
-      className="rounded-xl border border-mist p-4"
+      className="rounded-card border border-line p-4"
       data-testid="cancellation-terms"
       data-state="set"
     >
-      <Heading className="text-base font-semibold text-navy">
+      <Heading className="text-base font-semibold text-primary">
         Cancellation{terms.name ? `: ${terms.name}` : ""}
       </Heading>
       <p className="mt-1 text-sm font-medium text-ink" data-testid="cancellation-summary">
@@ -54,9 +54,7 @@ export function CancellationTerms({
           <li key={line}>{line}</li>
         ))}
       </ul>
-      {terms.description ? (
-        <p className="mt-2 text-sm text-slate-600">{terms.description}</p>
-      ) : null}
+      {terms.description ? <p className="mt-2 text-sm text-muted">{terms.description}</p> : null}
       <p className="mt-2 text-xs text-slate-500">
         {context === "booking"
           ? "These terms were fixed when this was booked; later changes to the policy do not apply."

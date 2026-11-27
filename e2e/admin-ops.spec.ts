@@ -37,10 +37,10 @@ const world: World | null = process.env.E2E_WORLD
 const projectOf = (name: string): "desktop" | "mobile" =>
   name.startsWith("mobile") ? "mobile" : "desktop";
 
-/** "306000" paisa → "Rs 3,060.00" (only to build expectations; the UI formats the API's string). */
+/** "306000" paisa → "Rs. 3,060.00" (only to build expectations; the UI formats the API's string). */
 function rupees(minor: string): string {
   const whole = minor.slice(0, -2) || "0";
-  return `Rs ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${minor.slice(-2).padStart(2, "0")}`;
+  return `Rs. ${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${minor.slice(-2).padStart(2, "0")}`;
 }
 
 async function login(page: Page, email: string, password: string, next: string): Promise<void> {

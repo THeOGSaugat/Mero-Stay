@@ -14,7 +14,7 @@ export default function SearchPage(props: PageProps<"/search">) {
       />
       <Suspense
         fallback={
-          <p className="text-sm text-slate-600" aria-live="polite">
+          <p className="text-sm text-muted" aria-live="polite">
             Searching…
           </p>
         }

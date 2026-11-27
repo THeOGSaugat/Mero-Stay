@@ -35,34 +35,34 @@ function ResultCard({ listing, filters }: { listing: ListingSummary; filters: Se
   const price = formatMoney(listing.basePriceMinor, listing.currency, listing.currencyExponent);
   const availability = listing.availability;
   return (
-    <li className="rounded-xl border border-mist bg-white p-4 shadow-sm">
+    <li className="rounded-card border border-line bg-white p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">
             {listing.listingType.name}
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-navy">
+          <h2 className="mt-1 text-lg font-semibold text-primary">
             <Link href={listingHref(listing, filters)} className="hover:underline">
               {listing.title}
             </Link>
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-muted">
             {listing.parent ? `${listing.parent.title} · ` : ""}
             {listing.provider.name}
             {listing.location ? ` · ${listing.location.name}` : ""}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-lg font-bold text-navy" data-testid="listing-price">
+          <p className="text-lg font-bold text-primary" data-testid="listing-price">
             {price}
           </p>
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-muted">
             per {listing.listingType.unitLabel}, before taxes
           </p>
         </div>
       </div>
       {availability ? (
-        <p className="mt-3 rounded-lg bg-mist px-3 py-2 text-sm text-ink">
+        <p className="mt-3 rounded-control bg-surface px-3 py-2 text-sm text-ink">
           {availability.minAvailable} available ·{" "}
           {formatMoney(
             availability.estimatedSubtotalMinor,
@@ -111,7 +111,7 @@ export async function SearchResults({
         </Alert>
       ) : (
         <section aria-labelledby="results-heading">
-          <h2 id="results-heading" className="mb-3 text-sm font-semibold text-slate-600">
+          <h2 id="results-heading" className="mb-3 text-sm font-semibold text-muted">
             {result.data.pagination.total} result{result.data.pagination.total === 1 ? "" : "s"}
           </h2>
           <ul className="space-y-3">
@@ -131,7 +131,7 @@ export async function SearchResults({
               ) : (
                 <span />
               )}
-              <span className="text-sm text-slate-600">
+              <span className="text-sm text-muted">
                 Page {result.data.pagination.page} of {result.data.pagination.totalPages}
               </span>
               {result.data.pagination.page < result.data.pagination.totalPages ? (

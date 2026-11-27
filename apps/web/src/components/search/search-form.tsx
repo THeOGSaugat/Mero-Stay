@@ -24,7 +24,7 @@ export function SearchForm({
       method="get"
       role="search"
       aria-label="Search listings"
-      className="grid grid-cols-1 gap-4 rounded-xl border border-mist bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
+      className="grid grid-cols-1 gap-4 rounded-card border border-line bg-white p-4 shadow-card sm:grid-cols-2 lg:grid-cols-4"
     >
       <div>
         <label htmlFor="search-type" className={labelClass}>

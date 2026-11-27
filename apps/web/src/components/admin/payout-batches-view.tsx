@@ -82,7 +82,7 @@ export function AdminPayoutBatches() {
 
   return (
     <Panel title="Payout batches">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted">
         Bookings whose service is over (Nepal time), paid online and not cancelled, grouped per
         provider and month. Net = total − commission. Transfers are made outside MeroStay and
         recorded here.
@@ -114,7 +114,7 @@ export function AdminPayoutBatches() {
           <Link
             key={s || "all"}
             href={s ? `/admin/payouts?status=${s}` : "/admin/payouts"}
-            className={`rounded-full border px-3 py-1 ${status === s ? "border-navy bg-navy text-white" : "border-mist text-navy"}`}
+            className={`rounded-full border px-3 py-1 ${status === s ? "border-primary bg-primary text-white" : "border-line text-primary"}`}
             aria-current={status === s ? "page" : undefined}
           >
             {s ? payoutBatchStatusLabel(s) : "All"}
@@ -124,10 +124,10 @@ export function AdminPayoutBatches() {
 
       <div className="mt-3">
         {error ? <AdminError view={error} /> : null}
-        {!data && !error ? <p className="text-sm text-slate-600">Loading payout batches…</p> : null}
+        {!data && !error ? <p className="text-sm text-muted">Loading payout batches…</p> : null}
         {data && data.data.length === 0 ? <Alert tone="info">No payout batches here.</Alert> : null}
         {data && data.data.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+          <div className="overflow-x-auto rounded-card border border-line bg-white">
             <table className={tableClass} data-testid="payout-batches">
               <thead>
                 <tr>
@@ -140,7 +140,7 @@ export function AdminPayoutBatches() {
                   <th className={thClass}>Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-mist">
+              <tbody className="divide-y divide-line">
                 {data.data.map((batch) => {
                   const f = (minor: string) =>
                     formatMoney(minor, batch.currency, batch.currencyExponent);
@@ -154,7 +154,7 @@ export function AdminPayoutBatches() {
                         {/* First column: reachable on a phone without scrolling the table sideways. */}
                         <button
                           type="button"
-                          className="text-left font-semibold text-navy underline"
+                          className="text-left font-semibold text-primary underline"
                           onClick={() => setOpenId(openId === batch.id ? null : batch.id)}
                           aria-expanded={openId === batch.id}
                           aria-label={`${openId === batch.id ? "Close" : "Open"} payout for ${batch.provider.name}`}
@@ -167,7 +167,7 @@ export function AdminPayoutBatches() {
                       <td className={tdClass}>{f(batch.grossMinor)}</td>
                       <td className={tdClass}>{f(batch.commissionMinor)}</td>
                       <td
-                        className={`${tdClass} font-semibold text-navy`}
+                        className={`${tdClass} font-semibold text-primary`}
                         data-testid="payout-batch-net"
                       >
                         {f(batch.netMinor)}
@@ -212,7 +212,7 @@ function PayoutBatchPanel({ id, onChanged }: { id: string; onChanged: () => void
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   if (error) return <AdminError view={error} />;
-  if (!data) return <p className="mt-3 text-sm text-slate-600">Loading payout…</p>;
+  if (!data) return <p className="mt-3 text-sm text-muted">Loading payout…</p>;
   const batch = data.data;
   const f = (minor: string) => formatMoney(minor, batch.currency, batch.currencyExponent);
 
@@ -235,10 +235,10 @@ function PayoutBatchPanel({ id, onChanged }: { id: string; onChanged: () => void
   return (
     <section
       aria-label={`Payout for ${batch.provider.name}`}
-      className="mt-4 space-y-3 rounded-xl border border-mist bg-white p-4"
+      className="mt-4 space-y-3 rounded-card border border-line bg-white p-4"
       data-testid="payout-batch-detail"
     >
-      <h3 className="font-semibold text-navy">
+      <h3 className="font-semibold text-primary">
         {batch.provider.name} · {formatPeriod(batch.period)}
       </h3>
       <p className="text-sm text-ink">
@@ -247,10 +247,10 @@ function PayoutBatchPanel({ id, onChanged }: { id: string; onChanged: () => void
         {payoutBatchStatusLabel(batch.status)}
       </p>
       {batch.payoutAccountLabel ? (
-        <p className="text-sm text-slate-600">To: {batch.payoutAccountLabel}</p>
+        <p className="text-sm text-muted">To: {batch.payoutAccountLabel}</p>
       ) : null}
       {batch.bankReferenceMasked ? (
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           Bank reference {batch.bankReferenceMasked} · paid {formatTimestamp(batch.paidAt)}
         </p>
       ) : null}

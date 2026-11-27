@@ -1,6 +1,6 @@
 /**
  * Money in the web app (ADR 0010). The API sends every amount as a STRING of minor units plus
- * `currency` and `currencyExponent` (ADR 0005), e.g. "115500" + NPR + 2 = Rs 1,155.00.
+ * `currency` and `currencyExponent` (ADR 0005), e.g. "115500" + NPR + 2 = Rs. 1,155.00.
  *
  * These helpers work on the digit string itself: they never convert money to a JS number, so
  * there is no float rounding and no precision loss above 2^53. The UI never does arithmetic on
@@ -47,14 +47,15 @@ export function splitMinor(minor: string, exponent: number): [string, string] {
 }
 
 /**
- * Display text for an amount: NPR as "Rs 1,155.00" (Nepali grouping, e.g. "Rs 12,34,567.00");
+ * Display text for an amount: NPR as "Rs. 1,155.00" (Nepali grouping, e.g. "Rs. 12,34,567.00",
+ * CLAUDE.md §1, Phase 13);
  * any other currency as "USD 1,234.50".
  */
 export function formatMoney(minor: string, currency: string, exponent: number): string {
   const [integer, fraction] = splitMinor(minor, exponent);
   const grouped = currency === "NPR" ? groupNepali(integer) : groupThousands(integer);
   const amount = fraction ? `${grouped}.${fraction}` : grouped;
-  return currency === "NPR" ? `Rs ${amount}` : `${currency} ${amount}`;
+  return currency === "NPR" ? `Rs. ${amount}` : `${currency} ${amount}`;
 }
 
 /** Formats `{ <field>Minor, currency, currencyExponent }`-style API values. */

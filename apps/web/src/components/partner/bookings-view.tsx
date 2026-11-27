@@ -98,38 +98,38 @@ export function BookingList() {
         </select>
       </label>
       {error ? <PartnerError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading bookings…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading bookings…</p> : null}
       {data && data.data.length === 0 ? <Alert tone="info">No bookings yet.</Alert> : null}
       {data && data.data.length > 0 ? (
         <ul className="space-y-3" data-testid="partner-bookings">
           {data.data.map((b) => (
             <li
               key={b.id}
-              className="rounded-xl border border-mist bg-white p-4 shadow-sm"
+              className="rounded-card border border-line bg-white p-4 shadow-card"
               data-testid="partner-booking"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <Link
                     href={`/partner/bookings/${b.id}`}
-                    className="font-semibold text-navy hover:underline"
+                    className="font-semibold text-primary hover:underline"
                   >
                     {b.listing.title}
                   </Link>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-muted">
                     {formatDateRange(b.startDate, b.endDate)} · {b.quantity} × · {b.customer.name} ·
                     Trip {b.tripReference}
                   </p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-muted">
                     {paymentMethodLabel(b.paymentMethod)} · {paymentStatusLabel(b.paymentStatus)}
                   </p>
                 </div>
                 <div className="text-right">
                   <StatusPill label={bookingStatusLabel(b.status)} tone={statusTone(b.status)} />
-                  <p className="mt-1 font-semibold text-navy">
+                  <p className="mt-1 font-semibold text-primary">
                     {formatMoney(b.money.totalMinor, b.currency, b.currencyExponent)}
                   </p>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-muted">
                     Your share{" "}
                     {formatMoney(b.money.providerPayoutMinor, b.currency, b.currencyExponent)}
                   </p>
@@ -190,7 +190,7 @@ function SettleAction({
   if (!canSettleAtProperty(booking)) return null;
   return (
     <div className="space-y-3" data-testid="settle-action">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted">
         When the guest pays you on arrival, record it here. No money moves through MeroStay; the
         commission stays on your invoice.
       </p>
@@ -221,7 +221,7 @@ export function BookingDetailView() {
   );
   if (error)
     return <PartnerError view={error} backHref="/partner/bookings" backLabel="Back to bookings" />;
-  if (!data) return <p className="text-sm text-slate-600">Loading booking…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading booking…</p>;
   const b = data.data;
   const f = (minor: string) => formatMoney(minor, b.currency, b.currencyExponent);
 
@@ -249,7 +249,7 @@ export function BookingDetailView() {
             {
               label: "Invoice",
               value: b.commissionInvoice ? (
-                <Link href="/partner/invoices" className="text-navy underline">
+                <Link href="/partner/invoices" className="text-primary underline">
                   {b.commissionInvoice.number} ({invoiceStatusLabel(b.commissionInvoice.status)})
                 </Link>
               ) : (
@@ -279,11 +279,11 @@ export function BookingDetailView() {
             ["Refunded", f(b.money.refundedMinor)],
           ].map(([label, value]) => (
             <div key={label} className="contents">
-              <dt className={label === "Your share" ? "font-semibold text-navy" : "text-slate-600"}>
+              <dt className={label === "Your share" ? "font-semibold text-primary" : "text-muted"}>
                 {label}
               </dt>
               <dd
-                className={`text-right ${label === "Your share" ? "font-semibold text-navy" : "text-ink"}`}
+                className={`text-right ${label === "Your share" ? "font-semibold text-primary" : "text-ink"}`}
               >
                 {value}
               </dd>
@@ -301,7 +301,7 @@ export function BookingDetailView() {
                   <th className={thClass}>Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-mist">
+              <tbody className="divide-y divide-line">
                 {b.lines.map((line) => (
                   <tr key={line.date}>
                     <td className={tdClass}>{formatServiceDate(line.date)}</td>

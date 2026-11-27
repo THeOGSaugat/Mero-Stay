@@ -52,7 +52,7 @@ export function TripBuilder() {
     }
   }
 
-  if (trip === undefined) return <p className="text-sm text-slate-600">Loading your trip…</p>;
+  if (trip === undefined) return <p className="text-sm text-muted">Loading your trip…</p>;
   if (trip === null) {
     return (
       <div className="space-y-4">
@@ -195,7 +195,7 @@ export function TripBuilder() {
 
       {quote ? (
         <section aria-labelledby="quote-heading" className="space-y-3">
-          <h2 id="quote-heading" className="text-lg font-semibold text-navy">
+          <h2 id="quote-heading" className="text-lg font-semibold text-primary">
             Quote (today&rsquo;s prices, nothing booked yet)
           </h2>
           {!quote.allAvailable ? (
@@ -205,7 +205,7 @@ export function TripBuilder() {
           ) : null}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[36rem] text-left text-sm" data-testid="quote-table">
-              <thead className="bg-mist text-slate-700">
+              <thead className="bg-surface text-slate-700">
                 <tr>
                   <th scope="col" className="px-3 py-2">
                     Item
@@ -226,11 +226,11 @@ export function TripBuilder() {
               </thead>
               <tbody>
                 {quoteRows(quote).map((row) => (
-                  <tr key={row.key} className="border-b border-mist align-top">
+                  <tr key={row.key} className="border-b border-line align-top">
                     <td className="px-3 py-2">
                       <span className="font-medium text-ink">{row.title}</span>
                       <br />
-                      <span className="text-slate-600">
+                      <span className="text-muted">
                         {row.dates} · {row.quantity} per date · {row.payment}
                       </span>
                       {!row.available ? (
@@ -253,13 +253,13 @@ export function TripBuilder() {
               </tbody>
             </table>
           </div>
-          <dl className="rounded-xl border border-mist p-4 text-sm" data-testid="quote-totals">
+          <dl className="rounded-card border border-line p-4 text-sm" data-testid="quote-totals">
             {totalsRows(quote.totals, quote).map((row) => (
               <div key={row.label} className="flex justify-between gap-3 py-1">
-                <dt className={row.emphasis ? "font-semibold text-navy" : "text-slate-700"}>
+                <dt className={row.emphasis ? "font-semibold text-primary" : "text-slate-700"}>
                   {row.label}
                 </dt>
-                <dd className={row.emphasis ? "font-bold text-navy" : "font-medium"}>
+                <dd className={row.emphasis ? "font-bold text-primary" : "font-medium"}>
                   {row.value}
                 </dd>
               </div>
