@@ -15,7 +15,7 @@ export default function PaymentFailurePage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
       <PageHeading title="Payment" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <PaymentReturn />
       </Suspense>
     </div>

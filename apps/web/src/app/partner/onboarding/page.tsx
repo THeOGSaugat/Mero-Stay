@@ -13,7 +13,7 @@ export default function PartnerOnboardingPage() {
         title="List your business on MeroStay"
         subtitle="Hotels, homestays, bus operators, guides and tour operators."
       />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RequireAuth>
           <OnboardingForm />
         </RequireAuth>

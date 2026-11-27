@@ -27,7 +27,7 @@ async function login(page: Page, email: string, password: string): Promise<void>
   await expect(page).toHaveURL(/\/trips$/);
 }
 
-/** One online bus seat (Rs 1,800.00), confirmed through the API; returns the trip id. */
+/** One online bus seat (Rs. 1,800.00), confirmed through the API; returns the trip id. */
 async function confirmedTrip(page: Page): Promise<string> {
   const csrf = await page.evaluate(async () => {
     const res = await fetch("/api/v1/auth/me", { credentials: "include" });
@@ -56,9 +56,9 @@ async function confirmedTrip(page: Page): Promise<string> {
 async function startPayment(page: Page, tripId: string, label: "eSewa" | "Khalti") {
   await page.goto(`/trips/${tripId}`);
   const pay = page.getByRole("region", { name: "Pay online" });
-  await expect(pay).toContainText("Rs 1,800.00");
+  await expect(pay).toContainText("Rs. 1,800.00");
   await pay.getByLabel(label).check();
-  await pay.getByRole("button", { name: `Pay Rs 1,800.00 with ${label}` }).click();
+  await pay.getByRole("button", { name: `Pay Rs. 1,800.00 with ${label}` }).click();
   await expect(page.getByRole("heading", { name: `${label} (test)` })).toBeVisible();
 }
 

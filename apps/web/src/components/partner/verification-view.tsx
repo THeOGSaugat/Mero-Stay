@@ -66,7 +66,7 @@ export function VerificationView() {
   }, []);
 
   if (docs.error) return <PartnerError view={docs.error} />;
-  if (!docs.data || types === null) return <p className="text-sm text-slate-600">Loading…</p>;
+  if (!docs.data || types === null) return <p className="text-sm text-muted">Loading…</p>;
 
   const groups = types.find((t) => t.code === profile.providerType.code)?.requiredDocuments ?? [];
   const checklist = requirementChecklist(groups, docs.data.data);
@@ -192,7 +192,7 @@ export function VerificationView() {
             <Alert>MeroStay asked for changes: {profile.rejectionReason}</Alert>
           </div>
         ) : null}
-        <h3 className="mb-2 text-sm font-semibold text-navy">
+        <h3 className="mb-2 text-sm font-semibold text-primary">
           Required for {profile.providerType.name.toLowerCase()}
         </h3>
         <ul className="space-y-2" data-testid="requirement-checklist">
@@ -201,11 +201,11 @@ export function VerificationView() {
               key={row.requirement}
               data-requirement={row.requirement}
               data-state={row.state}
-              className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-mist p-3 text-sm"
+              className="flex flex-wrap items-start justify-between gap-2 rounded-control border border-line p-3 text-sm"
             >
               <span>
                 <span className="block font-semibold text-ink">{row.label}</span>
-                <span className="block text-slate-600">
+                <span className="block text-muted">
                   One of: {row.acceptedDocumentTypes.map(documentTypeLabel).join(", ")}
                 </span>
               </span>
@@ -224,7 +224,7 @@ export function VerificationView() {
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-slate-600">
+        <p className="mt-2 text-xs text-muted">
           Only documents uploaded and sent for review count. Rejected ones don&apos;t; add a new
           one.
         </p>
@@ -242,7 +242,7 @@ export function VerificationView() {
 
       <Panel title="Your documents">
         {docs.data.data.length === 0 ? (
-          <p className="text-sm text-slate-600">No documents yet.</p>
+          <p className="text-sm text-muted">No documents yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className={tableClass}>
@@ -255,16 +255,16 @@ export function VerificationView() {
                   <th className={thClass}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-mist">
+              <tbody className="divide-y divide-line">
                 {docs.data.data.map((doc) => (
                   <tr key={doc.id} data-testid="document-row" data-status={doc.status}>
                     <td className={tdClass}>
                       {documentTypeLabel(doc.documentType)}
                       {doc.documentNumber ? (
-                        <span className="block text-slate-600">No. {doc.documentNumber}</span>
+                        <span className="block text-muted">No. {doc.documentNumber}</span>
                       ) : null}
                       {doc.expiresOn ? (
-                        <span className="block text-slate-600">
+                        <span className="block text-muted">
                           Expires {formatServiceDate(doc.expiresOn)}
                         </span>
                       ) : null}
@@ -280,7 +280,7 @@ export function VerificationView() {
                     </td>
                     <td className={tdClass}>
                       {doc.fileName ? <span className="block">{doc.fileName}</span> : null}
-                      <span className="block text-slate-600">
+                      <span className="block text-muted">
                         {doc.mimeType
                           .replace("application/", "")
                           .replace("image/", "")
@@ -333,7 +333,7 @@ export function VerificationView() {
 
       {profile.status !== "SUSPENDED" ? (
         <Panel title="Add a document">
-          <p className="mb-4 text-sm text-slate-600">
+          <p className="mb-4 text-sm text-muted">
             Your file is stored privately: only your business and MeroStay&apos;s verification team
             can open it. Photos lose their location and camera details before they are stored.
           </p>

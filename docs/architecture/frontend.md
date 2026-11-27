@@ -4,7 +4,127 @@ Next.js 16 (App Router, Cache Components, Turbopack), React 19, Tailwind 4. Deci
 [ADR 0010](decisions/0010-web-frontend-architecture.md) (architecture, customer site) and
 [ADR 0011](decisions/0011-partner-dashboard.md) (partner dashboard) and
 [ADR 0012](decisions/0012-admin-console.md) (admin console). Design tokens: `src/app/globals.css`
-(palette from the owner's reference, [docs/design](../design/README.md)).
+(palette and mockups from the owner, [docs/design](../design/README.md)). The design system
+(tokens, components, content rules) is described in [Design system](#design-system-phase-13)
+below ([ADR 0019](decisions/0019-ui-design-system.md)).
+
+## Design system (Phase 13)
+
+How the MeroStay web app (`apps/web`) looks, and how to style a new page so it matches. Introduced
+in Phase 13 ([ADR 0019](decisions/0019-ui-design-system.md)), following the owner's mockups in
+[`docs/design/screens/`](../design/screens/) (set 2, with the headline "Discover Nepal, your way").
+
+**Rules that do not change with the look:**
+
+- the UI computes no totals;
+- every amount is formatted from the API's minor-unit string by `formatMoney` / `formatAmount`
+  (`src/lib/money.ts`; NPR renders as `Rs. 7,500.00`);
+- auth state and the CSRF token live in memory (ADR 0010);
+- Flights are never offered.
+
+### 1. Tokens (`src/app/globals.css`)
+
+Colours, radii, shadows and fonts are defined once in `@theme`. Components use the **semantic
+names** and never a hex value.
+
+| Token | Value | Use |
+|---|---|---|
+| `primary` | `#1b4332` | Forest green: header, headings, primary buttons, links |
+| `primary-dark` | `#123326` | Hover/pressed; footer background |
+| `primary-light` | `#2d6a4f` | Gradients, success borders |
+| `primary-soft` | `#e3efe8` | Success / selected / availability backgrounds |
+| `accent` | `#f4a261` | Warm orange, **decorative only**: icons, labels on the dark header/footer, focus ring on dark backgrounds |
+| `accent-strong` | `#b8541a` | Orange for text, outlined "Book now" buttons, white-text orange buttons, default focus ring (≈ 4.9:1 on white) |
+| `accent-dark` | `#9a4413` | Hover of `accent-strong` |
+| `accent-soft` | `#fdf0e6` | Warm highlight background |
+| `surface` | `#f4f6f3` | Page sections, table headers, sidebars |
+| `line` | `#e1e7e2` | Borders, dividers |
+| `ink` | `#1f2a24` | Body text |
+| `muted` | `#4a5a51` | Secondary text (≥ 7:1 on white) |
+
+Contrast rules (WCAG AA):
+
+- **Never put small text in `accent` on white.** White on `accent` is about 2.2:1.
+- Use `accent-strong` for orange text and for buttons with white text.
+- The status badge's label always names the status, so colour is never the only signal.
+
+Other tokens:
+
+| Kind | Tokens |
+|---|---|
+| Radius | `rounded-card` (0.875 rem: cards, panels, the search card), `rounded-control` (0.625 rem: inputs, buttons) |
+| Shadow | `shadow-card` (cards), `shadow-float` (the search card over a hero) |
+| Font | `font-sans` = Inter (body, UI); `font-display` = Playfair Display (headings) |
+
+Fonts are self-hosted by `next/font` (`app/layout.tsx`), so the browser never calls Google.
+
+**Focus:** a 2 px `accent-strong` outline on every link, button and field (a global rule in
+`globals.css`). Use `outline-accent` on the dark green header and footer.
+
+### 2. Components
+
+| Component | File | Use |
+|---|---|---|
+| `Button` / `buttonClass(variant)` | `components/ui/primitives.tsx` | Variants `primary` (main action), `secondary` (outlined), `accent` (outlined orange: Book now), `ghost` |
+| `buttonPrimary`, `buttonSecondary`, `buttonAccent`, `buttonGhost` | same | The same styles as strings, for `<Link className={…}>` |
+| `inputClass`, `selectClass`, `labelClass` | same | Text, number and date inputs (native `type="date"`: no date-picker library) and selects |
+| `Card` | same | White card with border, radius and shadow |
+| `Badge` (`StatusPill`) + `statusTone()` | same | Statuses: `good` (Verified, Paid, Approved), `wait` (Pending…), `bad` (Rejected, Cancelled), `neutral`, `accent` |
+| `PageHeading`, `SectionHeading` | same | Page title (display font) / section title with an optional link |
+| `Alert` | same | `error` (role alert), `success`, `info` (role status) |
+| `Panel`, `Facts`, `Pager`, `SectionNav`, table classes | `components/ui/data.tsx` | Dashboards (partner and admin) |
+| Icons, `LogoMark` | `components/ui/icons.tsx` | Inline SVG line icons (no icon library); decorative (`aria-hidden`) |
+| `SiteHeader` / `HeaderNav` | `components/site-header.tsx`, `header-nav.tsx` | Green bar: logo, Stays · Buses · Guides · Experiences (links `/search?category=…`), account links. On phones the categories become a scrollable second row |
+| `SiteFooter` | `components/site-footer.tsx` | Links only to pages that exist |
+| `SearchForm` / `ResultFilters` | `components/search/search-form.tsx` | The search card (category tabs are radio inputs, so it works without JavaScript) / price and sort sidebar |
+| `ListingCard` | `components/search/listing-card.tsx` | Result and homepage card: illustrative image, title, place, price, Book now |
+| `TripSteps` | `components/trip/trip-steps.tsx` | Build → Quote → Confirm → Pay (presentation only, `lib/trip-steps.ts`) |
+
+### 3. Content rules (owner decisions, Phase 13)
+
+- **Only real data.** Show what the API returns and never invent numbers.
+  - No ratings or review counts (reviews are a later phase).
+  - No amenity or rating filters, and no property-type counts.
+  - The map is a labelled placeholder ("Map view is not available yet").
+  - Destination tiles appear only for places that have listings, with the real count.
+  - Homepage picks are real listings; a category with none is left out.
+- **Images are illustrative.** Listings have no photos yet, so cards use a photo of the kind of
+  thing booked (`illustrationFor()` in `lib/categories.ts`), always labelled "Illustrative photo",
+  with alt text that starts "Illustrative photo:". The listing banner uses the one large scenic
+  photo; the supplied per-type photos are only about 170–420 px wide.
+  - Assets live in `public/images/`: cropped from the owner's files, with the baked-in labels and
+    rounded corners removed and metadata stripped. The originals are in `docs/design/assets/`.
+  - Higher-resolution, label-free originals can replace them with the same file names.
+- **Categories** (`lib/categories.ts`) group the offered listing types by the unit they are sold
+  in, with **no listing-type code in code** (ADR 0013's guard test checks this):
+
+  | Category | Unit | Types today |
+  |---|---|---|
+  | Stays | night | Hotel room |
+  | Buses | seat | Bus ticket (flights are also per seat but inactive, so never offered) |
+  | Guides | day | Guide service |
+  | Experiences | person | Activity, Tour / trek (the results page shows pills to switch) |
+
+  - Header, footer and homepage links use `/search?category=<id>`; the search page resolves it
+    from `GET /listing-types` to the category's first offered type.
+  - A category with no offered type is not shown.
+
+### 4. Styling a new page
+
+1. Server Component by default; `"use client"` only for interaction.
+2. Use `max-w-6xl` page containers with `px-4 sm:px-6`. Design for 360 px first, then `sm:`,
+   `lg:`.
+3. Title with `PageHeading`, sections with `SectionHeading` or a `Panel` (dashboards) / `Card`.
+4. Actions:
+   - `Button` / `buttonPrimary` for the main one, `buttonSecondary` for the rest;
+   - "Book now"-style calls to action use `buttonAccent`;
+   - statuses use `Badge`.
+5. Images: `next/image` with `fill` + `sizes`, or width/height. Use `preload` (not the deprecated
+   `priority`) only for the first, above-the-fold image.
+6. Money only through `formatMoney` / `formatAmount`. Dates through the existing helpers
+   (Nepal time).
+7. Check at 375 px that there is no horizontal page scroll (`home.spec.ts` tests it for the home
+   page), and that tables scroll inside their own container with any action in the first column.
 
 ## Routes (Phase 7, Track A: customer)
 
@@ -157,10 +277,10 @@ formats it with string operations only:
 
 | API value | Display |
 |---|---|
-| `"115500"`, NPR, 2 | `Rs 1,155.00` |
-| `"123456700"`, NPR, 2 | `Rs 12,34,567.00` (Nepali grouping) |
+| `"115500"`, NPR, 2 | `Rs. 1,155.00` |
+| `"123456700"`, NPR, 2 | `Rs. 12,34,567.00` (Nepali grouping) |
 | `"123450"`, USD, 2 | `USD 1,234.50` |
-| `"9007199254740993"`, NPR, 2 | `Rs 9,00,71,99,25,47,409.93` (exact above 2^53) |
+| `"9007199254740993"`, NPR, 2 | `Rs. 9,00,71,99,25,47,409.93` (exact above 2^53) |
 
 The UI never adds or multiplies money. Totals, quotes and the split between pay online and pay at
 the property all come from the API, and so do the partner figures (commission, your share,
@@ -178,8 +298,8 @@ Forms use native inputs and `FormData`.
 
 | Kind | Where | Covers |
 |---|---|---|
-| Unit (Vitest) | `src/lib/*.test.ts` | Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
-| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks. Phase 9: the admin journey sends a forged `X-Forwarded-For` on every request and checks the audit row shows the address the web server saw. **Runs in CI on every push** ([ci.md](../development/ci.md)) |
+| Unit (Vitest) | `src/lib/*.test.ts` | Phase 13 (`phase13-logic.test.ts`): categories (never flights), search titles, illustrative images, trip steps, `Rs.` formatting. Money formatting (incl. > 2^53), price input, search query building (no inactive types), auth state, safe `next` paths, API client (credentials, CSRF on writes, errors, Retry-After), quote and totals rows, cancellation rules, calendar window, config, health check. Track C (`admin-logic.test.ts`): admin guard and 404/403 → not found, the blocked-approval message, money and masking reuse, audit rows (flattening, literal markup, secret hiding, re-masking), no `dangerouslySetInnerHTML` in any source file. Track B (`partner-logic.test.ts`): partner money reuse, rupees → minor units, percent ⇄ bps, masked bank display (never more than 4 characters), partner route guard and 404 → not-found, `X-Provider-Id` + CSRF headers, settle key reuse and one-time success, document checklist, detail fields, inventory error messages, Nepal "today" |
+| E2E (Playwright) | `e2e/booking.spec.ts`, `e2e/partner.spec.ts`, `e2e/admin.spec.ts`, `e2e/admin-ops.spec.ts`, `e2e/payments.spec.ts`, `e2e/policies-documents.spec.ts`, `e2e/home.spec.ts` | The customer booking journey, the partner dashboard journey and the admin console journey on desktop and mobile Chromium; non-admins get "Page not found" (API 403); protected pages redirect to login; Phase 1 home and health checks. Phase 9: the admin journey sends a forged `X-Forwarded-For` on every request and checks the audit row shows the address the web server saw. **Runs in CI on every push** ([ci.md](../development/ci.md)) |
 
 Run the booking journey against a **disposable** database (never dev):
 

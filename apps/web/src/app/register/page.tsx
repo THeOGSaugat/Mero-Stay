@@ -9,7 +9,7 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto w-full max-w-md px-4 py-10 sm:px-6">
       <PageHeading title="Create an account" subtitle="One account for stays, buses and guides." />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <RegisterForm />
       </Suspense>
     </div>

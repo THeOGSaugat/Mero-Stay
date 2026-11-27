@@ -1,33 +1,54 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. Colour palette from the owner's reference (docs/design/README.md); ONLY the
- * colours were taken from it. Change colours here, not in components.
+ * MeroStay design tokens (Phase 13, docs/architecture/frontend.md). The palette follows the
+ * owner's mockups (docs/design/): deep forest green as the primary colour, warm orange as the
+ * accent. Change colours HERE, never in components; components use the semantic names below.
  *
- * Contrast: navy and ink are for text and buttons (≥ 7:1 on white). Teal and mint are accents
- * (borders, highlights, large shapes), never small text on white (teal is below 4.5:1 there).
+ * Contrast (WCAG AA):
+ * - primary (#1b4332) and ink are for text and filled buttons: about 11:1 on white.
+ * - accent (#f4a261) is decorative only (badges' dots, large shapes, focus rings on the dark
+ *   header): white text on it is ~2.2:1, so it never carries small text.
+ * - accent-strong (#b8541a) is the orange for text, outlines and buttons with white text (~4.9:1).
  */
 @theme {
-  --color-navy: #0f3b64; /* Deep Blue: primary, headings, buttons */
-  --color-navy-dark: #0b2e4f; /* hover/pressed state of navy (derived) */
-  --color-teal: #14b8a6; /* Teal Green: accent */
-  --color-mint: #a7d8d1; /* Soft Mint: soft accent, highlights */
-  --color-mist: #e8f1f5; /* Light Gray: surfaces, page sections */
-  --color-ink: #2d3748; /* Charcoal: body text */
+  --color-primary: #1b4332; /* forest green: header, headings, primary buttons */
+  --color-primary-dark: #123326; /* hover/pressed */
+  --color-primary-light: #2d6a4f; /* gradients, secondary green */
+  --color-primary-soft: #e3efe8; /* success/selected backgrounds */
 
-  /* Aliases kept for existing components (Phase 1). */
-  --color-brand-50: #e8f1f5;
-  --color-brand-100: #a7d8d1;
-  --color-brand-600: #14b8a6;
-  --color-brand-700: #0f3b64;
-  --color-brand-900: #0f3b64;
+  --color-accent: #f4a261; /* warm orange: decorative accent */
+  --color-accent-strong: #b8541a; /* orange for text, outlines, white-text buttons */
+  --color-accent-dark: #9a4413; /* hover/pressed of accent-strong */
+  --color-accent-soft: #fdf0e6; /* warm highlight background */
 
+  --color-surface: #f4f6f3; /* page sections, table headers, hover rows */
+  --color-line: #e1e7e2; /* borders and dividers */
+  --color-ink: #1f2a24; /* body text */
+  --color-muted: #4a5a51; /* secondary text (≥ 7:1 on white) */
+
+  --radius-card: 0.875rem; /* cards, panels, search card */
+  --radius-control: 0.625rem; /* inputs, buttons */
+
+  --shadow-card: 0 1px 2px rgb(16 40 28 / 0.06), 0 4px 16px rgb(16 40 28 / 0.06);
+  --shadow-float: 0 8px 30px rgb(16 40 28 / 0.18);
+}
+
+/* Fonts come from next/font (app/layout.tsx), exposed as CSS variables on <html>. */
+@theme inline {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
+    var(--font-body), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
     "Noto Sans Devanagari", sans-serif;
+  --font-display: var(--font-heading), Georgia, "Times New Roman", serif;
 }
 
 body {
   background-color: var(--color-white);
   color: var(--color-ink);
+}
+
+/* Visible keyboard focus everywhere that does not set its own (WCAG 2.4.7). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 2px;
 }

@@ -9,7 +9,7 @@ export default function PartnerBookingsPage() {
   return (
     <>
       <PageHeading title="Bookings" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <BookingList />
       </Suspense>
     </>

@@ -45,10 +45,10 @@ const user = (role: PublicUser["role"]): AuthState => ({
 
 describe("money in the partner area reuses the Track A formatter (strings only)", () => {
   it("formats the API's booking, invoice and payout strings exactly", () => {
-    expect(formatMoney("765100", "NPR", 2)).toBe("Rs 7,651.00"); // provider share
-    expect(formatMoney("105000", "NPR", 2)).toBe("Rs 1,050.00"); // commission
-    expect(formatMoney("38255000", "NPR", 2)).toBe("Rs 3,82,550.00"); // Nepali grouping
-    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs 9,00,71,99,25,47,409.93");
+    expect(formatMoney("765100", "NPR", 2)).toBe("Rs. 7,651.00"); // provider share
+    expect(formatMoney("105000", "NPR", 2)).toBe("Rs. 1,050.00"); // commission
+    expect(formatMoney("38255000", "NPR", 2)).toBe("Rs. 3,82,550.00"); // Nepali grouping
+    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs. 9,00,71,99,25,47,409.93");
   });
 
   it("prices typed in rupees become minor-unit strings; rates become basis points", () => {

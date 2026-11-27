@@ -30,7 +30,7 @@ export function AddToTrip({ listing }: { listing: AddToTripListing }) {
   const [busy, setBusy] = useState(false);
   const range = usesDateRange(listing.unitLabel);
 
-  if (state.status === "loading") return <p className="text-sm text-slate-600">Loading…</p>;
+  if (state.status === "loading") return <p className="text-sm text-muted">Loading…</p>;
   if (state.status === "anonymous") {
     const query = search.toString();
     return (
@@ -81,7 +81,7 @@ export function AddToTrip({ listing }: { listing: AddToTripListing }) {
           ) : null}
         </Alert>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
         <div>
           <label htmlFor="add-start" className={labelClass}>
             {range ? "From" : "Date"}
@@ -140,7 +140,7 @@ export function AddToTrip({ listing }: { listing: AddToTripListing }) {
           </select>
         </div>
       </div>
-      <button type="submit" disabled={busy} className={buttonPrimary}>
+      <button type="submit" disabled={busy} className={`${buttonPrimary} w-full`}>
         {busy ? "Adding…" : "Add to trip"}
       </button>
     </form>

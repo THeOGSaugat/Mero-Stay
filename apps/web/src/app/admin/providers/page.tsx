@@ -9,7 +9,7 @@ export default function AdminProvidersPage() {
   return (
     <>
       <PageHeading title="Providers" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <ProviderList />
       </Suspense>
     </>

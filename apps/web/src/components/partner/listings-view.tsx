@@ -98,10 +98,10 @@ export function ListingList() {
         </Link>
       </div>
       {error ? <PartnerError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading listings…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading listings…</p> : null}
       {data && data.data.length === 0 ? <Alert tone="info">No listings yet.</Alert> : null}
       {data && data.data.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="partner-listings">
             <thead>
               <tr>
@@ -111,17 +111,17 @@ export function ListingList() {
                 <th className={thClass}>Place</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((listing) => (
                 <tr key={listing.id} data-testid="partner-listing-row">
                   <td className={tdClass}>
                     <Link
                       href={`/partner/listings/${listing.id}`}
-                      className="font-semibold text-navy hover:underline"
+                      className="font-semibold text-primary hover:underline"
                     >
                       {listing.title}
                     </Link>
-                    <span className="block text-slate-600">
+                    <span className="block text-muted">
                       {listing.listingType.name}
                       {listing.parent ? ` · ${listing.parent.title}` : ""}
                     </span>
@@ -439,8 +439,8 @@ export function ListingForm({
             current={listing?.location}
           />
           {fields.length > 0 ? (
-            <fieldset className="space-y-3 rounded-lg border border-mist p-3">
-              <legend className="px-1 text-sm font-semibold text-navy">Details</legend>
+            <fieldset className="space-y-3 rounded-control border border-line p-3">
+              <legend className="px-1 text-sm font-semibold text-primary">Details</legend>
               <div className="grid gap-4 sm:grid-cols-2">
                 {fields.map((field) =>
                   field.kind === "location" ? (
@@ -487,7 +487,7 @@ export function ListingDetailView() {
     return (
       <PartnerError view={error} backHref="/partner/listings" backLabel="Back to your listings" />
     );
-  if (!data) return <p className="text-sm text-slate-600">Loading listing…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading listing…</p>;
   const listing = data.data;
 
   async function move(to: string) {
@@ -546,9 +546,7 @@ export function ListingDetailView() {
           ]}
         />
         {listing.status === "PENDING_REVIEW" ? (
-          <p className="mt-3 text-sm text-slate-600">
-            MeroStay reviews listings before they go live.
-          </p>
+          <p className="mt-3 text-sm text-muted">MeroStay reviews listings before they go live.</p>
         ) : null}
         {statusError ? (
           <div className="mt-3">

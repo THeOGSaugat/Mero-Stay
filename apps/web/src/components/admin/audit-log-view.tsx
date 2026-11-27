@@ -27,7 +27,7 @@ const ENTITY_TYPES = ["provider", "booking_item", "trip"];
  */
 function Snapshot({ entry }: { entry: AuditEntry }) {
   const rows = auditRows(entry.before, entry.after);
-  if (rows.length === 0) return <p className="text-sm text-slate-600">No details recorded.</p>;
+  if (rows.length === 0) return <p className="text-sm text-muted">No details recorded.</p>;
   return (
     <div className="overflow-x-auto">
       <table className={tableClass} data-testid="audit-snapshot">
@@ -38,13 +38,17 @@ function Snapshot({ entry }: { entry: AuditEntry }) {
             <th className={thClass}>After</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-mist">
+        <tbody className="divide-y divide-line">
           {rows.map((row) => (
-            <tr key={row.key} data-key={row.key} className={row.changed ? "bg-mist/40" : undefined}>
+            <tr
+              key={row.key}
+              data-key={row.key}
+              className={row.changed ? "bg-surface/40" : undefined}
+            >
               <td className={`${tdClass} font-mono text-xs`}>{row.key}</td>
               <td className={`${tdClass} break-all`}>{row.before}</td>
               <td
-                className={`${tdClass} break-all ${row.changed ? "font-semibold text-navy" : ""}`}
+                className={`${tdClass} break-all ${row.changed ? "font-semibold text-primary" : ""}`}
               >
                 {row.after}
               </td>
@@ -115,8 +119,8 @@ export function AuditLogView() {
       </Form>
 
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading the audit log…</p> : null}
-      {data ? <p className="text-sm text-slate-600">{data.page.total} entries</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading the audit log…</p> : null}
+      {data ? <p className="text-sm text-muted">{data.page.total} entries</p> : null}
       {data && data.data.length === 0 ? <Alert tone="info">No entries match.</Alert> : null}
       <ul className="space-y-3" data-testid="audit-entries">
         {data?.data.map((entry) => (
@@ -124,20 +128,20 @@ export function AuditLogView() {
             key={entry.id}
             data-testid="audit-entry"
             data-action={entry.action}
-            className="rounded-xl border border-mist bg-white p-4 shadow-sm"
+            className="rounded-card border border-line bg-white p-4 shadow-card"
           >
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2 text-sm">
               <div>
-                <p className="font-semibold text-navy">
+                <p className="font-semibold text-primary">
                   {auditActionLabel(entry.action)}{" "}
-                  <span className="font-mono text-xs text-slate-600">{entry.action}</span>
+                  <span className="font-mono text-xs text-muted">{entry.action}</span>
                 </p>
-                <p className="text-slate-600">
+                <p className="text-muted">
                   {entry.entity.type}{" "}
                   {entry.entity.type === "provider" ? (
                     <Link
                       href={`/admin/providers/${entry.entity.id}`}
-                      className="font-mono text-xs text-navy underline"
+                      className="font-mono text-xs text-primary underline"
                     >
                       {entry.entity.id}
                     </Link>
@@ -146,7 +150,7 @@ export function AuditLogView() {
                   )}
                 </p>
               </div>
-              <div className="text-right text-slate-600">
+              <div className="text-right text-muted">
                 <p>{formatTimestamp(entry.createdAt)}</p>
                 <p>
                   <span data-testid="audit-actor">{auditActorLabel(entry.actor)}</span>

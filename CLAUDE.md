@@ -61,7 +61,7 @@ The architecture must leave room for these (see §3.4), but no code for them is 
 
 ### Nepal-specific context
 
-- **Currency:** Nepalese Rupee (NPR). Display as `Rs. 4,500` / `NPR 4,500`.
+- **Currency:** Nepalese Rupee (NPR). Display as `Rs. 4,500.00` (the web formatter, Phase 13) / `NPR 4,500`.
 - **Timezone:** `Asia/Kathmandu` (UTC+05:45 — note the 45-minute offset).
 - **Payment providers:** eSewa and Khalti first; others (Fonepay, cards) later.
 - **Phone numbers:** Nepali mobile format (`+977 98XXXXXXXX`), validated server-side.
@@ -225,6 +225,11 @@ mero-stay/
   at build time), so the session cookie is first-party. Auth state (user + CSRF token) lives in memory, never in
   localStorage. Public pages are Server Components inside `<Suspense>`; account pages are Client Components. Money is
   formatted from the API's strings with string operations only (`apps/web/src/lib/money.ts`); the UI computes no totals.
+- **Design system (ADR 0019):** colours, radii, shadows and fonts are tokens in `apps/web/src/app/globals.css`; screens
+  use the semantic names (`primary`, `accent-strong`, `surface`, `line`, `ink`, `muted`) and the shared components in
+  `components/ui/` (`Button`, `Card`, `Badge`, inputs, `Panel`). Orange `accent` is decorative only (contrast). Show only
+  real API data; listing photos are illustrative and labelled. Categories are grouped by unit label, never by type
+  code. Guide: `docs/architecture/frontend.md`.
 - **Client IP behind the proxy (ADR 0014):** the production web server (`apps/web/server.mts`, `npm start`) appends the
   connecting address to `X-Forwarded-For`; plain `next start` would forward a client's header unchanged. The API's
   `trust proxy` is a function, **never `true`**: an entry counts only within `TRUST_PROXY_HOPS` and from
@@ -349,6 +354,7 @@ mero-stay/
 | `docs/architecture/overview.md` | System architecture |
 | `docs/architecture/data-model.md` | Entity reference, money formulas, how to add a vertical |
 | `docs/architecture/api.md` | `/api/v1` endpoints, auth, money-as-string convention, error codes |
+| `docs/architecture/frontend.md` | Web app: routes, API access, design system (tokens, components, content rules) |
 | `docs/development/operational-gaps.md` | Known gaps that must be closed before launch |
 | `docs/architecture/decisions/` | Architecture Decision Records (ADRs) |
 | `docs/development/roadmap.md` | Phase-by-phase plan |
@@ -415,11 +421,17 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   (now Phase 15). Listing photos and bulk pricing are in the unscheduled "Frontend polish" roadmap row.
 - **Phase 11, Live payment gateways:** merged to `main`, tagged `v0.11.0`. Gaps 7 and 8 closed (ADR 0017);
   sandbox check passed 2026-11-26 (eSewa UAT + Khalti sandbox); Neon clean 258/258.
-- **Phase 12, Payouts & admin moderation:** on `phase/12-payouts-admin-moderation`, awaiting review (CI green,
-  Neon clean 293/293). Gaps 16,
+- **Phase 12, Payouts & admin moderation:** merged to `main`, tagged `v0.12.0` (CI green, Neon clean 293/293). Gaps 16,
   9, 13 (correction), 15 and 34 closed, gap 33 narrowed (ADR 0018); residual gaps 35–39 (invoice payment
   tracking, settlement reconciliation, setup links by email, re-review of edited listings, paid-out voids).
   23 gaps open; **no launch blocker**. Roadmap (owner, shift up by one): 13 Search UX, 14 Cancellations &
   refunds (refund execution and the refund clock reference decided there), 15 Reviews, 16 Notifications,
   17 Hardening. Gap 10 (invoice numbering) still waits for the tax advisor.
-- **Next:** Phase 13 only when the owner sends its prompt.
+- **Phase 13, UI design system & restyle:** on `phase/13-ui-design-system`, awaiting review. Pure presentation
+  (no API, state, auth or schema change; ADR 0019): design tokens (forest green `#1b4332`, orange `#f4a261` as
+  decoration, `accent-strong` for orange text), shared components, home/search/listing/trip/checkout restyled to the
+  owner's mockup set 2 ("Discover Nepal, your way"), dashboards on the same system. Only real data (no ratings,
+  amenity filters or counts); illustrative images; NPR shown as `Rs. 7,500.00`. Guide:
+  `docs/architecture/frontend.md`. Roadmap (owner): 14 Search UX, 15 Cancellations & refunds, 16 Reviews,
+  17 Notifications, 18 Hardening.
+- **Next:** Phase 14 only when the owner sends its prompt.

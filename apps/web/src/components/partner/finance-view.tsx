@@ -37,11 +37,11 @@ export function InvoiceList() {
     `/invoices?page=${page}&pageSize=20`,
   );
   if (error) return <PartnerError view={error} />;
-  if (!data) return <p className="text-sm text-slate-600">Loading invoices…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading invoices…</p>;
   if (data.data.length === 0) return <Alert tone="info">No invoices yet.</Alert>;
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-muted">
         When guests pay you at the property, MeroStay invoices its commission. Online payments have
         the commission deducted from your payout instead.
       </p>
@@ -57,12 +57,12 @@ export function InvoiceList() {
                 />
               }
             >
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted">
                 Issued {formatTimestamp(inv.issuedAt)}
                 {inv.dueOn ? ` · due ${formatServiceDate(inv.dueOn)}` : ""}
                 {inv.paidAt ? ` · paid ${formatTimestamp(inv.paidAt)}` : ""}
               </p>
-              <p className="mt-2 text-xl font-semibold text-navy" data-testid="invoice-amount">
+              <p className="mt-2 text-xl font-semibold text-primary" data-testid="invoice-amount">
                 {formatMoney(inv.amountMinor, inv.currency, inv.currencyExponent)}
               </p>
               <div className="mt-3 overflow-x-auto">
@@ -76,13 +76,13 @@ export function InvoiceList() {
                       <th className={thClass}>Commission</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-mist">
+                  <tbody className="divide-y divide-line">
                     {inv.items.map((item) => (
                       <tr key={item.id}>
                         <td className={tdClass}>{item.listingType.replace(/_/g, " ")}</td>
                         <td className={tdClass}>
                           {paymentStatusLabel(item.paymentStatus)}
-                          <span className="block text-xs text-slate-600">
+                          <span className="block text-xs text-muted">
                             {commissionStatusLabel(item.commissionStatus)}
                           </span>
                         </td>
@@ -118,7 +118,7 @@ export function PayoutSummary() {
     `/payouts?page=${page}&pageSize=20`,
   );
   if (error) return <PartnerError view={error} />;
-  if (!data) return <p className="text-sm text-slate-600">Loading payouts…</p>;
+  if (!data) return <p className="text-sm text-muted">Loading payouts…</p>;
   return (
     <div className="space-y-4">
       <Alert tone="info">
@@ -127,9 +127,9 @@ export function PayoutSummary() {
         bank transfer in the next monthly payout (below).
       </Alert>
       {data.data.length === 0 ? (
-        <p className="text-sm text-slate-600">No online-paid bookings waiting for a payout.</p>
+        <p className="text-sm text-muted">No online-paid bookings waiting for a payout.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="partner-payouts">
             <thead>
               <tr>
@@ -141,7 +141,7 @@ export function PayoutSummary() {
                 <th className={thClass}>Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((row) => {
                 const f = (minor: string) => formatMoney(minor, row.currency, row.currencyExponent);
                 return (
@@ -150,7 +150,7 @@ export function PayoutSummary() {
                     <td className={tdClass}>{row.items}</td>
                     <td className={tdClass}>{f(row.totalMinor)}</td>
                     <td className={tdClass}>{f(row.commissionMinor)}</td>
-                    <td className={`${tdClass} font-semibold text-navy`}>
+                    <td className={`${tdClass} font-semibold text-primary`}>
                       {f(row.providerPayoutMinor)}
                     </td>
                     <td className={tdClass}>

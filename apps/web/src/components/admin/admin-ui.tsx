@@ -30,8 +30,8 @@ const SECTIONS = [
 export function NotFoundPanel() {
   return (
     <section className="space-y-4 py-6" data-testid="admin-not-found">
-      <h1 className="text-2xl font-bold tracking-tight text-navy">Page not found</h1>
-      <p className="text-slate-600">This page doesn&apos;t exist or has moved.</p>
+      <h1 className="text-2xl font-bold tracking-tight text-primary">Page not found</h1>
+      <p className="text-muted">This page doesn&apos;t exist or has moved.</p>
       <Link href="/" className={buttonSecondary}>
         Go to the home page
       </Link>
@@ -43,10 +43,10 @@ export function AdminGate({ children }: { children: ReactNode }) {
   const { state } = useAuth();
   const access = adminAccess(state);
   if (access === "not-found") return <NotFoundPanel />;
-  if (access !== "admin") return <p className="py-6 text-sm text-slate-600">Loading…</p>;
+  if (access !== "admin") return <p className="py-6 text-sm text-muted">Loading…</p>;
   return (
     <>
-      <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-600">
+      <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
         MeroStay admin
       </p>
       <SectionNav label="Admin" rootHref="/admin" sections={SECTIONS} />

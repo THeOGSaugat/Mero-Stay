@@ -9,7 +9,7 @@ export default function PartnerInvoicesPage() {
   return (
     <>
       <PageHeading title="Commission invoices" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <InvoiceList />
       </Suspense>
     </>

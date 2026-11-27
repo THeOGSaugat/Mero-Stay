@@ -9,7 +9,7 @@ export default function PartnerListingPage() {
   return (
     <>
       <PageHeading title="Listing" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <ListingDetailView />
       </Suspense>
     </>

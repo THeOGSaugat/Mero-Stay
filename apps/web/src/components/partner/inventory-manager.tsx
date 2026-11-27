@@ -167,7 +167,7 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
       {error ? <PartnerError view={error} /> : null}
       {data ? (
         data.data.slots.length === 0 ? (
-          <p className="mb-4 text-sm text-slate-600">No availability in these dates yet.</p>
+          <p className="mb-4 text-sm text-muted">No availability in these dates yet.</p>
         ) : (
           <div className="mb-4 overflow-x-auto">
             <table className={tableClass} data-testid="inventory-table">
@@ -181,7 +181,7 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
                   <th className={thClass}>Price</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-mist">
+              <tbody className="divide-y divide-line">
                 {data.data.slots.map((slot) => (
                   <tr key={slot.id} data-date={slot.date}>
                     <td className={tdClass}>{formatServiceDate(slot.date)}</td>
@@ -197,7 +197,7 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
                     <td className={tdClass}>
                       {money(slot.effectivePriceMinor)}
                       {slot.priceOverrideMinor !== null ? (
-                        <span className="block text-xs text-slate-600">date price</span>
+                        <span className="block text-xs text-muted">date price</span>
                       ) : null}
                     </td>
                   </tr>
@@ -207,16 +207,16 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
           </div>
         )
       ) : !error ? (
-        <p className="mb-4 text-sm text-slate-600">Loading dates…</p>
+        <p className="mb-4 text-sm text-muted">Loading dates…</p>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <form
           onSubmit={(e) => void write(e, "POST")}
-          className="space-y-3 rounded-lg border border-mist p-3"
+          className="space-y-3 rounded-control border border-line p-3"
           aria-labelledby="add-dates"
         >
-          <h3 id="add-dates" className="font-semibold text-navy">
+          <h3 id="add-dates" className="font-semibold text-primary">
             Add dates
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -255,10 +255,10 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
 
         <form
           onSubmit={(e) => void write(e, "PATCH")}
-          className="space-y-3 rounded-lg border border-mist p-3"
+          className="space-y-3 rounded-control border border-line p-3"
           aria-labelledby="update-dates"
         >
-          <h3 id="update-dates" className="font-semibold text-navy">
+          <h3 id="update-dates" className="font-semibold text-primary">
             Update dates
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -277,7 +277,7 @@ export function InventoryManager({ listing }: { listing: ManagedListing }) {
               <input name="price" inputMode="decimal" className={inputClass} />
             </label>
             <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" name="basePrice" className="h-4 w-4 accent-navy" />
+              <input type="checkbox" name="basePrice" className="h-4 w-4 accent-primary" />
               Use the base price again
             </label>
             <label className={labelClass}>

@@ -32,7 +32,7 @@ export function LatePaymentsQueue() {
           <button
             key={s}
             type="button"
-            className={`rounded-full border px-3 py-1 text-sm ${status === s ? "border-navy bg-navy text-white" : "border-mist text-navy"}`}
+            className={`rounded-full border px-3 py-1 text-sm ${status === s ? "border-primary bg-primary text-white" : "border-line text-primary"}`}
             aria-pressed={status === s}
             onClick={() => setStatus(s)}
           >
@@ -41,7 +41,7 @@ export function LatePaymentsQueue() {
         ))}
       </div>
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading late payments…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading late payments…</p> : null}
       {data && data.data.length === 0 ? (
         <Alert tone="info">
           {status === "OPEN" ? "No late payments to handle." : "Nothing handled yet."}
@@ -78,18 +78,21 @@ function LatePaymentCard({ row, onHandled }: { row: LatePayment; onHandled: () =
   }
 
   return (
-    <li className="rounded-xl border border-mist bg-white p-4 shadow-sm" data-testid="late-payment">
+    <li
+      className="rounded-card border border-line bg-white p-4 shadow-card"
+      data-testid="late-payment"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-navy" data-testid="late-payment-amount">
+          <p className="font-semibold text-primary" data-testid="late-payment-amount">
             {formatMoney(row.amountMinor, row.currency, row.currencyExponent)} via{" "}
             {gatewayName(row.gateway)}
           </p>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted">
             Trip {row.trip.reference} · {reconciliationReasonLabel(row.reason)} ·{" "}
             {formatTimestamp(row.createdAt)}
           </p>
-          <p className="text-xs text-slate-600">Gateway transaction {row.gatewayTransactionId}</p>
+          <p className="text-xs text-muted">Gateway transaction {row.gatewayTransactionId}</p>
         </div>
         <StatusPill
           label={row.status === "OPEN" ? "To handle" : "Handled"}
@@ -139,24 +142,24 @@ export function RefundRequestsQueue() {
         portal (Khalti also has a refund API, used from the Cancellations &amp; refunds phase).
       </Alert>
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading refund requests…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading refund requests…</p> : null}
       {data && data.data.length === 0 ? <Alert tone="info">No refund requests.</Alert> : null}
       <ul className="space-y-3">
         {data?.data.map((row) => (
           <li
             key={row.id}
-            className="rounded-xl border border-mist bg-white p-4 shadow-sm"
+            className="rounded-card border border-line bg-white p-4 shadow-card"
             data-testid="refund-request"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <p className="font-semibold text-navy" data-testid="refund-request-amount">
+              <p className="font-semibold text-primary" data-testid="refund-request-amount">
                 {formatMoney(row.amountMinor, row.currency, row.currencyExponent)} ·{" "}
                 {gatewayName(row.gateway)}
               </p>
               <StatusPill label={refundStatusLabel(row.status)} tone="wait" />
             </div>
             <p className="mt-1 text-sm text-ink">{row.reason}</p>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-muted">
               {row.bookingItemId ? "For a booking" : "For a late payment"} ·{" "}
               {formatTimestamp(row.createdAt)} · {row.gatewayRefundCapability.note}
             </p>

@@ -46,7 +46,7 @@ export function PartnerOverview() {
             label={providerStatusLabel(profile.status)}
             tone={providerStatusTone(profile.status)}
           />
-          <span className="text-sm text-slate-600">{profile.providerType.name}</span>
+          <span className="text-sm text-muted">{profile.providerType.name}</span>
         </div>
         {profile.status === "REJECTED" && profile.rejectionReason ? (
           <div className="mt-3">
@@ -68,10 +68,10 @@ export function PartnerOverview() {
           <Link
             key={card.href}
             href={card.href}
-            className="rounded-xl border border-mist bg-white p-4 shadow-sm hover:border-teal focus-visible:outline-2 focus-visible:outline-teal"
+            className="rounded-card border border-line bg-white p-4 shadow-card hover:border-primary-light focus-visible:outline-2 focus-visible:outline-accent-strong"
           >
-            <span className="block font-semibold text-navy">{card.title}</span>
-            <span className="mt-1 block text-sm text-slate-600">{card.text}</span>
+            <span className="block font-semibold text-primary">{card.title}</span>
+            <span className="mt-1 block text-sm text-muted">{card.text}</span>
           </Link>
         ))}
       </div>
@@ -254,7 +254,7 @@ export function PartnerProfileView() {
                 </label>
               </>
             ) : (
-              <p className="text-sm text-slate-600 sm:col-span-2">
+              <p className="text-sm text-muted sm:col-span-2">
                 Legal and tax details are locked while your business is{" "}
                 {providerStatusLabel(profile.status).toLowerCase()}.
               </p>
@@ -311,7 +311,7 @@ export function PartnerProfileView() {
           ) : null
         }
       >
-        <p className="mb-3 text-sm text-slate-600" data-testid="payout-account-summary">
+        <p className="mb-3 text-sm text-muted" data-testid="payout-account-summary">
           {payoutAccountSummary(account)}
         </p>
         {account ? (
@@ -362,7 +362,7 @@ export function PartnerProfileView() {
                 className={inputClass}
               />
             </label>
-            <p className="text-sm text-slate-600 sm:col-span-2">
+            <p className="text-sm text-muted sm:col-span-2">
               After saving, only the last four characters are ever shown. A new account must be
               verified again before payouts.
             </p>

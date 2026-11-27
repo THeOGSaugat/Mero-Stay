@@ -9,7 +9,9 @@ import { formatMoney } from "@/lib/money";
 import { canPayOnline } from "@/lib/payment-flow";
 import { confirmOutcome, formatDateRange, statusLabel } from "@/lib/trip-display";
 import { Alert, buttonSecondary, StatusPill, statusTone } from "../ui/primitives";
+import { tripStep } from "@/lib/trip-steps";
 import { PayOnline } from "./pay-online";
+import { TripSteps } from "./trip-steps";
 import { TripView } from "./trip-view";
 
 /** The customer's trips (GET /trips: owner-scoped by the API), newest first. */
@@ -32,23 +34,23 @@ export function TripList() {
   }, [page]);
 
   if (error) return <Alert>{error}</Alert>;
-  if (!result) return <p className="text-sm text-slate-600">Loading your trips…</p>;
+  if (!result) return <p className="text-sm text-muted">Loading your trips…</p>;
   if (result.data.length === 0) return <Alert tone="info">You have no trips yet.</Alert>;
 
   return (
     <div className="space-y-4">
       <ul className="space-y-3">
         {result.data.map((trip) => (
-          <li key={trip.id} className="rounded-xl border border-mist bg-white p-4 shadow-sm">
+          <li key={trip.id} className="rounded-card border border-line bg-white p-4 shadow-card">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <Link
                   href={`/trips/${trip.id}`}
-                  className="font-semibold text-navy hover:underline"
+                  className="font-semibold text-primary hover:underline"
                 >
                   Trip {trip.reference}
                 </Link>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-muted">
                   {trip.items.length === 0
                     ? "No items"
                     : trip.items
@@ -58,7 +60,7 @@ export function TripList() {
               </div>
               <div className="text-right">
                 <StatusPill label={statusLabel(trip.status)} tone={statusTone(trip.status)} />
-                <p className="mt-1 font-semibold text-navy">
+                <p className="mt-1 font-semibold text-primary">
                   {formatMoney(trip.totals.totalMinor, trip.currency, trip.currencyExponent)}
                 </p>
               </div>
@@ -75,7 +77,7 @@ export function TripList() {
           ) : (
             <span />
           )}
-          <span className="text-sm text-slate-600">
+          <span className="text-sm text-muted">
             Page {result.pagination.page} of {result.pagination.totalPages}
           </span>
           {page < result.pagination.totalPages ? (
@@ -126,9 +128,13 @@ export function TripDetail() {
       </div>
     );
   }
-  if (!trip) return <p className="text-sm text-slate-600">Loading trip…</p>;
+  if (!trip) return <p className="text-sm text-muted">Loading trip…</p>;
   return (
     <div className="space-y-4">
+      <TripSteps
+        current={tripStep({ status: trip.status, dueOnline: canPayOnline(trip) })}
+        finished={trip.status === "CONFIRMED" || trip.status === "COMPLETED"}
+      />
       {confirmed ? <Alert tone="success">{confirmOutcome(trip)}</Alert> : null}
       <TripView trip={trip} />
       {canPayOnline(trip) ? <PayOnline trip={trip} /> : null}

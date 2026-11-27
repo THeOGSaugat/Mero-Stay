@@ -9,7 +9,7 @@ export default function AdminAuditLogPage() {
   return (
     <>
       <PageHeading title="Audit log" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <AuditLogView />
       </Suspense>
     </>

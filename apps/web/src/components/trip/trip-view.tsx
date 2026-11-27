@@ -21,14 +21,17 @@ import { StatusPill, statusTone } from "../ui/primitives";
 function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
   const f = (minor: string) => formatMoney(minor, item.currency, item.currencyExponent);
   return (
-    <li className="rounded-xl border border-mist bg-white p-4 shadow-sm" data-testid="trip-item">
+    <li
+      className="rounded-card border border-line bg-white p-4 shadow-card"
+      data-testid="trip-item"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">
             {item.listing.listingType.replace(/_/g, " ")}
           </p>
-          <h3 className="mt-1 font-semibold text-navy">{item.listing.title}</h3>
-          <p className="text-sm text-slate-600">
+          <h3 className="mt-1 font-semibold text-primary">{item.listing.title}</h3>
+          <p className="text-sm text-muted">
             {item.listing.provider.name} · {formatDateRange(item.startDate, item.endDate)} ·{" "}
             {item.quantity} per date
           </p>
@@ -43,7 +46,7 @@ function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
       </div>
       <p className="mt-2 text-sm text-ink">{paymentMethodLabel(item.paymentMethod)}</p>
       <details className="mt-2 text-sm">
-        <summary className="cursor-pointer text-navy">Price per date</summary>
+        <summary className="cursor-pointer text-primary">Price per date</summary>
         <ul className="mt-2 space-y-1">
           {item.lines.map((line) => (
             <li key={line.date} className="flex justify-between gap-3">
@@ -56,19 +59,19 @@ function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
         </ul>
       </details>
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-        <dt className="text-slate-600">Subtotal</dt>
+        <dt className="text-muted">Subtotal</dt>
         <dd className="text-right sm:text-left">{f(item.money.subtotalMinor)}</dd>
-        <dt className="text-slate-600">Service charge</dt>
+        <dt className="text-muted">Service charge</dt>
         <dd className="text-right sm:text-left">{f(item.money.serviceChargeMinor)}</dd>
-        <dt className="text-slate-600">VAT</dt>
+        <dt className="text-muted">VAT</dt>
         <dd className="text-right sm:text-left">{f(item.money.taxMinor)}</dd>
-        <dt className="font-semibold text-navy">Total</dt>
-        <dd className="text-right font-semibold text-navy sm:text-left" data-testid="item-total">
+        <dt className="font-semibold text-primary">Total</dt>
+        <dd className="text-right font-semibold text-primary sm:text-left" data-testid="item-total">
           {f(item.money.totalMinor)}
         </dd>
       </dl>
       <details className="mt-2 text-sm" data-testid="item-cancellation">
-        <summary className="cursor-pointer text-navy">
+        <summary className="cursor-pointer text-primary">
           {item.cancellationPolicy
             ? `Cancellation: ${policySummary(item.cancellationPolicy)} (fixed when booked)`
             : "No cancellation policy"}
@@ -77,20 +80,23 @@ function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
           <CancellationTerms terms={item.cancellationPolicy} context="booking" headingLevel={3} />
         </div>
       </details>
-      {actions ? <div className="mt-3 border-t border-mist pt-3">{actions}</div> : null}
+      {actions ? <div className="mt-3 border-t border-line pt-3">{actions}</div> : null}
     </li>
   );
 }
 
 export function TripTotals({ trip }: { trip: Trip }) {
   return (
-    <dl className="rounded-xl border border-mist bg-mist/50 p-4 text-sm" data-testid="trip-totals">
+    <dl
+      className="rounded-card border border-line bg-surface/50 p-4 text-sm"
+      data-testid="trip-totals"
+    >
       {totalsRows(trip.totals, trip).map((row) => (
         <div key={row.label} className="flex justify-between gap-3 py-1">
-          <dt className={row.emphasis ? "font-semibold text-navy" : "text-slate-700"}>
+          <dt className={row.emphasis ? "font-semibold text-primary" : "text-slate-700"}>
             {row.label}
           </dt>
-          <dd className={row.emphasis ? "font-bold text-navy" : "font-medium"}>{row.value}</dd>
+          <dd className={row.emphasis ? "font-bold text-primary" : "font-medium"}>{row.value}</dd>
         </div>
       ))}
     </dl>
@@ -107,13 +113,13 @@ export function TripView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           Reference <span className="font-semibold text-ink">{trip.reference}</span>
         </p>
         <StatusPill label={statusLabel(trip.status)} tone={statusTone(trip.status)} />
       </div>
       {trip.items.length === 0 ? (
-        <p className="text-sm text-slate-600">No items yet.</p>
+        <p className="text-sm text-muted">No items yet.</p>
       ) : (
         <ul className="space-y-3">
           {trip.items.map((item) => (

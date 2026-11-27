@@ -114,15 +114,15 @@ export function ProviderList() {
         </button>
       </Form>
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading providers…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading providers…</p> : null}
       {data ? (
-        <p className="text-sm text-slate-600" data-testid="providers-total">
+        <p className="text-sm text-muted" data-testid="providers-total">
           {data.page.total} providers
         </p>
       ) : null}
       {data && data.data.length === 0 ? <Alert tone="info">No providers match.</Alert> : null}
       {data && data.data.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="admin-providers">
             <thead>
               <tr>
@@ -133,17 +133,17 @@ export function ProviderList() {
                 <th className={thClass}>Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((p) => (
                 <tr key={p.id} data-testid="admin-provider-row">
                   <td className={tdClass}>
                     <Link
                       href={`/admin/providers/${p.id}`}
-                      className="font-semibold text-navy hover:underline"
+                      className="font-semibold text-primary hover:underline"
                     >
                       {p.displayName}
                     </Link>
-                    <span className="block text-slate-600">{p.providerType.name}</span>
+                    <span className="block text-muted">{p.providerType.name}</span>
                   </td>
                   <td className={tdClass}>
                     <StatusPill
@@ -261,11 +261,11 @@ function DecisionPanel({
           Approve provider
         </button>
         {blocked ? (
-          <p id="approval-blocked-reason" className="text-sm text-slate-600">
+          <p id="approval-blocked-reason" className="text-sm text-muted">
             Approve stays disabled until every required group has a document.
           </p>
         ) : null}
-        <form onSubmit={onReject} className="space-y-2 border-t border-mist pt-4">
+        <form onSubmit={onReject} className="space-y-2 border-t border-line pt-4">
           <label className={labelClass}>
             Reason for rejecting (shown to the provider)
             <textarea
@@ -336,7 +336,7 @@ export function ProviderReview() {
 
   if (error)
     return <AdminError view={error} backHref="/admin/providers" backLabel="Back to providers" />;
-  if (!data || types === null) return <p className="text-sm text-slate-600">Loading provider…</p>;
+  if (!data || types === null) return <p className="text-sm text-muted">Loading provider…</p>;
   const p = data.data;
   const groups = types.find((t) => t.code === p.providerType.code)?.requiredDocuments;
   const checklist = requirementChecklist(groups ?? [], p.documentList);
@@ -408,17 +408,17 @@ export function ProviderReview() {
         <p className="mt-2 flex flex-wrap gap-3 text-sm">
           <Link
             href={`/admin/invoices?providerId=${p.id}`}
-            className="font-semibold text-navy underline"
+            className="font-semibold text-primary underline"
           >
             This provider&apos;s invoices
           </Link>
           <Link
             href={`/admin/payouts?providerId=${p.id}`}
-            className="font-semibold text-navy underline"
+            className="font-semibold text-primary underline"
           >
             This provider&apos;s payouts
           </Link>
-          <Link href="/admin/listing-rules" className="font-semibold text-navy underline">
+          <Link href="/admin/listing-rules" className="font-semibold text-primary underline">
             All listing rules
           </Link>
         </p>
@@ -427,7 +427,7 @@ export function ProviderReview() {
       <Panel title="Payout account">
         <p className="text-sm text-ink">{payoutAccountSummary(account)}</p>
         {account ? (
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-muted">
             {account.accountName} ·{" "}
             <span data-testid="admin-account-masked">
               {safeMaskedAccountNumber(account.accountNumberMasked)}
@@ -448,11 +448,11 @@ export function ProviderReview() {
                 key={row.requirement}
                 data-requirement={row.requirement}
                 data-state={row.state}
-                className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-mist p-3 text-sm"
+                className="flex flex-wrap items-start justify-between gap-2 rounded-control border border-line p-3 text-sm"
               >
                 <span>
                   <span className="block font-semibold text-ink">{row.label}</span>
-                  <span className="block text-slate-600">
+                  <span className="block text-muted">
                     One of: {row.acceptedDocumentTypes.map(documentTypeLabel).join(", ")}
                   </span>
                 </span>
@@ -472,18 +472,18 @@ export function ProviderReview() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted">
             This kind of business isn&apos;t offered; no requirements are published.
           </p>
         )}
-        <p className="mt-2 text-xs text-slate-600">
+        <p className="mt-2 text-xs text-muted">
           A pending or approved document satisfies a group; a rejected one never does.
         </p>
       </Panel>
 
       <Panel title="Documents">
         {p.documentList.length === 0 ? (
-          <p className="text-sm text-slate-600">No documents.</p>
+          <p className="text-sm text-muted">No documents.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className={tableClass}>
@@ -495,35 +495,35 @@ export function ProviderReview() {
                   <th className={thClass}>Added</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-mist">
+              <tbody className="divide-y divide-line">
                 {p.documentList.map((doc) => (
                   <tr key={doc.id}>
                     <td className={tdClass}>
                       {documentTypeLabel(doc.documentType)}
                       {doc.documentNumber ? (
-                        <span className="block text-slate-600">No. {doc.documentNumber}</span>
+                        <span className="block text-muted">No. {doc.documentNumber}</span>
                       ) : null}
                     </td>
                     <td className={tdClass}>
                       {documentStatusLabel(doc.status)}
                       {doc.rejectionReason ? (
-                        <span className="block text-slate-600">{doc.rejectionReason}</span>
+                        <span className="block text-muted">{doc.rejectionReason}</span>
                       ) : null}
                     </td>
                     <td className={tdClass}>
                       {doc.fileName ? <span className="block">{doc.fileName}</span> : null}
-                      <span className="block text-slate-600">{formatFileSize(doc.sizeBytes)}</span>
+                      <span className="block text-muted">{formatFileSize(doc.sizeBytes)}</span>
                       {doc.hasFile ? (
                         // Private: the API checks the admin role; each view is audited (ADR 0016).
                         <a
                           href={adminDocumentFileHref(p.id, doc.id)}
-                          className="mt-1 inline-block font-medium text-navy underline"
+                          className="mt-1 inline-block font-medium text-primary underline"
                           data-testid="admin-document-file"
                         >
                           Open file
                         </a>
                       ) : (
-                        <span className="block text-slate-600">No file uploaded yet</span>
+                        <span className="block text-muted">No file uploaded yet</span>
                       )}
                     </td>
                     <td className={tdClass}>{formatTimestamp(doc.createdAt)}</td>
@@ -560,18 +560,18 @@ function ProviderPoliciesPanel({ providerId }: { providerId: string }) {
   return (
     <Panel title="Cancellation policies (read-only)">
       {error ? (
-        <p className="text-sm text-slate-600">The policies could not be loaded.</p>
+        <p className="text-sm text-muted">The policies could not be loaded.</p>
       ) : !data ? (
-        <p className="text-sm text-slate-600">Loading…</p>
+        <p className="text-sm text-muted">Loading…</p>
       ) : data.data.policies.length === 0 ? (
-        <p className="text-sm text-slate-600" data-testid="admin-no-policies">
+        <p className="text-sm text-muted" data-testid="admin-no-policies">
           This business has no cancellation policies: its listings show customers that none applies.
         </p>
       ) : (
         <ul className="space-y-2" data-testid="admin-policy-list">
           {data.data.policies.map((policy) => (
-            <li key={policy.id} className="rounded-lg border border-mist p-3 text-sm">
-              <span className="font-medium text-navy">{policy.name}</span>
+            <li key={policy.id} className="rounded-control border border-line p-3 text-sm">
+              <span className="font-medium text-primary">{policy.name}</span>
               {policy.id === data.data.defaultPolicyId ? " · default" : ""}
               {policy.isActive ? "" : " · off"}
               <span className="block text-ink">{policySummary(policy)}</span>

@@ -137,12 +137,12 @@ function PartnerProvider({ children }: { children: ReactNode }) {
   );
 
   if (load.status === "loading") {
-    return <p className="py-6 text-sm text-slate-600">Loading your business…</p>;
+    return <p className="py-6 text-sm text-muted">Loading your business…</p>;
   }
   if (load.status === "choose") {
     return (
       <section aria-labelledby="choose-business" className="space-y-4">
-        <h2 id="choose-business" className="text-lg font-semibold text-navy">
+        <h2 id="choose-business" className="text-lg font-semibold text-primary">
           Which business do you want to manage?
         </h2>
         <ul className="flex flex-wrap gap-3">
@@ -210,7 +210,7 @@ export function PartnerGate({ children }: { children: ReactNode }) {
     return <Alert>Admin accounts can&apos;t use the partner area.</Alert>;
   }
   if (access !== "partner") {
-    return <p className="py-6 text-sm text-slate-600">Loading your account…</p>;
+    return <p className="py-6 text-sm text-muted">Loading your account…</p>;
   }
   return <PartnerProvider>{children}</PartnerProvider>;
 }

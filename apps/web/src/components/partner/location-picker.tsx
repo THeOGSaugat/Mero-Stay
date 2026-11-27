@@ -88,7 +88,7 @@ export function LocationPicker({
         </div>
       )}
       {changing && chosen.length > 0 ? (
-        <p className="text-xs text-slate-600" data-testid={`${name}-chosen`}>
+        <p className="text-xs text-muted" data-testid={`${name}-chosen`}>
           Chosen: {chosen.map((n) => n.name).join(" › ")}
         </p>
       ) : null}

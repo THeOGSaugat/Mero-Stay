@@ -69,9 +69,9 @@ describe("the incomplete-provider block", () => {
 
 describe("money and masking reuse the shared helpers", () => {
   it("invoice and payout strings are formatted, never computed", () => {
-    expect(formatMoney("115500", "NPR", 2)).toBe("Rs 1,155.00");
-    expect(formatMoney("38255000", "NPR", 2)).toBe("Rs 3,82,550.00");
-    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs 9,00,71,99,25,47,409.93");
+    expect(formatMoney("115500", "NPR", 2)).toBe("Rs. 1,155.00");
+    expect(formatMoney("38255000", "NPR", 2)).toBe("Rs. 3,82,550.00");
+    expect(formatMoney("9007199254740993", "NPR", 2)).toBe("Rs. 9,00,71,99,25,47,409.93");
   });
 
   it("bank numbers: the API's mask is shown, anything longer is masked again", () => {

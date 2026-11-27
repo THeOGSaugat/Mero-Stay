@@ -29,7 +29,7 @@ export function SectionNav({
   const pathname = usePathname();
   return (
     <nav aria-label={label} className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      <ul className="flex min-w-max gap-1 border-b border-mist">
+      <ul className="flex min-w-max gap-1 border-b border-line">
         {sections.map((section) => {
           const active =
             section.href === rootHref
@@ -40,10 +40,10 @@ export function SectionNav({
               <Link
                 href={section.href}
                 aria-current={active ? "page" : undefined}
-                className={`inline-flex min-h-11 items-center border-b-2 px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-teal ${
+                className={`inline-flex min-h-11 items-center border-b-2 px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-accent-strong ${
                   active
-                    ? "border-navy text-navy"
-                    : "border-transparent text-ink hover:border-mint hover:text-navy"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-ink hover:border-primary-soft hover:text-primary"
                 }`}
               >
                 {section.label}
@@ -67,9 +67,9 @@ export function Panel({
   actions?: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-mist bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-card border border-line bg-white p-4 shadow-card sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-navy">{title}</h2>
+        <h2 className="font-display text-xl font-semibold text-primary">{title}</h2>
         {actions}
       </div>
       {children}
@@ -83,7 +83,7 @@ export function Facts({ rows }: { rows: readonly { label: string; value: ReactNo
     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[minmax(0,12rem)_1fr]">
       {rows.map((row) => (
         <div key={row.label} className="contents">
-          <dt className="font-medium text-slate-600">{row.label}</dt>
+          <dt className="font-medium text-muted">{row.label}</dt>
           <dd className="text-ink">{row.value}</dd>
         </div>
       ))}
@@ -104,7 +104,7 @@ export function Pager({ page, hrefFor }: { page: PageInfo; hrefFor: (page: numbe
       ) : (
         <span />
       )}
-      <span className="text-sm text-slate-600">
+      <span className="text-sm text-muted">
         Page {page.page} of {totalPages}
       </span>
       {page.page < totalPages ? (
@@ -118,7 +118,7 @@ export function Pager({ page, hrefFor }: { page: PageInfo; hrefFor: (page: numbe
   );
 }
 
-export const tableClass = "min-w-full divide-y divide-mist text-sm";
+export const tableClass = "min-w-full divide-y divide-line text-sm";
 export const thClass =
-  "bg-mist px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-navy";
-export const tdClass = "px-3 py-2 align-top text-ink";
+  "bg-surface px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-primary";
+export const tdClass = "px-3 py-2.5 align-top text-ink";

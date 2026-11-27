@@ -12,7 +12,7 @@ export default function AdminAccountsPage() {
   return (
     <>
       <PageHeading title="Admin accounts" />
-      <Suspense fallback={<p className="text-sm text-slate-600">Loading…</p>}>
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
         <AdminAccounts />
       </Suspense>
     </>

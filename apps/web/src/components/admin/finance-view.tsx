@@ -43,12 +43,12 @@ function ProviderFilter({
         />
       </label>
       {values.providerId ? (
-        <p className="text-sm text-slate-600 sm:col-span-2 lg:col-span-1">
+        <p className="text-sm text-muted sm:col-span-2 lg:col-span-1">
           <input type="hidden" name="providerId" value={values.providerId} />
           One provider only ·{" "}
           <Link
             href={listHref(base, { ...values, providerId: "" }, 1)}
-            className="text-navy underline"
+            className="text-primary underline"
           >
             show all
           </Link>
@@ -94,10 +94,10 @@ export function AdminInvoiceList() {
         </button>
       </Form>
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading invoices…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading invoices…</p> : null}
       {data && data.data.length === 0 ? <Alert tone="info">No invoices match.</Alert> : null}
       {data && data.data.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="admin-invoices">
             <thead>
               <tr>
@@ -109,21 +109,19 @@ export function AdminInvoiceList() {
                 <th className={thClass}>Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((inv) => (
                 <tr key={inv.id} data-testid="admin-invoice-row" data-invoice={inv.id}>
                   <td className={tdClass}>
                     {inv.number}
                     {inv.dueOn ? (
-                      <span className="block text-slate-600">
-                        Due {formatServiceDate(inv.dueOn)}
-                      </span>
+                      <span className="block text-muted">Due {formatServiceDate(inv.dueOn)}</span>
                     ) : null}
                   </td>
                   <td className={tdClass}>
                     <Link
                       href={`/admin/providers/${inv.provider.id}`}
-                      className="text-navy hover:underline"
+                      className="text-primary hover:underline"
                     >
                       {inv.provider.name}
                     </Link>
@@ -139,7 +137,7 @@ export function AdminInvoiceList() {
                   <td className={tdClass}>{formatTimestamp(inv.issuedAt)}</td>
                   <td className={tdClass}>{inv.items.length}</td>
                   <td
-                    className={`${tdClass} font-semibold text-navy`}
+                    className={`${tdClass} font-semibold text-primary`}
                     data-testid="admin-invoice-amount"
                   >
                     {formatMoney(inv.amountMinor, inv.currency, inv.currencyExponent)}
@@ -186,12 +184,12 @@ export function AdminPayoutSummary() {
         </button>
       </Form>
       {error ? <AdminError view={error} /> : null}
-      {!data && !error ? <p className="text-sm text-slate-600">Loading payouts…</p> : null}
+      {!data && !error ? <p className="text-sm text-muted">Loading payouts…</p> : null}
       {data && data.data.length === 0 ? (
         <Alert tone="info">Nothing is waiting for a payout.</Alert>
       ) : null}
       {data && data.data.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-mist bg-white">
+        <div className="overflow-x-auto rounded-card border border-line bg-white">
           <table className={tableClass} data-testid="admin-payouts">
             <thead>
               <tr>
@@ -204,7 +202,7 @@ export function AdminPayoutSummary() {
                 <th className={thClass}>Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-mist">
+            <tbody className="divide-y divide-line">
               {data.data.map((row) => {
                 const f = (minor: string) => formatMoney(minor, row.currency, row.currencyExponent);
                 return (
@@ -219,7 +217,7 @@ export function AdminPayoutSummary() {
                     <td className={tdClass}>{f(row.totalMinor)}</td>
                     <td className={tdClass}>{f(row.commissionMinor)}</td>
                     <td
-                      className={`${tdClass} font-semibold text-navy`}
+                      className={`${tdClass} font-semibold text-primary`}
                       data-testid="admin-payout-amount"
                     >
                       {f(row.providerPayoutMinor)}

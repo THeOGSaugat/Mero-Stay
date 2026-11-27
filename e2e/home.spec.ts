@@ -10,7 +10,7 @@ test.describe("home page (Phase 1 health check)", () => {
     await expect(page).toHaveTitle(/MeroStay/);
     await expect(page.getByRole("link", { name: "MeroStay" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { level: 1, name: "Find your stay anywhere in Nepal" }),
+      page.getByRole("heading", { level: 1, name: "Discover Nepal, your way" }),
     ).toBeVisible();
   });
 
