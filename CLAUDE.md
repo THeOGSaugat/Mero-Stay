@@ -427,11 +427,16 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   23 gaps open; **no launch blocker**. Roadmap (owner, shift up by one): 13 Search UX, 14 Cancellations &
   refunds (refund execution and the refund clock reference decided there), 15 Reviews, 16 Notifications,
   17 Hardening. Gap 10 (invoice numbering) still waits for the tax advisor.
-- **Phase 13, UI design system & restyle:** on `phase/13-ui-design-system`, awaiting review. Pure presentation
+- **Phase 13, UI design system & restyle:** merged to `main`, tagged `v0.13.0` (CI green on `main` and the tag; API
+  unchanged since `v0.12.0`, so no Neon run). Pure presentation
   (no API, state, auth or schema change; ADR 0019): design tokens (forest green `#1b4332`, orange `#f4a261` as
   decoration, `accent-strong` for orange text), shared components, home/search/listing/trip/checkout restyled to the
   owner's mockup set 2 ("Discover Nepal, your way"), dashboards on the same system. Only real data (no ratings,
   amenity filters or counts); illustrative images; NPR shown as `Rs. 7,500.00`. Guide:
   `docs/architecture/frontend.md`. Roadmap (owner): 14 Search UX, 15 Cancellations & refunds, 16 Reviews,
   17 Notifications, 18 Hardening.
+- **Refund clock rule (owner decision 2026-11-27):** "hours before the start" in a cancellation policy counts from
+  the **actual start of the service** (hotel check-in, bus/flight departure, guide/tour/activity start time), not
+  midnight of the service date. The start is stored as an exact timestamp on each booking item (UTC, compared in
+  Nepal time); implemented in the Cancellations & refunds phase.
 - **Next:** Phase 14 only when the owner sends its prompt.
