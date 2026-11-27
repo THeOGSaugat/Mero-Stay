@@ -18,22 +18,27 @@ docs/design/
 
 ## Index
 
-### Colour palette (owner reference, 2026-11-23)
+### Mockups and photos (owner, 2026-11-27, Phase 13)
 
-The owner shared a brand-kit image (Phase 7) and asked to use it **only for the colour palette**.
-Nothing else from it is used: no logo, mark, name, tagline, typography or layout. The image itself
-is not stored in the repository; these values are the reference.
+- `screens/mockup-set-1.png`, `screens/mockup-set-2.png`: home, hotels, buses, guides. **Set 2 is
+  the reference** (owner decision), with the headline "Discover Nepal, your way".
+- `assets/`: the owner's photos as supplied (crops from the mockups; small; destination photos
+  have the place name baked in). Web copies, cropped and re-encoded, are in
+  `apps/web/public/images/`. `13_domestic_flight.jpg` is not used (flights are not offered).
 
-| Token (`globals.css`) | Hex | Use |
+### Colour palette (Phase 13, supersedes the Phase 7 navy/teal palette)
+
+From the owner's brief and mockups. Tokens live in `apps/web/src/app/globals.css`; usage and
+contrast rules are in [docs/architecture/frontend.md](../architecture/frontend.md).
+
+| Token | Hex | Use |
 |---|---|---|
-| `navy` (Deep Blue) | `#0F3B64` | Primary: headings, buttons, links |
-| `teal` (Teal Green) | `#14B8A6` | Accent: focus outlines, borders, highlights, logo mark |
-| `mint` (Soft Mint) | `#A7D8D1` | Soft accent: success and status backgrounds |
-| `mist` (Light Gray) | `#E8F1F5` | Surfaces: hero, table headers, cards |
-| `ink` (Charcoal) | `#2D3748` | Body text |
-| `navy-dark` (derived) | `#0B2E4F` | Hover/pressed state of navy |
+| `primary` | `#1B4332` | Forest green: header, headings, primary buttons |
+| `accent` | `#F4A261` | Warm orange: decorative accents only (fails contrast for small text) |
+| `accent-strong` | `#B8541A` | Orange text, outlined "Book now", white-text orange buttons |
+| `surface` / `line` | `#F4F6F3` / `#E1E7E2` | Section backgrounds / borders |
+| `ink` / `muted` | `#1F2A24` / `#4A5A51` | Body / secondary text |
 
-Contrast rule: text and buttons use navy or ink. Teal and mint are never used for small text on
-white, because teal is below 4.5:1 contrast there.
+Typography: Inter (text) and Playfair Display (headings), self-hosted with `next/font`.
 
-Typography: the system font stack (unchanged). No font was taken from the reference.
+The Phase 7 palette (navy `#0F3B64`, teal `#14B8A6`, from a brand-kit image) is retired.
