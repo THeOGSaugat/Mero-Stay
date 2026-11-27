@@ -63,9 +63,9 @@ export function PayOnline({ trip }: { trip: Trip }) {
   return (
     <section
       aria-labelledby="pay-online-heading"
-      className="rounded-card border border-line bg-white p-4 shadow-card"
+      className="rounded-card border border-line bg-white p-5 shadow-card"
     >
-      <h2 id="pay-online-heading" className="font-semibold text-primary">
+      <h2 id="pay-online-heading" className="font-display text-xl font-semibold text-primary">
         Pay online
       </h2>
       <p className="mt-1 text-sm text-muted">
@@ -78,7 +78,7 @@ export function PayOnline({ trip }: { trip: Trip }) {
           {ONLINE_GATEWAYS.map((g) => (
             <label
               key={g.id}
-              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-line px-3 py-2 text-sm has-checked:border-primary"
+              className="flex min-h-16 flex-1 basis-40 cursor-pointer items-center gap-3 rounded-card border-2 border-line bg-white px-4 text-base font-semibold text-primary hover:border-primary-light has-checked:border-primary has-checked:bg-primary-soft has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent-strong"
             >
               <input
                 type="radio"
@@ -100,7 +100,7 @@ export function PayOnline({ trip }: { trip: Trip }) {
       ) : null}
       <button
         type="button"
-        className={`${buttonPrimary} mt-4`}
+        className={`${buttonPrimary} mt-4 min-h-12 w-full text-base sm:w-auto`}
         onClick={() => void pay()}
         disabled={busy || !csrfToken}
       >

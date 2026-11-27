@@ -3,7 +3,7 @@ import { ListingDetail } from "@/components/search/listing-detail";
 
 export default function ListingPage(props: PageProps<"/listings/[id]">) {
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <Suspense
         fallback={
           <p className="text-sm text-muted" aria-live="polite">

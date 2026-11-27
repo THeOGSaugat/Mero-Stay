@@ -9,6 +9,8 @@ import { quoteRows, totalsRows } from "@/lib/trip-display";
 import { findDraftTrip } from "@/lib/trips-client";
 import { useAuth } from "../auth/auth-provider";
 import { Alert, buttonPrimary, buttonSecondary, inputClass, labelClass } from "../ui/primitives";
+import { tripStep } from "@/lib/trip-steps";
+import { TripSteps } from "./trip-steps";
 import { TripView } from "./trip-view";
 
 /**
@@ -118,6 +120,7 @@ export function TripBuilder() {
 
   return (
     <div className="space-y-6">
+      <TripSteps current={tripStep({ status: current.status, hasQuote: quote !== null })} />
       {error ? <Alert>{error}</Alert> : null}
       <TripView
         trip={current}
@@ -183,7 +186,7 @@ export function TripBuilder() {
       />
 
       {current.items.length > 0 ? (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 rounded-card border border-line bg-surface p-4">
           <button type="button" onClick={getQuote} disabled={busy} className={buttonSecondary}>
             Get quote
           </button>
@@ -194,8 +197,11 @@ export function TripBuilder() {
       ) : null}
 
       {quote ? (
-        <section aria-labelledby="quote-heading" className="space-y-3">
-          <h2 id="quote-heading" className="text-lg font-semibold text-primary">
+        <section
+          aria-labelledby="quote-heading"
+          className="space-y-3 rounded-card border border-line bg-white p-4 shadow-card sm:p-5"
+        >
+          <h2 id="quote-heading" className="font-display text-xl font-semibold text-primary">
             Quote (today&rsquo;s prices, nothing booked yet)
           </h2>
           {!quote.allAvailable ? (
@@ -253,7 +259,10 @@ export function TripBuilder() {
               </tbody>
             </table>
           </div>
-          <dl className="rounded-card border border-line p-4 text-sm" data-testid="quote-totals">
+          <dl
+            className="rounded-card border border-primary-light/30 bg-primary-soft p-4 text-sm"
+            data-testid="quote-totals"
+          >
             {totalsRows(quote.totals, quote).map((row) => (
               <div key={row.label} className="flex justify-between gap-3 py-1">
                 <dt className={row.emphasis ? "font-semibold text-primary" : "text-slate-700"}>

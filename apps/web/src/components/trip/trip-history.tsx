@@ -9,7 +9,9 @@ import { formatMoney } from "@/lib/money";
 import { canPayOnline } from "@/lib/payment-flow";
 import { confirmOutcome, formatDateRange, statusLabel } from "@/lib/trip-display";
 import { Alert, buttonSecondary, StatusPill, statusTone } from "../ui/primitives";
+import { tripStep } from "@/lib/trip-steps";
 import { PayOnline } from "./pay-online";
+import { TripSteps } from "./trip-steps";
 import { TripView } from "./trip-view";
 
 /** The customer's trips (GET /trips: owner-scoped by the API), newest first. */
@@ -129,6 +131,10 @@ export function TripDetail() {
   if (!trip) return <p className="text-sm text-muted">Loading trip…</p>;
   return (
     <div className="space-y-4">
+      <TripSteps
+        current={tripStep({ status: trip.status, dueOnline: canPayOnline(trip) })}
+        finished={trip.status === "CONFIRMED" || trip.status === "COMPLETED"}
+      />
       {confirmed ? <Alert tone="success">{confirmOutcome(trip)}</Alert> : null}
       <TripView trip={trip} />
       {canPayOnline(trip) ? <PayOnline trip={trip} /> : null}
