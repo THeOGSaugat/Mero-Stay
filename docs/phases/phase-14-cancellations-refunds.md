@@ -210,23 +210,27 @@ ADR: [0020](../architecture/decisions/0020-cancellations-refunds-and-clock.md).
 | Migration backfill on `v0.13.0` seed data | Room 13:00 (parent check-in), bus 06:30, guide 00:00 `DEFAULT_MIDNIGHT` |
 | `npm audit` | 0 vulnerabilities |
 | Commit 1 on its own (separate worktree: `npm ci`, format, lint, typecheck, unit, integration and E2E on disposable databases) | All pass: API unit 373/373, web unit 107/107, integration 317/317, E2E 40/40 (the new journeys come with commit 2). A first version failed typecheck and E2E seeding because the E2E fixture's service start was left out of it; I rebuilt both local commits **before pushing** (no published history changed) |
-| CI | Checked on the pushed head (see the final report) |
-| **Neon integration run** | **Not run: blocked by credentials.** See below |
+| CI | Green on `a0465e8` (run 46035709743, both jobs). The commit recording the Neon result is checked by its own run |
+| **Neon integration run** (test branch, committed code `a0465e8`) | **317/317**, 21 files, on the third attempt (the first two failed on credentials). See below |
 
 **Neon end-of-phase run, every attempt:**
 
-| Attempt | Started (UTC) | Result |
-|---|---|---|
-| 1 | 2026-11-27 16:34:40 | Failed in global setup before any test: `28P01 password authentication failed for user 'neondb_owner'` |
-| 2 | 2026-11-27 16:35:30 | The same `28P01` |
+| Attempt | Started (UTC) | Code | Result |
+|---|---|---|---|
+| 1 | 2026-11-27 16:34:40 | Phase 14 working tree, before the commits | Failed in global setup, no test ran: `28P01 password authentication failed for user 'neondb_owner'` |
+| 2 | 2026-11-27 16:35:30 | The same | The same `28P01` |
+| 3 | 2026-11-27 17:40:48 (ended 18:55:38) | `a0465e8`, clean tree before and after | **Passed: 317/317 tests, 21/21 files**, exit 0, 4488.84 s (about 75 minutes) |
 
-- `.env.test` points at the test branch endpoint (`ep-dawn-mountain…`), not dev, with both URLs
-  set.
-- A `28P01` is an authentication refusal, not a stalled connection: the branch's credentials have
-  changed (rotated, or the branch was reset).
-- I did not retry further or point the suite at another database. **The Neon run is pending new
-  test-branch credentials from the owner.**
-- The full suite passes on a disposable PostgreSQL 17 here, and in CI on its service container.
+- **Attempts 1 and 2 were a credential issue, not a code issue:** Neon refused the login before
+  any test ran. The owner then put the test branch's current connection strings into
+  `apps/api/.env.test` and confirmed it is the test branch. No code changed to make attempt 3 pass.
+- **Endpoints:** attempts 1 and 2 used `ep-dawn-mountain…`; attempt 3 used `ep-rapid-glade…`. Both
+  differ from dev (`ep-muddy-sunset…`). An earlier version of this report called `ep-dawn-mountain…`
+  the test branch endpoint; I had only checked that it was not dev.
+- **Guard, re-checked before attempt 3:** the pooled and direct URLs name the same endpoint, it
+  differs from dev, and no database URL was set in the shell.
+- **Conditions for attempt 3:** `caffeinate -i npm run test:integration`; no retries inside the
+  run, no changed timeouts, no skipped tests. It took longer than the 40–50 minutes expected.
 
 **Tests that changed because behaviour changed on purpose** (each by the owner's decisions or the
 brief):
@@ -251,7 +255,8 @@ brief):
 | `cb4ee9a` (on `main`) | `docs: mark Phase 13 tagged and record refund clock rule` | Bookkeeping before the phase (CI green) |
 | `48582d2` | `feat(api): cancellations, refund execution, the refund clock and clawbacks` | Migration, schema, domain rules, gateway adapters (Khalti refund, fake), services and routes, error mapping, unit and integration tests, fixtures (45 files) |
 | `9d7553e` | `feat(web): cancel bookings, execute refunds, settlements and clawbacks` | Trip cancellation, refund queue actions, settlements, clawbacks and deductions, start-time fields, web unit tests, E2E journeys and their world (22 files) |
-| (this commit) | `docs: record Phase 14 cancellations, refunds, ADR 0020 and closed gaps` | ADR 0020, API/data-model/frontend docs, requirements, gaps (31, 36, 39 closed; 40, 41 added), roadmap, CLAUDE.md, README, `.env.example`, this report |
+| `a0465e8` | `docs: record Phase 14 cancellations, refunds, ADR 0020 and closed gaps` | ADR 0020, API/data-model/frontend docs, requirements, gaps (31, 36, 39 closed; 40, 41 added), roadmap, CLAUDE.md, README, `.env.example`, this report |
+| (this commit) | `docs: record Phase 14 Neon verification` | The Neon result and every attempt, in this report and ADR 0020 |
 
 ## Security and constraints checklist
 
@@ -292,7 +297,6 @@ brief):
   Phase 17).
 - **eSewa partial refunds** depend on what the merchant portal allows; the admin records whatever
   was refunded, and the queue shows the amount owed.
-- **Neon run:** pending new test-branch credentials.
 
 ## How to review
 

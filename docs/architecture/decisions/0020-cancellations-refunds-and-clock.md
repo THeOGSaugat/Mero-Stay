@@ -217,3 +217,10 @@ REQUESTED ─approve→ APPROVED ─execute→ PROCESSING ─→ COMPLETED
   - customers are not notified when a refund completes (Notifications, gap 1/2 phase).
 - **Launch checklist:** confirm with the Khalti sandbox that a partial refund's `amount` is in
   paisa before going live.
+
+## Verification
+
+Integration suite on the Neon test branch, commit `a0465e8`, 2026-11-27: **317/317 tests, 21
+files** (third attempt; the first two were refused by Neon with `28P01`, a credential issue, before
+any test ran). All attempts: [Phase 14 report](../../phases/phase-14-cancellations-refunds.md).
+Khalti's refund API has only been exercised against the local fake (launch checklist).
