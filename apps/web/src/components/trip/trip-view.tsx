@@ -3,6 +3,7 @@ import { policySummary } from "@/lib/cancellation-policy";
 import type { ReactNode } from "react";
 import type { Trip, TripItem } from "@/lib/api-types";
 import { formatMoney } from "@/lib/money";
+import { itemStartLabel } from "@/lib/refunds-display";
 import {
   formatDateRange,
   formatServiceDate,
@@ -35,6 +36,11 @@ function ItemCard({ item, actions }: { item: TripItem; actions?: ReactNode }) {
             {item.listing.provider.name} · {formatDateRange(item.startDate, item.endDate)} ·{" "}
             {item.quantity} per date
           </p>
+          {item.serviceStartsAtNepal ? (
+            <p className="text-sm text-muted" data-testid="item-starts">
+              {itemStartLabel(item)}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <StatusPill label={statusLabel(item.status)} tone={statusTone(item.status)} />

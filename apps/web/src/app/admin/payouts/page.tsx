@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AdminPayoutSummary } from "@/components/admin/finance-view";
+import { AdminClawbacks } from "@/components/admin/admin-clawbacks";
 import { AdminPayoutBatches } from "@/components/admin/payout-batches-view";
 import { PageHeading } from "@/components/ui/primitives";
 
@@ -14,6 +15,7 @@ export default function AdminPayoutsPage() {
         <div className="space-y-6">
           <AdminPayoutSummary />
           <AdminPayoutBatches />
+          <AdminClawbacks />
         </div>
       </Suspense>
     </>

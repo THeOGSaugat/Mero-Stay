@@ -10,6 +10,7 @@ import { canPayOnline } from "@/lib/payment-flow";
 import { confirmOutcome, formatDateRange, statusLabel } from "@/lib/trip-display";
 import { Alert, buttonSecondary, StatusPill, statusTone } from "../ui/primitives";
 import { tripStep } from "@/lib/trip-steps";
+import { CancelItem, CancelledNote } from "./cancel-item";
 import { PayOnline } from "./pay-online";
 import { TripSteps } from "./trip-steps";
 import { TripView } from "./trip-view";
@@ -136,7 +137,16 @@ export function TripDetail() {
         finished={trip.status === "CONFIRMED" || trip.status === "COMPLETED"}
       />
       {confirmed ? <Alert tone="success">{confirmOutcome(trip)}</Alert> : null}
-      <TripView trip={trip} />
+      <TripView
+        trip={trip}
+        itemActions={(item) =>
+          item.cancellation ? (
+            <CancelledNote item={item} />
+          ) : item.status === "CONFIRMED" ? (
+            <CancelItem trip={trip} item={item} onCancelled={setTrip} />
+          ) : null
+        }
+      />
       {canPayOnline(trip) ? <PayOnline trip={trip} /> : null}
     </div>
   );

@@ -125,6 +125,12 @@ export interface TripItem extends CurrencyInfo {
   money: MoneyBreakdown & { paidMinor: string; refundedMinor: string };
   /** Frozen when booked (ADR 0015); null = none was attached. */
   cancellationPolicy: PolicyTerms | null;
+  /** When the service starts (the refund clock, ADR 0020); Nepal time "YYYY-MM-DDTHH:MM". */
+  serviceStartsAt: string;
+  serviceStartsAtNepal: string;
+  serviceStartSource: "LISTING_TIME" | "DEFAULT_MIDNIGHT";
+  /** Set when the customer cancelled: the tier that applied and what goes back. */
+  cancellation: { cancelledAt: string | null; refundBps: number; refundMinor: string } | null;
   confirmedAt: string | null;
   createdAt: string;
 }

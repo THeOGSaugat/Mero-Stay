@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PayoutSummary } from "@/components/partner/finance-view";
-import { PartnerPayoutBatches } from "@/components/partner/payout-batches-list";
+import { PartnerClawbacks, PartnerPayoutBatches } from "@/components/partner/payout-batches-list";
 import { PageHeading } from "@/components/ui/primitives";
 
 export const metadata: Metadata = { title: "Payouts" };
@@ -14,6 +14,7 @@ export default function PartnerPayoutsPage() {
         <div className="space-y-6">
           <PayoutSummary />
           <PartnerPayoutBatches />
+          <PartnerClawbacks />
         </div>
       </Suspense>
     </>

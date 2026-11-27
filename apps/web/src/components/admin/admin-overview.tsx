@@ -51,7 +51,12 @@ export function AdminOverview() {
           {
             href: "/admin/refund-requests",
             title: "Refund requests",
-            text: "Refunds waiting to be made",
+            text: "Approve and make refunds (Khalti, or eSewa by hand)",
+          },
+          {
+            href: "/admin/settlements",
+            title: "Settlements",
+            text: "Pay-at-property payments that do not match the invoices",
           },
           { href: "/admin/admins", title: "Admins", text: "Add, suspend and reactivate admins" },
           { href: "/admin/audit-log", title: "Audit log", text: "Who changed what, and when" },
