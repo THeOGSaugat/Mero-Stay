@@ -5,6 +5,7 @@ import { parseEnv } from "node:util";
 import { randomBytes } from "node:crypto";
 import { toDbDate, todayInKathmandu } from "../domain/dates.js";
 import { calculateItemCharges, resolveCommissionRateBps, summarizeTrip } from "../domain/money.js";
+import { serviceStartFields } from "../domain/refunds.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { ProviderDocumentType } from "../generated/prisma/enums.js";
 import { createPrismaClient } from "../lib/prisma.js";
@@ -454,6 +455,7 @@ async function createPhase12World(prisma: PrismaClient, world: World) {
         listingTypeCode: "guide_service",
         status: "COMPLETED",
         startDate: toDbDate(serviceDate),
+        ...serviceStartFields(serviceDate, null),
         quantity: charges.quantity,
         subtotalMinor: charges.subtotalMinor,
         serviceChargeRateBps: charges.serviceChargeRateBps,

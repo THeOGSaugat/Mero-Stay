@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
+import { Prisma, type PrismaClient } from "../../generated/prisma/client.js";
+import { planDeductions } from "../../domain/clawbacks.js";
 import { assertCommissionTransition } from "../../domain/booking-item-status.js";
 import { fromDbDate, toDbDate, todayInKathmandu } from "../../domain/dates.js";
 import { maskAccountNumber } from "../../domain/masking.js";
@@ -42,6 +43,7 @@ export const payoutsListQuerySchema = z
   })
   .strict();
 export type PayoutsListQuery = z.infer<typeof payoutsListQuerySchema>;
+export const clawbacksQuerySchema = z.object({ providerId: uuidSchema.optional() }).strict();
 
 const PAYOUT_INCLUDE = {
   provider: { select: { id: true, displayName: true } },
@@ -52,8 +54,11 @@ const ITEM_SELECT = {
   startDate: true,
   endDate: true,
   quantity: true,
+  status: true,
   totalMinor: true,
   commissionMinor: true,
+  refundedMinor: true,
+  keptCommissionMinor: true,
   providerPayoutMinor: true,
   currency: true,
   listing: { select: { id: true, title: true, listingTypeCode: true } },
@@ -61,10 +66,44 @@ const ITEM_SELECT = {
 } as const;
 
 export type PayoutRow = Prisma.PayoutGetPayload<{ include: typeof PAYOUT_INCLUDE }>;
+
+const CLAWBACK_INCLUDE = {
+  provider: { select: { id: true, displayName: true } },
+  bookingItem: {
+    select: {
+      id: true,
+      listing: { select: { title: true } },
+      trip: { select: { reference: true } },
+    },
+  },
+  recoveries: {
+    select: { amountMinor: true, payoutId: true, payout: { select: { status: true } } },
+  },
+} as const satisfies Prisma.ProviderClawbackInclude;
+export type ClawbackRow = Prisma.ProviderClawbackGetPayload<{ include: typeof CLAWBACK_INCLUDE }>;
+export interface ClawbackView {
+  clawback: ClawbackRow;
+  recoveredMinor: bigint;
+  outstandingMinor: bigint;
+}
 export type PayoutItemRow = Prisma.BookingItemGetPayload<{ select: typeof ITEM_SELECT }>;
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 60_000 } as const;
 const payoutNotFound = () => new AppError(404, "PAYOUT_NOT_FOUND", "Payout not found.");
+
+/**
+ * Items a batch may pay (mirrors isPayoutEligible and booking_items_payout_guard): paid online and
+ * live, or cancelled BY THE CUSTOMER with money kept and its refund completed (Phase 14).
+ */
+const PAYABLE_ITEM_SQL = Prisma.sql`(
+  (bi.payment_status = 'PAID' AND bi.status IN ('CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'NO_SHOW'))
+  OR (bi.status = 'CANCELLED' AND bi.cancellation_refund_bps IS NOT NULL AND bi.voided_at IS NULL
+      AND bi.payment_status IN ('PAID', 'PARTIALLY_REFUNDED')
+      AND bi.refunded_minor = bi.cancellation_refund_minor
+      AND bi.refunded_minor < bi.total_minor))`;
+
+/** A refund not yet finished holds the item back (its money may still go to the customer). */
+const OPEN_REFUND_SQL = Prisma.sql`('REQUESTED', 'APPROVED', 'PROCESSING', 'FAILED')`;
 
 export interface PayoutChange {
   payout: PayoutRow;
@@ -78,14 +117,25 @@ export async function refreshPayoutSums(
 ): Promise<void> {
   const items = await tx.bookingItem.findMany({
     where: { payoutId },
-    select: { totalMinor: true, commissionMinor: true },
+    select: {
+      totalMinor: true,
+      commissionMinor: true,
+      refundedMinor: true,
+      keptCommissionMinor: true,
+    },
   });
-  const sums = sumPayout(items);
+  // Deductions exist only once the batch is being scheduled (clawback recoveries, Phase 14).
+  const deducted = await tx.providerClawbackRecovery.aggregate({
+    where: { payoutId },
+    _sum: { amountMinor: true },
+  });
+  const sums = sumPayout(items, deducted._sum.amountMinor ?? 0n);
   await tx.payout.update({
     where: { id: payoutId },
     data: {
       grossMinor: sums.grossMinor,
       commissionMinor: sums.commissionMinor,
+      deductionsMinor: sums.deductionsMinor,
       amountMinor: sums.netMinor,
       itemCount: sums.itemCount,
     },
@@ -103,14 +153,13 @@ export function createPayoutsService({ prisma, now }: { prisma: PrismaClient; no
       SELECT bi.id::text AS id, bi.provider_id::text AS provider_id, bi.currency
       FROM booking_items bi
       WHERE bi.start_date BETWEEN ${toDbDate(period.start)}::date AND ${toDbDate(period.end)}::date
-        AND bi.payment_status = 'PAID'
         AND bi.payout_status = 'PENDING'
         AND bi.payout_id IS NULL
-        AND bi.status IN ('CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'NO_SHOW')
+        AND ${PAYABLE_ITEM_SQL}
         AND COALESCE(bi.end_date - 1, bi.start_date) < ${toDbDate(today)}::date
         AND NOT EXISTS (
           SELECT 1 FROM refund_requests r
-          WHERE r.booking_item_id = bi.id AND r.status = 'REQUESTED')
+          WHERE r.booking_item_id = bi.id AND r.status IN ${OPEN_REFUND_SQL})
       ORDER BY bi.provider_id, bi.currency, bi.start_date, bi.id
       FOR UPDATE OF bi`;
   }
@@ -232,6 +281,9 @@ export function createPayoutsService({ prisma, now }: { prisma: PrismaClient; no
           "The provider has no verified bank account. Verify it before scheduling a payout.",
         );
       }
+      // Clawbacks of paid-out voided bookings (gap 39): deducted now, oldest first, never below 0.
+      const deductions = await deductClawbacks(tx, refreshed);
+      if (deductions.length > 0) await refreshPayoutSums(tx, payout.id);
       const at = now();
       const updated = await tx.payout.update({
         where: { id },
@@ -252,11 +304,92 @@ export function createPayoutsService({ prisma, now }: { prisma: PrismaClient; no
           status: "SCHEDULED",
           itemCount: updated.itemCount,
           amountMinor: updated.amountMinor.toString(),
+          deductionsMinor: updated.deductionsMinor.toString(),
+          clawbacksRecovered: deductions.map((d) => ({
+            clawbackId: d.clawbackId,
+            amountMinor: d.amountMinor.toString(),
+          })),
           payoutAccountLabel: updated.payoutAccountLabel,
         },
       });
       return { payout: updated, changed: true };
     }, TX_OPTIONS);
+  }
+
+  /** Outstanding clawbacks of the batch's provider and currency, oldest first. */
+  async function outstandingClawbacks(
+    db: Prisma.TransactionClient | PrismaClient,
+    providerId: string,
+    currency: string,
+  ) {
+    const clawbacks = await db.providerClawback.findMany({
+      where: { providerId, currency },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      include: {
+        recoveries: { select: { amountMinor: true, payout: { select: { status: true } } } },
+      },
+    });
+    return clawbacks.map((c) => {
+      const recovered = c.recoveries
+        .filter((r) => r.payout.status === "SCHEDULED" || r.payout.status === "PAID")
+        .reduce((sum, r) => sum + r.amountMinor, 0n);
+      return {
+        clawback: c,
+        recoveredMinor: recovered,
+        outstandingMinor: c.amountMinor - recovered,
+      };
+    });
+  }
+
+  async function deductClawbacks(
+    tx: Prisma.TransactionClient,
+    payout: {
+      id: string;
+      providerId: string;
+      currency: string;
+      grossMinor: bigint;
+      commissionMinor: bigint;
+    },
+  ) {
+    // Lock the provider's clawbacks so two batches never recover the same money.
+    await tx.$queryRaw`
+      SELECT id FROM provider_clawbacks
+      WHERE provider_id = ${payout.providerId}::uuid AND currency = ${payout.currency}
+      FOR UPDATE`;
+    const open = await outstandingClawbacks(tx, payout.providerId, payout.currency);
+    const plan = planDeductions(
+      payout.grossMinor - payout.commissionMinor,
+      open.map((o) => ({ id: o.clawback.id, outstandingMinor: o.outstandingMinor })),
+    );
+    for (const deduction of plan) {
+      await tx.providerClawbackRecovery.create({
+        data: {
+          clawbackId: deduction.clawbackId,
+          payoutId: payout.id,
+          amountMinor: deduction.amountMinor,
+        },
+      });
+    }
+    return plan;
+  }
+
+  /** Clawbacks (admin: all, or one provider's; partner: their own), with what is still owed. */
+  async function listClawbacks(providerId?: string) {
+    const rows = await prisma.providerClawback.findMany({
+      where: providerId ? { providerId } : {},
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: CLAWBACK_INCLUDE,
+    });
+    return rows.map((c) => {
+      const recovered = c.recoveries
+        .filter((r) => r.payout.status === "SCHEDULED" || r.payout.status === "PAID")
+        .reduce((sum, r) => sum + r.amountMinor, 0n);
+      return {
+        clawback: c,
+        recoveredMinor: recovered,
+        outstandingMinor: c.amountMinor - recovered,
+      };
+    });
   }
 
   async function eligibleIdsIn(
@@ -267,13 +400,12 @@ export function createPayoutsService({ prisma, now }: { prisma: PrismaClient; no
     const rows = await tx.$queryRaw<{ id: string }[]>`
       SELECT bi.id::text AS id FROM booking_items bi
       WHERE bi.payout_id = ${payoutId}::uuid
-        AND bi.payment_status = 'PAID'
         AND bi.payout_status = 'PENDING'
-        AND bi.status IN ('CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'NO_SHOW')
+        AND ${PAYABLE_ITEM_SQL}
         AND COALESCE(bi.end_date - 1, bi.start_date) < ${toDbDate(today)}::date
         AND NOT EXISTS (
           SELECT 1 FROM refund_requests r
-          WHERE r.booking_item_id = bi.id AND r.status = 'REQUESTED')
+          WHERE r.booking_item_id = bi.id AND r.status IN ${OPEN_REFUND_SQL})
       FOR UPDATE OF bi`;
     return rows.map((row) => row.id);
   }
@@ -398,7 +530,7 @@ export function createPayoutsService({ prisma, now }: { prisma: PrismaClient; no
     return { payout, items };
   }
 
-  return { generate, schedule, markPaid, markFailed, list, get };
+  return { generate, schedule, markPaid, markFailed, list, get, listClawbacks };
 }
 
 export type PayoutsService = ReturnType<typeof createPayoutsService>;

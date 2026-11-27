@@ -60,7 +60,11 @@ import type { ProvidersService } from "../providers/providers.service.js";
 import { createPartnerContext, currentPartner } from "./partner-context.js";
 
 import { payoutsListQuerySchema, type PayoutsService } from "../payouts/payouts.service.js";
-import { serializePayoutDetail, serializePayoutPage } from "../payouts/payouts.serializers.js";
+import {
+  serializeClawbacks,
+  serializePayoutDetail,
+  serializePayoutPage,
+} from "../payouts/payouts.serializers.js";
 
 export interface PartnerRouterDeps {
   prisma: PrismaClient;
@@ -413,6 +417,11 @@ export function createPartnerRouter(deps: PartnerRouterDeps): Router {
   });
 
   // Own payout batches (Phase 12, ADR 0018): read-only; another provider's is a 404.
+  // Own clawbacks only (gap 39): what is deducted from future payouts, and why.
+  router.get("/partner/clawbacks", async (req, res) => {
+    res.json(serializeClawbacks(await payouts.listClawbacks(currentPartner(req).providerId)));
+  });
+
   router.get("/partner/payout-batches", async (req, res) => {
     const query = payoutsListQuerySchema.parse(req.query);
     const { rows, total } = await payouts.list(query, currentPartner(req).providerId);

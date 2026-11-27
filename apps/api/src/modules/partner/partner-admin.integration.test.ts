@@ -512,20 +512,33 @@ describe("partner listings and inventory", () => {
           listingTypeCode: "activity",
           title: "Lake kayaking",
           basePriceMinor: "300000",
+          details: { startTime: "09:00" },
           parentId: hotelId,
         }),
       ),
     ).toEqual([422, "UNKNOWN_PARENT_LISTING"]);
   });
 
-  it("a type without a detail table needs no endpoint change: attributes only (activity)", async () => {
-    const res = await call(partnerB, "post", "/api/v1/partner/listings", {
+  it("an activity: its start time as details (Phase 14, ADR 0020), everything else as attributes", async () => {
+    const withoutStart = await call(partnerB, "post", "/api/v1/partner/listings", {
       listingTypeCode: "activity",
       title: "Sunrise Paragliding",
       basePriceMinor: "800000",
       attributes: { durationMinutes: 30, minWeightKg: 35 },
     });
-    expect([res.status, dataOf<{ details: unknown }>(res).details]).toEqual([201, null]);
+    expect(codeOf(withoutStart)).toEqual([422, "DETAILS_REQUIRED"]);
+    const res = await call(partnerB, "post", "/api/v1/partner/listings", {
+      listingTypeCode: "activity",
+      title: "Sunrise Paragliding",
+      basePriceMinor: "800000",
+      details: { startTime: "06:00" },
+      attributes: { durationMinutes: 30, minWeightKg: 35 },
+    });
+    expect([
+      res.status,
+      dataOf<{ details: unknown; attributes: unknown }>(res).details,
+      dataOf<{ attributes: unknown }>(res).attributes,
+    ]).toEqual([201, { startTime: "06:00" }, { durationMinutes: 30, minWeightKg: 35 }]);
   });
 
   it("status moves: submit for review yes, self-approval never; other partners get 404", async () => {

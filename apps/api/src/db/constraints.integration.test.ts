@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyRate, calculateItemCharges, type ItemCharges } from "../domain/money.js";
+import { serviceStartFields } from "../domain/refunds.js";
 import { createPrismaClient } from "../lib/prisma.js";
 import { resolveTestDatabase } from "../testing/test-database.js";
 
@@ -71,6 +72,7 @@ function itemData(charges: ItemCharges, overrides: Record<string, unknown> = {})
     listingTypeCode: "hotel_room",
     startDate: day("2026-12-20"),
     endDate: day("2026-12-22"),
+    ...serviceStartFields("2026-12-20", "14:00"),
     quantity: charges.quantity,
     subtotalMinor: charges.subtotalMinor,
     serviceChargeRateBps: charges.serviceChargeRateBps,
@@ -244,7 +246,9 @@ describe("64-bit money columns", () => {
       ORDER BY table_name, column_name`;
     // + payments.captured_minor (Phase 5); + payment_reconciliations and refund_requests amount_minor (Phase 11)
     // + payouts.gross_minor, payouts.commission_minor, provider_invoice_adjustments.amount_minor (Phase 12)
-    expect(rows.length).toBe(26);
+    // + booking_items.cancellation_refund_minor and kept_commission_minor, payouts.deductions_minor,
+    //   provider_clawbacks.amount_minor, provider_clawback_recoveries.amount_minor (Phase 14)
+    expect(rows.length).toBe(31);
     expect(rows.filter((row) => row.data_type !== "bigint")).toEqual([]);
   });
 

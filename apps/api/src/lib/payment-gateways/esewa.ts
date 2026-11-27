@@ -159,7 +159,7 @@ export function createEsewaAdapter(config: EsewaConfig): PaymentGatewayAdapter {
     refundCapability: {
       api: "none",
       partial: false,
-      note: "eSewa documents no merchant refund API: refunds go through the eSewa merchant portal.",
+      note: "eSewa documents no merchant refund API: refund in the eSewa merchant portal, then record the reference here.",
     },
 
     createCheckout(request: CheckoutRequest): Promise<CheckoutResult> {

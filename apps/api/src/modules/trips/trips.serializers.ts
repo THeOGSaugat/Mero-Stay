@@ -1,3 +1,4 @@
+import { toNepalLocal } from "../../domain/refunds.js";
 import { fromDbDate } from "../../domain/dates.js";
 import { currencyInfo, minorToString, toJsonSafe } from "../../lib/money-json.js";
 import {
@@ -71,6 +72,10 @@ export function serializeItem(item: Item) {
     },
     startDate: fromDbDate(item.startDate),
     endDate: item.endDate ? fromDbDate(item.endDate) : null,
+    // When the service starts (the refund clock, ADR 0020), and in Nepal time "YYYY-MM-DDTHH:MM".
+    serviceStartsAt: item.serviceStartsAt.toISOString(),
+    serviceStartsAtNepal: toNepalLocal(item.serviceStartsAt),
+    serviceStartSource: item.serviceStartSource,
     travellerCount: item.travellerCount,
     quantity: item.quantity,
     paymentMethod: paymentMethodOf(item.paymentStatus),
@@ -88,6 +93,15 @@ export function serializeItem(item: Item) {
       refundedMinor: minorToString(item.refundedMinor),
     },
     cancellationPolicy: toJsonSafe(item.cancellationPolicySnapshot),
+    // Set when the customer cancelled: the tier that applied and what goes back (no commission).
+    cancellation:
+      item.cancellationRefundBps === null || item.cancellationRefundMinor === null
+        ? null
+        : {
+            cancelledAt: item.cancelledAt?.toISOString() ?? null,
+            refundBps: item.cancellationRefundBps,
+            refundMinor: minorToString(item.cancellationRefundMinor),
+          },
     attributes: toJsonSafe(item.attributes),
     confirmedAt: item.confirmedAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),

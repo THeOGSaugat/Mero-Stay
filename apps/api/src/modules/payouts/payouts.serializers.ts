@@ -1,8 +1,13 @@
 import { fromDbDate } from "../../domain/dates.js";
-import { maskReference } from "../../domain/payouts.js";
+import { maskReference, payoutLine } from "../../domain/payouts.js";
 import { currencyInfo, minorToString } from "../../lib/money-json.js";
 import { pageInfo, type Page } from "../../lib/pagination.js";
-import { periodOf, type PayoutItemRow, type PayoutRow } from "./payouts.service.js";
+import {
+  periodOf,
+  type ClawbackView,
+  type PayoutItemRow,
+  type PayoutRow,
+} from "./payouts.service.js";
 
 /**
  * Payout batches as partners and admins see them (ADR 0018). Money as digit strings with the
@@ -19,6 +24,8 @@ export function serializePayout(payout: PayoutRow) {
     ...currencyInfo(payout.currency),
     grossMinor: minorToString(payout.grossMinor),
     commissionMinor: minorToString(payout.commissionMinor),
+    /** Clawbacks of paid-out voided bookings recovered from this batch (Phase 14). */
+    deductionsMinor: minorToString(payout.deductionsMinor),
     netMinor: minorToString(payout.amountMinor),
     itemCount: payout.itemCount,
     payoutAccountLabel: payout.payoutAccountLabel,
@@ -32,6 +39,8 @@ export function serializePayout(payout: PayoutRow) {
 }
 
 export function serializePayoutItem(item: PayoutItemRow) {
+  // The batch line: what MeroStay kept, its commission, the provider's share (ADR 0020).
+  const line = payoutLine(item);
   return {
     id: item.id,
     trip: { id: item.trip.id, reference: item.trip.reference },
@@ -44,10 +53,43 @@ export function serializePayoutItem(item: PayoutItemRow) {
     endDate: item.endDate ? fromDbDate(item.endDate) : null,
     quantity: item.quantity,
     ...currencyInfo(item.currency),
+    status: item.status,
     totalMinor: minorToString(item.totalMinor),
-    commissionMinor: minorToString(item.commissionMinor),
-    netMinor: minorToString(item.providerPayoutMinor),
+    refundedMinor: minorToString(item.refundedMinor),
+    grossMinor: minorToString(line.grossMinor),
+    commissionMinor: minorToString(line.commissionMinor),
+    netMinor: minorToString(line.netMinor),
   };
+}
+
+/** A clawback (gap 39): what the provider owes back, how much later batches recovered. */
+export function serializeClawback({ clawback, recoveredMinor, outstandingMinor }: ClawbackView) {
+  return {
+    id: clawback.id,
+    provider: { id: clawback.provider.id, name: clawback.provider.displayName },
+    bookingItem: {
+      id: clawback.bookingItem.id,
+      title: clawback.bookingItem.listing.title,
+      tripReference: clawback.bookingItem.trip.reference,
+    },
+    paidOutInPayoutId: clawback.payoutId,
+    ...currencyInfo(clawback.currency),
+    amountMinor: minorToString(clawback.amountMinor),
+    recoveredMinor: minorToString(recoveredMinor),
+    outstandingMinor: minorToString(outstandingMinor),
+    recoveries: clawback.recoveries.map((r) => ({
+      payoutId: r.payoutId,
+      payoutStatus: r.payout.status,
+      amountMinor: minorToString(r.amountMinor),
+      counts: r.payout.status === "SCHEDULED" || r.payout.status === "PAID",
+    })),
+    reason: clawback.reason,
+    createdAt: clawback.createdAt.toISOString(),
+  };
+}
+
+export function serializeClawbacks(rows: ClawbackView[]) {
+  return { data: rows.map(serializeClawback) };
 }
 
 export function serializePayoutPage(rows: PayoutRow[], total: number, page: Page) {

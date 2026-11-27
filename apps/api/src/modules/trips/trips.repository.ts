@@ -1,3 +1,4 @@
+import { START_TIME_SELECT } from "../listings/listing-details.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { toDbDate } from "../../domain/dates.js";
 import { summarizeTrip } from "../../domain/money.js";
@@ -94,6 +95,8 @@ export async function findListingForBooking(db: Db, id: string) {
       },
       listingType: { select: { code: true, isActive: true, isBookable: true } },
       defaultCancellationPolicy: { select: CANCELLATION_POLICY_SELECT },
+      // The refund clock: the listing's start time (check-in, departure, start), ADR 0020.
+      ...START_TIME_SELECT,
     },
   });
 }

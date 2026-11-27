@@ -40,10 +40,19 @@ export interface FakeKhaltiPayment {
   purchaseOrderId: string;
   purchaseOrderName: string;
   returnUrl: string;
-  status: "Initiated" | "Pending" | "Completed" | "Expired" | "User canceled" | "Refunded";
+  status:
+    | "Initiated"
+    | "Pending"
+    | "Completed"
+    | "Expired"
+    | "User canceled"
+    | "Refunded"
+    | "Partially Refunded";
   transactionId: string | null;
   /** Test control: what lookup reports as paid (defaults to `amount`). */
   paidAmount?: number;
+  /** Paisa refunded so far through the refund API (Phase 14). */
+  refunded: number;
 }
 
 export interface FakeGateways {
@@ -64,6 +73,11 @@ export interface FakeGateways {
     /** Every API call received, with its Authorization header (to check `Key <secret>`). */
     requests: { path: string; authorization: string | undefined; body: unknown }[];
     complete(pidx: string, options?: { paidAmount?: number }): void;
+    /**
+     * Test control for the refund API: "ok" (default) refunds; "reject" answers 400; "lost" refunds
+     * but answers 503 (the outcome is unknown to the caller, like a time-out after Khalti acted).
+     */
+    setRefundMode(mode: "ok" | "reject" | "lost"): void;
   };
   /** Test control: answer every API call with 503 (gateway down). */
   setUnavailable(down: boolean): void;
@@ -138,6 +152,7 @@ export async function startFakeGateways(
     });
   };
 
+  let refundMode: "ok" | "reject" | "lost" = "ok";
   const completeKhalti = (pidx: string, opts: { paidAmount?: number } = {}): void => {
     const payment = khaltiPayments.get(pidx);
     if (!payment) throw new Error(`no Khalti payment ${pidx}`);
@@ -267,13 +282,15 @@ export async function startFakeGateways(
     return true;
   };
 
+  const moneyMoved = (p: FakeKhaltiPayment) =>
+    p.status === "Completed" || p.status === "Refunded" || p.status === "Partially Refunded";
   const khaltiLookupBody = (p: FakeKhaltiPayment) => ({
     pidx: p.pidx,
-    total_amount: p.status === "Completed" ? (p.paidAmount ?? p.amount) : p.amount,
+    total_amount: moneyMoved(p) ? (p.paidAmount ?? p.amount) : p.amount,
     status: p.status,
-    transaction_id: p.status === "Completed" ? p.transactionId : null,
+    transaction_id: moneyMoved(p) ? p.transactionId : null,
     fee: 0,
-    refunded: p.status === "Refunded",
+    refunded: p.status === "Refunded" || p.status === "Partially Refunded",
   });
 
   app.post("/khalti/epayment/initiate/", (req: Request, res: Response) => {
@@ -302,6 +319,7 @@ export async function startFakeGateways(
       returnUrl: body.return_url,
       status: "Initiated",
       transactionId: null,
+      refunded: 0,
     });
     res.json({
       pidx,
@@ -322,6 +340,40 @@ export async function startFakeGateways(
     const failed = payment.status === "Expired" || payment.status === "User canceled";
     res.status(failed ? 400 : 200).json(khaltiLookupBody(payment));
   });
+
+  // Refund API (docs.khalti.com/api/refund): no body = full; { amount } (paisa) = partial.
+  app.post(
+    "/khalti/merchant-transaction/:transactionId/refund/",
+    (req: Request<{ transactionId: string }>, res: Response) => {
+      if (!khaltiAuthorized(req, res)) return;
+      const payment = [...khaltiPayments.values()].find(
+        (p) => p.transactionId === req.params.transactionId,
+      );
+      if (!payment || !moneyMoved(payment) || payment.status === "Refunded") {
+        res.status(400).json({ detail: "Transaction cannot be refunded." });
+        return;
+      }
+      if (refundMode === "reject") {
+        res.status(400).json({ detail: "Refund not allowed for this transaction." });
+        return;
+      }
+      const paid = payment.paidAmount ?? payment.amount;
+      const remaining = paid - payment.refunded;
+      const amount = (req.body as { amount?: unknown } | undefined)?.amount;
+      const take = amount === undefined ? remaining : amount;
+      if (typeof take !== "number" || !Number.isInteger(take) || take <= 0 || take > remaining) {
+        res.status(400).json({ detail: "Invalid refund amount." });
+        return;
+      }
+      payment.refunded += take;
+      payment.status = payment.refunded === paid ? "Refunded" : "Partially Refunded";
+      if (refundMode === "lost") {
+        res.status(503).json({ detail: "Service unavailable." });
+        return;
+      }
+      res.json({ detail: "Transaction refund successful." });
+    },
+  );
 
   app.get("/khalti/pay/:pidx", (req: Request<{ pidx: string }>, res: Response) => {
     const payment = khaltiPayments.get(req.params.pidx);
@@ -394,7 +446,14 @@ export async function startFakeGateways(
     },
     khaltiConfig: { secretKey: keys.khalti.secretKey, apiUrl: `${baseUrl}/khalti` },
     esewa: { transactions: esewaTransactions, complete: completeEsewa, signedData },
-    khalti: { payments: khaltiPayments, requests: khaltiRequests, complete: completeKhalti },
+    khalti: {
+      payments: khaltiPayments,
+      requests: khaltiRequests,
+      complete: completeKhalti,
+      setRefundMode: (mode) => {
+        refundMode = mode;
+      },
+    },
     setUnavailable(value: boolean) {
       unavailable = value;
     },

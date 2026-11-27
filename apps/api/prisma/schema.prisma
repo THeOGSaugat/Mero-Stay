@@ -68,21 +68,28 @@ model User {
   trips                   Trip[]
   reviews                 Review[]
   notifications           Notification[]
-  reviewedDocuments       ProviderDocument[]          @relation("DocumentReviewer")
+  reviewedDocuments       ProviderDocument[]                   @relation("DocumentReviewer")
   sessions                Session[]
-  settledItems            BookingItem[]               @relation("PaymentSettledBy")
+  settledItems            BookingItem[]                        @relation("PaymentSettledBy")
   auditEntries            AuditLog[]
   idempotencyKeys         IdempotencyKey[]
-  resolvedReconciliations PaymentReconciliation[]     @relation("ReconciliationResolvedBy")
-  refundRequests          RefundRequest[]             @relation("RefundRequestedBy")
-  voidedItems             BookingItem[]               @relation("BookingItemVoidedBy")
-  reviewedListings        Listing[]                   @relation("ListingReviewedBy")
-  payoutsCreated          Payout[]                    @relation("PayoutCreatedBy")
-  payoutsScheduled        Payout[]                    @relation("PayoutScheduledBy")
-  payoutsPaid             Payout[]                    @relation("PayoutPaidBy")
-  invoiceAdjustments      ProviderInvoiceAdjustment[] @relation("InvoiceAdjustmentCreatedBy")
-  adminSetupTokens        AdminSetupToken[]           @relation("AdminSetupTokenUser")
-  adminSetupTokensCreated AdminSetupToken[]           @relation("AdminSetupTokenCreatedBy")
+  resolvedReconciliations PaymentReconciliation[]              @relation("ReconciliationResolvedBy")
+  refundRequests          RefundRequest[]                      @relation("RefundRequestedBy")
+  voidedItems             BookingItem[]                        @relation("BookingItemVoidedBy")
+  reviewedListings        Listing[]                            @relation("ListingReviewedBy")
+  payoutsCreated          Payout[]                             @relation("PayoutCreatedBy")
+  payoutsScheduled        Payout[]                             @relation("PayoutScheduledBy")
+  payoutsPaid             Payout[]                             @relation("PayoutPaidBy")
+  invoiceAdjustments      ProviderInvoiceAdjustment[]          @relation("InvoiceAdjustmentCreatedBy")
+  adminSetupTokens        AdminSetupToken[]                    @relation("AdminSetupTokenUser")
+  adminSetupTokensCreated AdminSetupToken[]                    @relation("AdminSetupTokenCreatedBy")
+  cancelledItems          BookingItem[]                        @relation("BookingItemCancelledBy")
+  refundsApproved         RefundRequest[]                      @relation("RefundApprovedBy")
+  refundsExecuted         RefundRequest[]                      @relation("RefundExecutedBy")
+  refundsCompleted        RefundRequest[]                      @relation("RefundCompletedBy")
+  refundsRejected         RefundRequest[]                      @relation("RefundRejectedBy")
+  clawbacksCreated        ProviderClawback[]                   @relation("ClawbackCreatedBy")
+  settlementResolutions   SettlementReconciliationResolution[] @relation("SettlementResolvedBy")
 
   @@map("users")
 }
@@ -249,6 +256,7 @@ model Provider {
   payouts                   Payout[]
   invoices                  ProviderInvoice[]
   reviews                   Review[]
+  clawbacks                 ProviderClawback[]
 
   @@index([ownerUserId])
   @@index([providerTypeCode, status])
@@ -417,6 +425,7 @@ model Listing {
   busRouteDetail     BusRouteDetail?
   guideServiceDetail GuideServiceDetail?
   tourDetail         TourDetail?
+  activityDetail     ActivityDetail?
   flightRouteDetail  FlightRouteDetail?
 
   inventorySlots InventorySlot[]
@@ -502,6 +511,8 @@ model GuideServiceDetail {
   regions       String[]
   licenseNumber String?  @map("license_number")
   maxGroupSize  Int      @map("max_group_size")
+  /// Local Nepal time "HH:MM" each guide day starts (refund clock, ADR 0020). NULL on older rows.
+  startTime     String?  @map("start_time")
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -525,11 +536,25 @@ model TourDetail {
   startLocationId   String?        @map("start_location_id") @db.Uuid
   maxAltitudeMeters Int?           @map("max_altitude_meters")
   maxGroupSize      Int            @map("max_group_size")
+  /// Local Nepal time "HH:MM" the tour starts on its departure date (ADR 0020). NULL on older rows.
+  startTime         String?        @map("start_time")
 
   listing       Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
   startLocation Location? @relation(fields: [startLocationId], references: [id])
 
   @@map("tour_details")
+}
+
+/// listing_type = activity; unit = person. Only the start time is structured (ADR 0020); other
+/// activity fields stay in listings.attributes.
+model ActivityDetail {
+  listingId String @id @map("listing_id") @db.Uuid
+  /// Local Nepal time "HH:MM" the activity starts.
+  startTime String @map("start_time")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("activity_details")
 }
 
 /// listing_type = flight_ticket. MODELLED, NOT BUILT in the MVP (listing_types.is_active = false).
@@ -719,6 +744,11 @@ model BookingItem {
   startDate                  DateTime          @map("start_date") @db.Date
   /// Last service date + 1 for ranges (check-out; exclusive). NULL for single-date items.
   endDate                    DateTime?         @map("end_date") @db.Date
+  /// When the service starts (ADR 0020): start date at the listing's check-in/departure/start time,
+  /// Nepal time, stored in UTC. The refund clock counts from here.
+  serviceStartsAt            DateTime          @map("service_starts_at") @db.Timestamptz(3)
+  /// LISTING_TIME = from the listing; DEFAULT_MIDNIGHT = no start time known, 00:00 Nepal time.
+  serviceStartSource         String            @map("service_start_source")
   travellerCount             Int               @default(1) @map("traveller_count")
   /// Total billable units (room-nights, seats, guide-days, persons) = sum of booking_item_slots.units.
   quantity                   Int
@@ -749,6 +779,12 @@ model BookingItem {
   /// Frozen copy of the policy at booking time, so later edits never change this booking.
   cancellationPolicySnapshot Json?             @map("cancellation_policy_snapshot")
   cancellationReason         String?           @map("cancellation_reason")
+  /// Set when the CUSTOMER cancelled (ADR 0020): who, the tier that applied, what goes back, and the
+  /// commission on what is kept. NULL otherwise (admin voids use voided_*).
+  cancelledById              String?           @map("cancelled_by_id") @db.Uuid
+  cancellationRefundBps      Int?              @map("cancellation_refund_bps")
+  cancellationRefundMinor    BigInt?           @map("cancellation_refund_minor")
+  keptCommissionMinor        BigInt?           @map("kept_commission_minor")
   /// Type-specific booking details: seat numbers, pickup point, guest names, ...
   attributes                 Json              @default("{}")
   /// Booking reference in the provider's own system (future integrations).
@@ -773,12 +809,15 @@ model BookingItem {
   commissionInvoice  ProviderInvoice?    @relation(fields: [commissionInvoiceId], references: [id])
   paymentSettledBy   User?               @relation("PaymentSettledBy", fields: [paymentSettledById], references: [id], onDelete: Restrict)
   voidedBy           User?               @relation("BookingItemVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  cancelledBy        User?               @relation("BookingItemCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
 
-  slots             BookingItemSlot[]
-  allocations       PaymentAllocation[]
-  refundRequests    RefundRequest[]
-  invoiceAdjustment ProviderInvoiceAdjustment?
-  review            Review?
+  slots                 BookingItemSlot[]
+  allocations           PaymentAllocation[]
+  refundRequests        RefundRequest[]
+  invoiceAdjustment     ProviderInvoiceAdjustment?
+  review                Review?
+  clawback              ProviderClawback?
+  settlementResolutions SettlementReconciliationResolution[]
 
   @@index([tripId])
   @@index([listingId])
@@ -940,7 +979,7 @@ model PaymentReconciliation {
 enum RefundRequestStatus {
   REQUESTED
   REJECTED
-  /// The states below belong to refund execution (a later phase); the database refuses them now.
+  /// Execution (Phase 14, ADR 0020): REQUESTED → APPROVED → PROCESSING → COMPLETED | FAILED.
   APPROVED
   PROCESSING
   COMPLETED
@@ -949,8 +988,8 @@ enum RefundRequestStatus {
   @@map("refund_request_status")
 }
 
-/// What should go back to a customer (ADR 0017). Not executed this phase: the database keeps every
-/// request REQUESTED or REJECTED, and never more than was paid.
+/// What goes back to a customer (ADR 0017), and how it was executed (ADR 0020): Khalti by its
+/// refund API, eSewa by hand in the merchant portal. Never more than was paid (database guard).
 model RefundRequest {
   id                      String              @id @default(uuid()) @db.Uuid
   paymentId               String              @map("payment_id") @db.Uuid
@@ -964,6 +1003,22 @@ model RefundRequest {
   status                  RefundRequestStatus @default(REQUESTED)
   gatewayRefundReference  String?             @map("gateway_refund_reference")
   requestedById           String?             @map("requested_by_id") @db.Uuid
+  approvedAt              DateTime?           @map("approved_at") @db.Timestamptz(3)
+  approvedById            String?             @map("approved_by_id") @db.Uuid
+  processingAt            DateTime?           @map("processing_at") @db.Timestamptz(3)
+  executedById            String?             @map("executed_by_id") @db.Uuid
+  /// API (gateway refund call) or MANUAL (merchant portal, confirmed by an admin).
+  executionMode           String?             @map("execution_mode")
+  attempts                Int                 @default(0)
+  completedAt             DateTime?           @map("completed_at") @db.Timestamptz(3)
+  completedById           String?             @map("completed_by_id") @db.Uuid
+  failedAt                DateTime?           @map("failed_at") @db.Timestamptz(3)
+  failureReason           String?             @map("failure_reason")
+  rejectedAt              DateTime?           @map("rejected_at") @db.Timestamptz(3)
+  rejectedById            String?             @map("rejected_by_id") @db.Uuid
+  note                    String?
+  /// The gateway's answer to the refund call or check (no secrets).
+  gatewayResponse         Json?               @map("gateway_response")
   createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -971,7 +1026,13 @@ model RefundRequest {
   bookingItem    BookingItem?           @relation(fields: [bookingItemId], references: [id], onDelete: Restrict)
   reconciliation PaymentReconciliation? @relation(fields: [paymentReconciliationId], references: [id], onDelete: Restrict)
   requestedBy    User?                  @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  approvedBy     User?                  @relation("RefundApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  executedBy     User?                  @relation("RefundExecutedBy", fields: [executedById], references: [id], onDelete: Restrict)
+  completedBy    User?                  @relation("RefundCompletedBy", fields: [completedById], references: [id], onDelete: Restrict)
+  rejectedBy     User?                  @relation("RefundRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
 
+  @@unique([paymentId], map: "refund_requests_one_processing_per_payment", where: raw("status = 'PROCESSING'"))
+  @@index([status])
   @@index([paymentId])
   @@index([bookingItemId])
   @@map("refund_requests")
@@ -993,11 +1054,14 @@ model Payout {
   providerId         String            @map("provider_id") @db.Uuid
   status             PayoutBatchStatus @default(PENDING)
   currency           String            @default("NPR") @db.Char(3)
-  /// Net payout = gross − commission (CHECK).
+  /// Net payout = gross − commission − deductions (CHECK).
   amountMinor        BigInt            @map("amount_minor")
-  /// Sum of the items' totals.
+  /// Sum of what MeroStay kept per item (total − refunded).
   grossMinor         BigInt            @default(0) @map("gross_minor")
+  /// Sum of the commission on it (kept commission for customer-cancelled items).
   commissionMinor    BigInt            @default(0) @map("commission_minor")
+  /// Clawbacks recovered from this batch (ADR 0020), fixed when it is scheduled.
+  deductionsMinor    BigInt            @default(0) @map("deductions_minor")
   itemCount          Int               @default(0) @map("item_count")
   /// One calendar month of service dates: first and last day.
   periodStart        DateTime          @map("period_start") @db.Date
@@ -1016,11 +1080,13 @@ model Payout {
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz(3)
 
-  provider     Provider      @relation(fields: [providerId], references: [id])
-  createdBy    User?         @relation("PayoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  scheduledBy  User?         @relation("PayoutScheduledBy", fields: [scheduledById], references: [id], onDelete: Restrict)
-  paidBy       User?         @relation("PayoutPaidBy", fields: [paidById], references: [id], onDelete: Restrict)
+  provider     Provider                   @relation(fields: [providerId], references: [id])
+  createdBy    User?                      @relation("PayoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  scheduledBy  User?                      @relation("PayoutScheduledBy", fields: [scheduledById], references: [id], onDelete: Restrict)
+  paidBy       User?                      @relation("PayoutPaidBy", fields: [paidById], references: [id], onDelete: Restrict)
   bookingItems BookingItem[]
+  clawbacks    ProviderClawback[]
+  recoveries   ProviderClawbackRecovery[]
 
   @@unique([providerId, periodStart, currency], map: "payouts_one_pending_per_provider_period", where: raw("status = 'PENDING'"))
   @@index([providerId])
@@ -1046,6 +1112,65 @@ model ProviderInvoiceAdjustment {
 
   @@index([invoiceId])
   @@map("provider_invoice_adjustments")
+}
+
+/// What a provider owes back after a PAID-out booking was voided (gap 39, ADR 0020): the item's line
+/// in its paid batch. Append-only; recovered by deductions from the provider's later batches.
+model ProviderClawback {
+  id            String   @id @default(uuid()) @db.Uuid
+  providerId    String   @map("provider_id") @db.Uuid
+  bookingItemId String   @unique @map("booking_item_id") @db.Uuid
+  /// The PAID batch that paid the item.
+  payoutId      String   @map("payout_id") @db.Uuid
+  currency      String   @db.Char(3)
+  amountMinor   BigInt   @map("amount_minor")
+  reason        String
+  createdById   String?  @map("created_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider    Provider                   @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  bookingItem BookingItem                @relation(fields: [bookingItemId], references: [id], onDelete: Restrict)
+  payout      Payout                     @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+  createdBy   User?                      @relation("ClawbackCreatedBy", fields: [createdById], references: [id])
+  recoveries  ProviderClawbackRecovery[]
+
+  @@index([providerId, currency])
+  @@map("provider_clawbacks")
+}
+
+/// A deduction from one batch towards one clawback, written when the batch is scheduled. Counts
+/// while that batch is SCHEDULED or PAID, not when it FAILED. Append-only.
+model ProviderClawbackRecovery {
+  id          String   @id @default(uuid()) @db.Uuid
+  clawbackId  String   @map("clawback_id") @db.Uuid
+  payoutId    String   @map("payout_id") @db.Uuid
+  amountMinor BigInt   @map("amount_minor")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  clawback ProviderClawback @relation(fields: [clawbackId], references: [id], onDelete: Restrict)
+  payout   Payout           @relation(fields: [payoutId], references: [id], onDelete: Restrict)
+
+  @@unique([clawbackId, payoutId], map: "provider_clawback_recoveries_clawback_payout_key")
+  @@index([payoutId])
+  @@map("provider_clawback_recoveries")
+}
+
+/// How an admin handled a pay-at-property settlement mismatch (gap 36, ADR 0020). Mismatches are
+/// computed; this records the resolution. One per item and kind; append-only.
+model SettlementReconciliationResolution {
+  id            String   @id @default(uuid()) @db.Uuid
+  bookingItemId String   @map("booking_item_id") @db.Uuid
+  /// UNSETTLED_AFTER_SERVICE | SETTLED_NOT_INVOICED | SETTLED_BEFORE_SERVICE (CHECK).
+  kind          String
+  note          String
+  resolvedById  String?  @map("resolved_by_id") @db.Uuid
+  resolvedAt    DateTime @default(now()) @map("resolved_at") @db.Timestamptz(3)
+
+  bookingItem BookingItem @relation(fields: [bookingItemId], references: [id], onDelete: Restrict)
+  resolvedBy  User?       @relation("SettlementResolvedBy", fields: [resolvedById], references: [id])
+
+  @@unique([bookingItemId, kind], map: "settlement_reconciliation_resolutions_item_kind_key")
+  @@map("settlement_reconciliation_resolutions")
 }
 
 /// One-time admin setup links (Phase 12, gap 9): only the SHA-256 of the token is stored.

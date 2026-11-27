@@ -34,6 +34,7 @@ export const DETAIL_INCLUDE = {
   },
   guideServiceDetail: true,
   tourDetail: { include: { startLocation: { select: { id: true, name: true, slug: true } } } },
+  activityDetail: true,
   flightRouteDetail: true,
 } satisfies Prisma.ListingInclude;
 

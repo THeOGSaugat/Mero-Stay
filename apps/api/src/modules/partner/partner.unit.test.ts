@@ -189,7 +189,12 @@ describe("partner listing rules", () => {
         seatCapacity: 35,
       }).success,
     ).toBe(false);
-    expect(detailSpecFor("activity")).toBeUndefined(); // generic: attributes JSON
+    // Phase 14 (ADR 0020): activities gained a detail row for their start time (refund clock).
+    const activity = detailSpecFor("activity");
+    expect(activity?.relation).toBe("activityDetail");
+    expect(activity?.schema.safeParse({ startTime: "07:30" }).success).toBe(true);
+    expect(activity?.schema.safeParse({}).success).toBe(false);
+    // A type without a detail table still uses the generic attributes JSON only.
     expect(detailSpecFor("a_future_vertical")).toBeUndefined();
   });
 

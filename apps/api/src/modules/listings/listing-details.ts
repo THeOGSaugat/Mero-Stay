@@ -5,8 +5,8 @@ import { uuidSchema } from "../../lib/validation.js";
  * Type-specific listing fields for partner writes (ADR 0004 / 0008).
  *
  * The endpoints are vertical-agnostic: a listing type is DATA (`listing_types`). A type whose
- * fields search must query has a detail table, validated here; every other type (e.g. `activity`,
- * or a new vertical with no table) uses the generic `attributes` JSON and needs no entry here.
+ * fields search or a rule must read has a detail table, validated here (since Phase 14 `activity`
+ * too, for its start time); every other type uses the generic `attributes` JSON and needs no entry.
  * Adding a vertical = a `listing_types` row (+ optionally a detail table and an entry below).
  */
 
@@ -69,6 +69,8 @@ export const DETAIL_SCHEMAS = {
         regions: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
         licenseNumber: z.string().trim().min(1).max(60).nullable().optional(),
         maxGroupSize: z.number().int().min(1).max(100),
+        /** When each guide day starts (Nepal time): the refund clock counts from it (ADR 0020). */
+        startTime: time,
       })
       .strict(),
   },
@@ -81,6 +83,17 @@ export const DETAIL_SCHEMAS = {
         startLocationId: uuidSchema.nullable().optional(),
         maxAltitudeMeters: z.number().int().min(1).max(9000).nullable().optional(),
         maxGroupSize: z.number().int().min(1).max(200),
+        /** When the tour starts on its departure date (Nepal time; ADR 0020). */
+        startTime: time,
+      })
+      .strict(),
+  },
+  activity: {
+    relation: "activityDetail",
+    schema: z
+      .object({
+        /** When the activity starts (Nepal time; ADR 0020). Other fields stay in attributes. */
+        startTime: time,
       })
       .strict(),
   },
@@ -100,3 +113,40 @@ export function detailSpecFor(listingTypeCode: string) {
     listingTypeCode
   ];
 }
+
+/**
+ * The time of day a listing's service starts (Nepal time, "HH:MM"), for the refund clock
+ * (ADR 0020): a stay's check-in (a room uses its parent's), a bus's departure, a guide day's, tour's
+ * or activity's start. A listing has at most one detail row, so the first one present answers;
+ * null = no start time recorded (older guide/tour listings), and the booking falls back to midnight.
+ */
+export interface StartTimeDetails {
+  hotelDetail?: { checkInTime: string } | null;
+  busRouteDetail?: { departureTime: string } | null;
+  guideServiceDetail?: { startTime: string | null } | null;
+  tourDetail?: { startTime: string | null } | null;
+  activityDetail?: { startTime: string } | null;
+  parent?: { hotelDetail?: { checkInTime: string } | null } | null;
+}
+
+export function listingStartTime(listing: StartTimeDetails): string | null {
+  return (
+    listing.hotelDetail?.checkInTime ??
+    listing.parent?.hotelDetail?.checkInTime ??
+    listing.busRouteDetail?.departureTime ??
+    listing.guideServiceDetail?.startTime ??
+    listing.tourDetail?.startTime ??
+    listing.activityDetail?.startTime ??
+    null
+  );
+}
+
+/** The select that brings every start-time field `listingStartTime` reads. */
+export const START_TIME_SELECT = {
+  hotelDetail: { select: { checkInTime: true } },
+  busRouteDetail: { select: { departureTime: true } },
+  guideServiceDetail: { select: { startTime: true } },
+  tourDetail: { select: { startTime: true } },
+  activityDetail: { select: { startTime: true } },
+  parent: { select: { hotelDetail: { select: { checkInTime: true } } } },
+} as const;
