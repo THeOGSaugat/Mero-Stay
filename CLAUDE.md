@@ -450,7 +450,8 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   the **actual start of the service** (hotel check-in, bus/flight departure, guide/tour/activity start time), not
   midnight of the service date. The start is stored as an exact timestamp on each booking item (UTC, compared in
   Nepal time); implemented in Phase 14.
-- **Phase 14, Cancellations & refunds:** on `phase/14-cancellations-refunds`, awaiting review (ADR 0020). Gaps 31
+- **Phase 14, Cancellations & refunds:** merged to `main`, tagged `v0.14.0` (CI green on `main` and the tag; Neon
+  317/317 on the third attempt, the first two refused on credentials; dev migrated). ADR 0020. Gaps 31
   (refund execution), 36 (settlement reconciliation) and 39 (paid-out voids, clawbacks) closed; residual gaps 40
   (clawback with no later payouts) and 41 (partial refunds on live items; payout estimate). Owner decisions
   2026-11-27: partners set start times for guides/tours/activities (midnight fallback), commission on the part
@@ -458,4 +459,4 @@ Before committing: `npm run format:check && npm run lint && npm run typecheck &&
   checklist: confirm Khalti's refund amount unit in the sandbox. 22 gaps open; **no launch blocker**. Gap 10
   (invoice numbering) still waits for the tax advisor. Roadmap (owner): 14 Cancellations & refunds, 15 Search
   UX, 16 Reviews, 17 Notifications, 18 Hardening.
-- **Next:** Phase 15 only when the owner sends its prompt.
+- **Phase 15, Reviews, amenities & listing photos:** in progress (owner's brief 2026-11-28).

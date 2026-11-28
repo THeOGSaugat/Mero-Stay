@@ -1,6 +1,6 @@
 # Phase 14: Cancellations & refunds
 
-- **Status:** Awaiting review
+- **Status:** Approved; merged to `main` as `68f6f11`, tagged `v0.14.0` (CI green on `main` and the tag)
 - **Branch:** `phase/14-cancellations-refunds`
 - **Date completed:** 2026-11-27
 
