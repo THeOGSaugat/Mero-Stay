@@ -88,7 +88,13 @@ Full guide, including troubleshooting: [docs/development/local-setup.md](docs/de
 - **Payouts** (ADR 0018): once a month, Payouts → Prepare payouts for last month, Schedule each
   batch (the provider's bank account must be verified), make the bank transfer outside MeroStay,
   then Record as paid with the bank's reference. The hold-release job also re-checks closed
-  eSewa/Khalti payments, so it must keep running.
+  eSewa/Khalti payments, so it must keep running. Scheduling deducts clawbacks of voided paid-out
+  bookings from the provider's batch (ADR 0020).
+- **Refunds** (ADR 0020): Refund requests → Approve → Refund through Khalti (its refund API, the
+  same secret key), or for eSewa start a manual refund, refund in the eSewa merchant portal and
+  record its reference. Confirm Khalti's refund amounts in the sandbox before going live (launch
+  checklist). Customers cancel their own bookings from the trip page; the refund follows the
+  booking's frozen policy, counted from the actual start time (check-in, departure, start).
 - **Web app (`apps/web`):** set `API_URL` (the API's base URL) for **both** `npm run build` and
   `npm start`. Browsers call `/api/v1/*` on the web origin and Next.js proxies it to `API_URL`; the
   proxy target is fixed at build time (ADR 0010).

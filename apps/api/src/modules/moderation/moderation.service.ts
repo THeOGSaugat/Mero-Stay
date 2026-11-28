@@ -3,7 +3,9 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import {
   assertCommissionTransition,
   assertItemTransition,
+  canWaivePaidOutCommission,
 } from "../../domain/booking-item-status.js";
+import { clawbackAmount } from "../../domain/clawbacks.js";
 import { canReverseSettlement, planVoid } from "../../domain/booking-void.js";
 import { decideListingType } from "../../domain/listing-rules.js";
 import { maskAccountNumber } from "../../domain/masking.js";
@@ -12,7 +14,9 @@ import { paginationShape, searchShape, skipTake } from "../../lib/pagination.js"
 import { recordAudit, type AuditContext } from "../audit/audit.js";
 import { providerTypeRules } from "../listings/listing-management.service.js";
 import { refreshPayoutSums } from "../payouts/payouts.service.js";
-import { lockTrip, recalculateTripTotals } from "../trips/trips.repository.js";
+import { adjustInvoiceForWaivedItem } from "../finance/invoice-adjustments.js";
+import { settleTripAfterCancellations } from "../trips/trip-settlement.js";
+import { lockTrip } from "../trips/trips.repository.js";
 
 /**
  * Admin moderation (Phase 12, ADR 0018):
@@ -228,6 +232,8 @@ export function createModerationService({
     changed: boolean;
     refundRequests: number;
     invoiceAdjusted: boolean;
+    clawbackMinor: bigint | null;
+    currency: string;
   }> {
     const item = await loadItem(tx, itemId);
     if (!item) throw itemNotFound();
@@ -241,11 +247,17 @@ export function createModerationService({
     });
     if (!plan.ok) {
       if (plan.refusal === "ALREADY_VOIDED") {
-        return { itemId, changed: false, refundRequests: 0, invoiceAdjusted: false };
+        return {
+          itemId,
+          changed: false,
+          refundRequests: 0,
+          invoiceAdjusted: false,
+          clawbackMinor: null,
+          currency: item.currency,
+        };
       }
       const message = {
         NOT_VOIDABLE_STATUS: `This item is ${item.status}; only pending or confirmed bookings can be voided.`,
-        PAID_OUT: "This item was already paid out to the provider and cannot be voided.",
         IN_SCHEDULED_PAYOUT:
           "This item is in a scheduled payout. Record that payout as paid or failed first.",
       }[plan.refusal];
@@ -270,7 +282,7 @@ export function createModerationService({
     }
     // 3. The item itself: cancelled, commission waived.
     assertItemTransition(item.status, "CANCELLED");
-    if (plan.commission !== "KEEP") {
+    if (plan.commission !== "KEEP" && !(plan.clawback && canWaivePaidOutCommission(item))) {
       assertCommissionTransition(item.commissionStatus, "WAIVED", item.paymentStatus);
     }
     await tx.bookingItem.update({
@@ -287,24 +299,12 @@ export function createModerationService({
     // 4. Invoiced commission: an adjustment (the issued invoice never changes); fully adjusted → VOID.
     let invoiceAdjusted = false;
     if (plan.commission === "WAIVE_AND_ADJUST_INVOICE" && item.commissionInvoiceId) {
-      await tx.providerInvoiceAdjustment.create({
-        data: {
-          invoiceId: item.commissionInvoiceId,
-          bookingItemId: itemId,
-          amountMinor: item.commissionMinor,
-          currency: item.currency,
-          reason: `Booking voided: ${reason}`.slice(0, 500),
-          createdById: ctx.actorUserId,
-        },
-      });
-      const invoice = await tx.providerInvoice.findUniqueOrThrow({
-        where: { id: item.commissionInvoiceId },
-        include: { adjustments: { select: { amountMinor: true } } },
-      });
-      const adjusted = invoice.adjustments.reduce((sum, a) => sum + a.amountMinor, 0n);
-      if (adjusted === invoice.amountMinor && invoice.status === "ISSUED") {
-        await tx.providerInvoice.update({ where: { id: invoice.id }, data: { status: "VOID" } });
-      }
+      await adjustInvoiceForWaivedItem(
+        tx,
+        { ...item, commissionInvoiceId: item.commissionInvoiceId },
+        `Booking voided: ${reason}`,
+        ctx.actorUserId,
+      );
       invoiceAdjusted = true;
     }
     // 5. Online money: one refund REQUEST per succeeded charge that paid this item (not executed).
@@ -327,6 +327,25 @@ export function createModerationService({
         refundRequests += 1;
       }
     }
+    // 6. Paid out already (gap 39): the provider owes back what its batch paid for this item,
+    //    deducted from later payouts. The past payout itself never changes.
+    let clawbackMinor: bigint | null = null;
+    if (plan.clawback && item.payoutId) {
+      clawbackMinor = clawbackAmount(item);
+      if (clawbackMinor > 0n) {
+        await tx.providerClawback.create({
+          data: {
+            providerId: item.providerId,
+            bookingItemId: itemId,
+            payoutId: item.payoutId,
+            currency: item.currency,
+            amountMinor: clawbackMinor,
+            reason: `Paid-out booking voided: ${reason}`.slice(0, 500),
+            createdById: ctx.actorUserId,
+          },
+        });
+      }
+    }
     await recordAudit(tx, ctx, {
       action: "booking_item.void",
       entityType: "booking_item",
@@ -343,30 +362,22 @@ export function createModerationService({
         commissionStatus: plan.commission !== "KEEP" ? "WAIVED" : item.commissionStatus,
         refundRequests,
         invoiceAdjusted,
+        clawbackMinor: clawbackMinor?.toString() ?? null,
       },
     });
-    return { itemId, changed: true, refundRequests, invoiceAdjusted };
+    return {
+      itemId,
+      changed: true,
+      refundRequests,
+      invoiceAdjusted,
+      clawbackMinor,
+      currency: item.currency,
+    };
   }
 
-  /** Trip totals and status after voids: totals = active items; nothing active → CANCELLED. */
+  /** Trip totals and status after voids (shared with customer cancellations). */
   async function settleTrip(tx: Prisma.TransactionClient, tripId: string): Promise<void> {
-    const trip = await tx.trip.findUniqueOrThrow({ where: { id: tripId } });
-    const items = await tx.bookingItem.findMany({ where: { tripId }, select: { status: true } });
-    const pending = items.filter((i) => i.status === "PENDING").length;
-    const live = items.filter((i) => !["CANCELLED", "EXPIRED"].includes(i.status)).length;
-    const at = now();
-    let extra: Prisma.TripUpdateInput = {};
-    if (trip.status === "PENDING" || trip.status === "CONFIRMED") {
-      if (live === 0) extra = { status: "CANCELLED", cancelledAt: at, expiresAt: null };
-      else if (pending === 0)
-        extra = { status: "CONFIRMED", confirmedAt: trip.confirmedAt ?? at, expiresAt: null };
-    }
-    await recalculateTripTotals(tx, trip, extra);
-    // The amount due changed: open payment intents no longer match (late money is reconciled).
-    await tx.payment.updateMany({
-      where: { tripId, kind: "CHARGE", status: { in: ["INITIATED", "PENDING"] } },
-      data: { status: "CANCELLED", completedAt: at },
-    });
+    await settleTripAfterCancellations(tx, tripId, now());
   }
 
   async function voidItem(ctx: AuditContext, itemId: string, reason: string) {

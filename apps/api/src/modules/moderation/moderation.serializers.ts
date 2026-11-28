@@ -1,3 +1,4 @@
+import { currencyInfo, minorToString } from "../../lib/money-json.js";
 import { pageInfo, type Page } from "../../lib/pagination.js";
 import type { ReviewEntry } from "./moderation.service.js";
 
@@ -30,7 +31,26 @@ export function serializeReviewPage(entries: ReviewEntry[], total: number, page:
 
 export function serializeVoid(result: {
   tripId: string;
-  items: { itemId: string; changed: boolean; refundRequests: number; invoiceAdjusted: boolean }[];
+  items: {
+    itemId: string;
+    changed: boolean;
+    refundRequests: number;
+    invoiceAdjusted: boolean;
+    /** Paid-out items (gap 39): what the provider owes back, minor units. */
+    clawbackMinor: bigint | null;
+    currency: string;
+  }[];
 }) {
-  return { data: result };
+  return {
+    data: {
+      tripId: result.tripId,
+      items: result.items.map(({ currency, clawbackMinor, ...item }) => ({
+        ...item,
+        // Present only for a paid-out item (gap 39), with its currency.
+        ...(clawbackMinor === null
+          ? {}
+          : { ...currencyInfo(currency), clawbackMinor: minorToString(clawbackMinor) }),
+      })),
+    },
+  };
 }

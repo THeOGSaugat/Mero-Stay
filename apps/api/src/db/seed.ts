@@ -5,6 +5,7 @@ import {
   summarizeTrip,
   type ItemCharges,
 } from "../domain/money.js";
+import { serviceStartFields } from "../domain/refunds.js";
 import { issueCommissionInvoices } from "../modules/finance/invoices.service.js";
 
 /**
@@ -424,6 +425,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         listingTypeCode: "bus_ticket",
         status: "CONFIRMED",
         startDate: date("2026-12-20"),
+        // The bus departs at 06:30 Nepal time (its route detail): the refund clock starts there.
+        ...serviceStartFields("2026-12-20", "06:30"),
         travellerCount: 2,
         ...itemMoney(busCharges),
         // Becomes PAID below, once the payment is allocated (the database checks they agree).
@@ -456,6 +459,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         listingTypeCode: "hotel_room",
         status: "CONFIRMED",
         startDate: date("2026-12-20"),
+        // Check-in at 13:00 (the parent homestay's detail).
+        ...serviceStartFields("2026-12-20", "13:00"),
         endDate: date("2026-12-22"),
         travellerCount: 2,
         ...itemMoney(roomCharges),
@@ -534,6 +539,8 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
         listingTypeCode: "guide_service",
         status: "COMPLETED",
         startDate: date("2026-10-01"),
+        // Booked before guide start times existed: midnight Nepal time (labelled as such).
+        ...serviceStartFields("2026-10-01", null),
         endDate: date("2026-10-06"),
         ...itemMoney(guideCharges),
         paymentStatus: "UNPAID", // PAID below, once the payment is allocated

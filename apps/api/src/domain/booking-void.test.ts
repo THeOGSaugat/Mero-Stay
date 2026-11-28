@@ -18,6 +18,7 @@ describe("booking voids (ADR 0018, gap 13)", () => {
       commission: "WAIVE",
       requestRefund: true,
       leavePendingPayout: false,
+      clawback: false,
     });
     expect(planVoid({ ...base, paymentStatus: "PARTIALLY_PAID", status: "PENDING" })).toMatchObject(
       {
@@ -44,10 +45,11 @@ describe("booking voids (ADR 0018, gap 13)", () => {
       commission: "WAIVE_AND_ADJUST_INVOICE",
       requestRefund: false,
       leavePendingPayout: false,
+      clawback: false,
     });
   });
 
-  it("an item in an open payout batch leaves it; scheduled or paid out items cannot be voided", () => {
+  it("an item in an open payout batch leaves it; a scheduled one cannot be voided", () => {
     expect(planVoid({ ...base, payoutBatchStatus: "PENDING" })).toMatchObject({
       ok: true,
       leavePendingPayout: true,
@@ -56,9 +58,24 @@ describe("booking voids (ADR 0018, gap 13)", () => {
       ok: false,
       refusal: "IN_SCHEDULED_PAYOUT",
     });
-    expect(planVoid({ ...base, payoutStatus: "PAID", payoutBatchStatus: "PAID" })).toEqual({
-      ok: false,
-      refusal: "PAID_OUT",
+  });
+
+  it("a paid-out item can be voided (Phase 14, gap 39): refund, clawback, commission waived", () => {
+    expect(
+      planVoid({
+        ...base,
+        paymentStatus: "PAID",
+        commissionStatus: "PAID",
+        payoutStatus: "PAID",
+        payoutBatchStatus: "PAID",
+      }),
+    ).toEqual({
+      ok: true,
+      releaseInventory: true,
+      commission: "WAIVE",
+      requestRefund: true,
+      leavePendingPayout: false,
+      clawback: true,
     });
   });
 

@@ -1,3 +1,11 @@
+import {
+  resolveSettlementSchema,
+  serializeSettlementEntry,
+  serializeSettlementPage,
+  settlementItemParamsSchema,
+  settlementQuerySchema,
+  type SettlementReconciliationService,
+} from "../finance/settlement-reconciliation.service.js";
 import { Router } from "express";
 import { idParamsSchema } from "../../lib/validation.js";
 import { auditContextOf } from "../audit/audit.js";
@@ -34,13 +42,16 @@ import type { PrismaClient } from "../../generated/prisma/client.js";
 import {
   createRefundRequestSchema,
   reconciliationsQuerySchema,
+  completeRefundSchema,
   refundRequestsQuerySchema,
+  rejectRefundSchema,
   resolveReconciliationSchema,
   type RefundsService,
 } from "../refunds/refunds.service.js";
 import {
   serializeReconciliation,
   serializeReconciliationPage,
+  serializeRefundChange,
   serializeRefundRequest,
   serializeRefundRequestPage,
 } from "../refunds/refunds.serializers.js";
@@ -64,6 +75,7 @@ import {
   serializeVoid,
 } from "../moderation/moderation.serializers.js";
 import {
+  clawbacksQuerySchema,
   generatePayoutsSchema,
   markFailedSchema,
   markPaidSchema,
@@ -73,6 +85,7 @@ import {
 import {
   serializePayout,
   serializePayoutChanges,
+  serializeClawbacks,
   serializePayoutDetail,
   serializePayoutPage,
 } from "../payouts/payouts.serializers.js";
@@ -89,6 +102,7 @@ export interface AdminRouterDeps {
   payouts: PayoutsService;
   adminAccounts: AdminAccountsService;
   moderation: ModerationService;
+  settlement: SettlementReconciliationService;
 }
 
 /**
@@ -112,6 +126,7 @@ export function createAdminRouter({
   payouts,
   adminAccounts,
   moderation,
+  settlement,
 }: AdminRouterDeps): Router {
   const router = Router();
   router.use(
@@ -209,7 +224,7 @@ export function createAdminRouter({
     res.json({ data: serializeReconciliation(row) });
   });
 
-  // ------------------------------------------------------------------ refund requests (shape only)
+  // ------------------------------------------------------------------ refunds (gap 31)
   router.get("/admin/refund-requests", async (req, res) => {
     const query = refundRequestsQuerySchema.parse(req.query);
     const { rows, total } = await refunds.listRefundRequests(query);
@@ -220,6 +235,54 @@ export function createAdminRouter({
     const input = createRefundRequestSchema.parse(req.body ?? {});
     const row = await refunds.createRefundRequest(auditContextOf(req), input);
     res.status(201).json({ data: serializeRefundRequest(row, refunds.refundCapability) });
+  });
+
+  // Execution (Phase 14, gap 31, ADR 0020). Each step is idempotent and audited.
+  router.get("/admin/refund-requests/:id", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    res.json({
+      data: serializeRefundRequest(await refunds.getRefund(id), refunds.refundCapability),
+    });
+  });
+  router.post("/admin/refund-requests/:id/approve", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const result = await refunds.approve(auditContextOf(req), id);
+    res.json(serializeRefundChange(result, refunds.refundCapability));
+  });
+  router.post("/admin/refund-requests/:id/reject", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const { note } = rejectRefundSchema.parse(req.body ?? {});
+    const result = await refunds.reject(auditContextOf(req), id, note);
+    res.json(serializeRefundChange(result, refunds.refundCapability));
+  });
+  router.post("/admin/refund-requests/:id/execute", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const result = await refunds.execute(auditContextOf(req), id);
+    res.json(serializeRefundChange(result, refunds.refundCapability));
+  });
+  router.post("/admin/refund-requests/:id/complete", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const input = completeRefundSchema.parse(req.body ?? {});
+    const result = await refunds.complete(auditContextOf(req), id, input);
+    res.json(serializeRefundChange(result, refunds.refundCapability));
+  });
+  router.post("/admin/refund-requests/:id/check", async (req, res) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const result = await refunds.check(auditContextOf(req), id);
+    res.json(serializeRefundChange(result, refunds.refundCapability));
+  });
+
+  // ------------------------------------------------------------------ settlements (gap 36)
+  router.get("/admin/settlement-reconciliation", async (req, res) => {
+    const query = settlementQuerySchema.parse(req.query);
+    const { rows, total } = await settlement.list(query);
+    res.json(serializeSettlementPage(rows, total, query));
+  });
+  router.post("/admin/settlement-reconciliation/:itemId/resolve", async (req, res) => {
+    const { itemId } = settlementItemParamsSchema.parse(req.params);
+    const input = resolveSettlementSchema.parse(req.body ?? {});
+    const result = await settlement.resolve(auditContextOf(req), itemId, input);
+    res.json({ data: serializeSettlementEntry(result.entry), changed: result.changed });
   });
 
   // ------------------------------------------------------------------ audit log
@@ -233,6 +296,12 @@ export function createAdminRouter({
   router.post("/admin/payout-batches/generate", async (req, res) => {
     const { period } = generatePayoutsSchema.parse(req.body ?? {});
     res.json(serializePayoutChanges(await payouts.generate(auditContextOf(req), period)));
+  });
+
+  // Clawbacks of paid-out voided bookings (gap 39): what each provider still owes back.
+  router.get("/admin/clawbacks", async (req, res) => {
+    const { providerId } = clawbacksQuerySchema.parse(req.query);
+    res.json(serializeClawbacks(await payouts.listClawbacks(providerId)));
   });
 
   router.get("/admin/payout-batches", async (req, res) => {

@@ -14,6 +14,7 @@ import {
   type PayoutBatchDetail,
 } from "@/lib/admin-ops";
 import { formatMoney } from "@/lib/money";
+import { hasDeductions } from "@/lib/refunds-display";
 import { formatPeriod, formatTimestamp } from "@/lib/partner-display";
 import type { Paged } from "@/lib/partner-types";
 import { formatDateRange } from "@/lib/trip-display";
@@ -243,7 +244,8 @@ function PayoutBatchPanel({ id, onChanged }: { id: string; onChanged: () => void
       </h3>
       <p className="text-sm text-ink">
         Net payout <strong data-testid="payout-detail-net">{f(batch.netMinor)}</strong> (
-        {f(batch.grossMinor)} − {f(batch.commissionMinor)} commission) ·{" "}
+        {f(batch.grossMinor)} − {f(batch.commissionMinor)} commission
+        {hasDeductions(batch) ? ` − ${f(batch.deductionsMinor)} clawbacks` : ""}) ·{" "}
         {payoutBatchStatusLabel(batch.status)}
       </p>
       {batch.payoutAccountLabel ? (
@@ -263,6 +265,7 @@ function PayoutBatchPanel({ id, onChanged }: { id: string; onChanged: () => void
             <span>
               {item.listing.title} · trip {item.trip.reference} ·{" "}
               {formatDateRange(item.startDate, item.endDate)}
+              {item.status === "CANCELLED" ? " · cancelled by the customer: kept part" : ""}
             </span>
             <span className="font-medium">{f(item.netMinor)}</span>
           </li>

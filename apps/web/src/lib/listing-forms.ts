@@ -7,8 +7,9 @@ import { percentInputToBps } from "./partner-display";
  *
  * Which listing types exist comes from the API (GET /listing-types, active ones only). The
  * type-specific "details" fields below mirror the API's detail tables (listing-details.ts on the
- * API side). A type with no entry here (e.g. `activity`, or a new vertical without a detail table)
- * simply has no detail fields; nothing else changes. The API validates everything again: these
+ * API side). A type with no entry here (a new vertical without a detail table) simply has no
+ * detail fields; nothing else changes. Since Phase 14 guides, tours and activities have a start
+ * time (the refund clock, ADR 0020). The API validates everything again: these
  * descriptors only build a helpful form.
  *
  * Money typed in rupees becomes a minor-unit string (majorInputToMinor, string operations only);
@@ -155,6 +156,13 @@ export const DETAIL_FIELDS: Readonly<Record<string, readonly DetailField[]>> = {
       min: 1,
       max: 100,
     },
+    {
+      name: "startTime",
+      label: "Each day starts at",
+      kind: "time",
+      required: true,
+      hint: "Nepal time. Cancellation refunds count the hours before this time.",
+    },
   ],
   tour: [
     {
@@ -195,6 +203,22 @@ export const DETAIL_FIELDS: Readonly<Record<string, readonly DetailField[]>> = {
       required: true,
       min: 1,
       max: 200,
+    },
+    {
+      name: "startTime",
+      label: "Starts at",
+      kind: "time",
+      required: true,
+      hint: "Nepal time, on the departure date. Cancellation refunds count the hours before it.",
+    },
+  ],
+  activity: [
+    {
+      name: "startTime",
+      label: "Starts at",
+      kind: "time",
+      required: true,
+      hint: "Nepal time. Cancellation refunds count the hours before it.",
     },
   ],
 };

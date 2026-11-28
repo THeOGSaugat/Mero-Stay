@@ -23,7 +23,18 @@ export function createSimulatedAdapter(): PaymentGatewayAdapter {
     );
   return {
     name: "simulated",
-    refundCapability: { api: "none", partial: false, note: "Test mode only." },
+    refundCapability: {
+      api: "documented",
+      partial: true,
+      note: "Test mode only: refunds complete at once.",
+    },
+    refund: (request) =>
+      Promise.resolve({
+        reference: `SIM-REFUND-${request.refundId}`,
+        raw: { simulated: true, amountMinor: request.amountMinor.toString() },
+      }),
+    checkRefund: () =>
+      Promise.resolve({ state: "unknown" as const, fully: null, reference: null, raw: {} }),
     createCheckout: (request: CheckoutRequest) =>
       Promise.resolve({
         checkout: { type: "simulated" as const },

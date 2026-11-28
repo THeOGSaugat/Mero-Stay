@@ -62,16 +62,57 @@ export interface GatewayResult {
   raw: Record<string, unknown>;
 }
 
-/** What the gateway offers for refunds (refunds are not executed in this phase). */
+/** What the gateway offers for refunds (Phase 14, ADR 0020). */
 export interface RefundCapability {
+  /** "documented": a refund API is called (Khalti); "none": refunds are made by hand (eSewa). */
   api: "documented" | "none";
   partial: boolean;
   note: string;
 }
 
+/** What an adapter needs to refund part or all of a captured payment. */
+export interface GatewayRefundRequest {
+  /** Our refund request id (logs and idempotency only). */
+  refundId: string;
+  payment: GatewayPaymentRef & {
+    /** The gateway's transaction id recorded when the payment succeeded. */
+    transactionId: string | null;
+    capturedMinor: bigint;
+  };
+  /** Paisa to send back now. */
+  amountMinor: bigint;
+  /** True when this refund returns everything captured and nothing was refunded before. */
+  full: boolean;
+}
+
+/** The gateway accepted the refund: money is on its way back. */
+export interface GatewayRefundResult {
+  /** The gateway's id for the refund, or the refunded transaction when it gives none. */
+  reference: string;
+  raw: Record<string, unknown>;
+}
+
+/** What a lookup says about refunds on a payment (to settle an uncertain refund call). */
+export interface GatewayRefundCheck {
+  /** "refunded": the gateway shows a refund; "not_refunded": the payment is still fully paid. */
+  state: "refunded" | "not_refunded" | "unknown";
+  /** Whether the gateway reports the payment as fully (not partly) refunded. */
+  fully: boolean | null;
+  reference: string | null;
+  raw: Record<string, unknown>;
+}
+
 export interface PaymentGatewayAdapter {
   readonly name: GatewayName;
   readonly refundCapability: RefundCapability;
+  /**
+   * Refunds through the gateway's API (absent for gateways without one: an admin refunds in the
+   * merchant portal). Throws GatewayError("GATEWAY_REJECTED") when the gateway definitely refused,
+   * GatewayError("GATEWAY_UNAVAILABLE") when the outcome is unknown (time-out, 5xx): then the
+   * refund stays PROCESSING until `checkRefund` settles it.
+   */
+  refund?(request: GatewayRefundRequest): Promise<GatewayRefundResult>;
+  checkRefund?(payment: GatewayRefundRequest["payment"]): Promise<GatewayRefundCheck>;
   createCheckout(request: CheckoutRequest): Promise<CheckoutResult>;
   /**
    * Checks what the browser brought back from the gateway (eSewa `data`, Khalti `pidx`) and then

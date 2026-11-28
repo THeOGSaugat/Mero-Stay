@@ -149,6 +149,17 @@ Phase 2 design decisions confirmed by the owner (2026-11-19):
 | MVP scope | Hotels, buses, guides/tours (activities if trivial); flights modelled, not built |
 | Test database | A separate Neon branch, wiped and rebuilt on every integration test run |
 
+Cancellation and refund decisions (owner, 2026-11-27, Phase 14, ADR 0020):
+
+| Topic | Decision |
+|---|---|
+| Refund clock | "Hours before the start" counts from the **actual start of the service** (check-in, departure, start time), frozen per booking item; listings without a start time count from 00:00 Nepal time of the start date |
+| Start times | Partners set a start time on guide, tour and activity listings |
+| Commission on a partial refund | **On the part kept** (15% of the kept share of the subtotal); a full refund waives it |
+| No policy / non-refundable | The customer may still cancel; the refund is 0 |
+| Paid-out bookings voided | The customer is refunded; what the provider was paid is **deducted from the provider's next payouts** (never below zero; the rest carries forward) |
+| eSewa refunds | By hand in the eSewa merchant portal (no refund API), recorded with its reference; Khalti through its refund API |
+
 *Invoicing decisions* (numbering, payment terms, cadence, payout schedule) are recorded in one
 place: [operational-gaps.md → Owner decisions on invoicing](../development/operational-gaps.md#owner-decisions-on-invoicing-recorded-2026-11-21-after-phase-5).
 

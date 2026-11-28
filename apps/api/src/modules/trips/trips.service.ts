@@ -16,7 +16,9 @@ import {
   assertCommissionTransition,
   assertItemTransition,
 } from "../../domain/booking-item-status.js";
+import { serviceStartFields } from "../../domain/refunds.js";
 import { mapDatabaseError } from "../../lib/database-errors.js";
+import { listingStartTime } from "../listings/listing-details.js";
 import { issueCommissionInvoices } from "../finance/invoices.service.js";
 import { AppError } from "../../lib/errors.js";
 import { assertNotInPast, invalidDateRange } from "../listings/listings.service.js";
@@ -271,6 +273,8 @@ export function createTripsService({
       listingTypeCode: listing.listingTypeCode,
       startDate: toDbDate(request.startDate),
       endDate: request.endDate ? toDbDate(request.endDate) : null,
+      // When the service starts, frozen now (the refund clock, owner decision 2026-11-27).
+      ...serviceStartFields(request.startDate, listingStartTime(listing)),
       travellerCount: request.travellerCount ?? request.quantity,
       quantity: priced.quantity,
       currency: priced.currency,

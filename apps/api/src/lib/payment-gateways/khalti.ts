@@ -6,6 +6,9 @@ import {
   type CheckoutRequest,
   type CheckoutResult,
   type GatewayPaymentRef,
+  type GatewayRefundCheck,
+  type GatewayRefundRequest,
+  type GatewayRefundResult,
   type GatewayResult,
   type PaymentGatewayAdapter,
 } from "./types.js";
@@ -19,13 +22,27 @@ import {
  * - Return: Khalti redirects to return_url with pidx, status, amount, … These are NOT trusted.
  * - Verification: POST {base}/epayment/lookup/ { pidx } → { status, total_amount, transaction_id }.
  *   Only "Completed" with total_amount equal to what we asked for counts as paid.
- * - No webhook is documented. A refund API exists (not used in this phase).
+ * - No webhook is documented.
+ * - Refund (Phase 14, ADR 0020; docs.khalti.com/api/refund, checked 2026-11-27):
+ *   POST {api}/merchant-transaction/{transaction_id}/refund/ where {api} is the API root without
+ *   "/v2" (https://khalti.com/api, sandbox https://dev.khalti.com/api). No body = full refund;
+ *   { amount } = partial. The docs say the amount is in PAISA but their example reads like rupees
+ *   (50.00): we send paisa like every other Khalti call, and the sandbox check must confirm it
+ *   before launch (launch checklist). Success: 2xx { "detail": "Transaction refund successful." }
+ *   with no refund id documented, so the reference is the refunded transaction id. No refund status
+ *   endpoint is documented: an uncertain call is settled by the lookup (status "Refunded" /
+ *   "Partially Refunded", `refunded`).
  */
 
 export interface KhaltiConfig {
   secretKey: string;
   /** e.g. https://dev.khalti.com/api/v2 (sandbox) or https://khalti.com/api/v2. No trailing slash. */
   apiUrl: string;
+}
+
+/** The refund endpoint's root: the API URL without its "/v2" version segment. */
+export function khaltiRefundRoot(apiUrl: string): string {
+  return apiUrl.replace(/\/v2$/, "");
 }
 
 export const KHALTI_URLS = {
@@ -127,12 +144,74 @@ export function createKhaltiAdapter(config: KhaltiConfig): PaymentGatewayAdapter
     };
   }
 
+  async function transactionIdOf(payment: GatewayRefundRequest["payment"]): Promise<string> {
+    if (payment.transactionId) return payment.transactionId;
+    // Older rows may lack it: the docs say the transaction id comes from the lookup.
+    const looked = await lookup(payment);
+    const fromLookup = looked.raw.transaction_id;
+    if (typeof fromLookup === "string" && fromLookup) return fromLookup;
+    throw new GatewayError("GATEWAY_REJECTED", "Khalti has no transaction to refund.");
+  }
+
   return {
     name: "khalti",
     refundCapability: {
       api: "documented",
       partial: true,
-      note: "Khalti documents a merchant refund API (full or partial, by transaction id). Not used yet.",
+      note: "Refunded through Khalti's refund API (full or partial, by transaction id).",
+    },
+
+    async refund(request: GatewayRefundRequest): Promise<GatewayRefundResult> {
+      if (request.amountMinor <= 0n || request.amountMinor > request.payment.capturedMinor) {
+        throw new GatewayError("GATEWAY_REJECTED", "The refund is more than Khalti captured.");
+      }
+      const amount = Number(request.amountMinor);
+      if (!Number.isSafeInteger(amount)) {
+        throw new GatewayError("GATEWAY_REJECTED", "The amount is too large for Khalti.");
+      }
+      const transactionId = await transactionIdOf(request.payment);
+      const url = `${khaltiRefundRoot(config.apiUrl)}/merchant-transaction/${encodeURIComponent(transactionId)}/refund/`;
+      const response = await gatewayFetch(url, {
+        method: "POST",
+        headers,
+        // Full refund: no parameters (docs). Partial: the amount in paisa.
+        body: JSON.stringify(request.full ? {} : { amount }),
+      });
+      const body = await jsonBody(response);
+      const raw = {
+        httpStatus: response.status,
+        detail: typeof body?.detail === "string" ? body.detail : null,
+        transaction_id: transactionId,
+        amount: request.full ? null : amount,
+      };
+      if (response.status >= 400 && response.status < 500) {
+        throw new GatewayError("GATEWAY_REJECTED", "Khalti refused the refund.", {
+          cause: new Error(JSON.stringify(raw)),
+        });
+      }
+      if (response.status < 200 || response.status >= 300) {
+        throw new GatewayError("GATEWAY_UNAVAILABLE", "Khalti did not confirm the refund.");
+      }
+      const id = [body?.refund_id, body?.idx, body?.id].find(
+        (v): v is string => typeof v === "string" && v.length > 0,
+      );
+      return { reference: (id ?? transactionId).slice(0, 200), raw };
+    },
+
+    async checkRefund(payment): Promise<GatewayRefundCheck> {
+      const result = await lookup(payment);
+      const raw = result.raw;
+      const status = typeof raw.status === "string" ? raw.status : "";
+      const reference =
+        typeof raw.transaction_id === "string" && raw.transaction_id ? raw.transaction_id : null;
+      if (status === "Refunded") return { state: "refunded", fully: true, reference, raw };
+      if (status === "Partially Refunded") {
+        return { state: "refunded", fully: false, reference, raw };
+      }
+      if (status === "Completed" && raw.refunded !== true) {
+        return { state: "not_refunded", fully: null, reference, raw };
+      }
+      return { state: "unknown", fully: null, reference, raw };
     },
 
     async createCheckout(request: CheckoutRequest): Promise<CheckoutResult> {

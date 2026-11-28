@@ -161,6 +161,8 @@ describe("gap 22: listing types follow the provider type's mapping", () => {
       listingTypeCode: "activity",
       title: "Rafting on the Trishuli",
       basePriceMinor: "450000",
+      // Since Phase 14 an activity has a start time (the refund clock, ADR 0020).
+      details: { startTime: "08:00" },
     };
     await setListingTypeActive("activity", false);
     try {
@@ -227,6 +229,7 @@ describe("gap 22: listing types follow the provider type's mapping", () => {
       listingTypeCode: "activity",
       title: "Paragliding from Sarangkot",
       basePriceMinor: "800000",
+      details: { startTime: "10:00" },
     });
     const id = dataOf<{ id: string }>(created).id;
 

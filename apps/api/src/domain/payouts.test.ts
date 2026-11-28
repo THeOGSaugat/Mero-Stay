@@ -36,6 +36,7 @@ describe("payouts (ADR 0018, gap 16)", () => {
     expect(sumPayout([])).toEqual({
       grossMinor: 0n,
       commissionMinor: 0n,
+      deductionsMinor: 0n,
       netMinor: 0n,
       itemCount: 0,
     });
@@ -44,7 +45,13 @@ describe("payouts (ADR 0018, gap 16)", () => {
         { totalMinor: 360000n, commissionMinor: 54000n },
         { totalMinor: 900000n, commissionMinor: 135000n },
       ]),
-    ).toEqual({ grossMinor: 1260000n, commissionMinor: 189000n, netMinor: 1071000n, itemCount: 2 });
+    ).toEqual({
+      grossMinor: 1260000n,
+      commissionMinor: 189000n,
+      deductionsMinor: 0n,
+      netMinor: 1071000n,
+      itemCount: 2,
+    });
     // Beyond 2^53: no precision lost.
     const big = 9_007_199_254_740_993n;
     expect(sumPayout([{ totalMinor: big, commissionMinor: 1n }]).netMinor).toBe(big - 1n);

@@ -120,6 +120,50 @@ export function mapDatabaseError(err: unknown): AppError | null {
       "The payout cannot change that way in its current state.",
     );
   }
+  // Phase 14 (ADR 0020): refund execution, clawbacks, settlement resolutions. Checked before the
+  // generic money prefixes ("booking_items_").
+  if (
+    sqlState === "23514" &&
+    constraint &&
+    [
+      "refund_requests_transition_chk",
+      "refund_requests_final_chk",
+      "refund_requests_immutable_chk",
+      "refund_requests_kept_chk",
+      "refund_requests_status_fields_chk",
+    ].includes(constraint)
+  ) {
+    return new AppError(
+      409,
+      "REFUND_STATE_CONFLICT",
+      "The refund cannot change that way in its current state.",
+    );
+  }
+  if (sqlState === "23505" && constraint === "refund_requests_one_processing_per_payment") {
+    return new AppError(
+      409,
+      "REFUND_IN_PROGRESS",
+      "Another refund of this payment is being processed. Finish it first.",
+    );
+  }
+  if (sqlState === "23514" && constraint === "booking_items_refunds_match_chk") {
+    return new AppError(
+      422,
+      "PAYMENT_INVARIANT_VIOLATED",
+      "The refund amounts failed a consistency check and were not saved.",
+    );
+  }
+  if (
+    sqlState === "23514" &&
+    (constraint?.startsWith("provider_clawback") ||
+      constraint?.startsWith("settlement_reconciliation"))
+  ) {
+    return new AppError(
+      409,
+      "CLAWBACK_STATE_CONFLICT",
+      "The clawback or reconciliation record cannot change that way.",
+    );
+  }
   if (
     sqlState === "23514" &&
     (constraint?.startsWith("provider_invoice_adjustments_") ||

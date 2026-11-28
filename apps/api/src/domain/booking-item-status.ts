@@ -47,6 +47,7 @@ export function isPayAtProperty(paymentStatus: PaymentStatus): boolean {
 const COMMISSION_TRANSITIONS: Record<CommissionStatus, readonly CommissionStatus[]> = {
   PENDING: ["INVOICED", "PAID", "WAIVED"],
   INVOICED: ["PAID", "WAIVED"],
+  // PAID → WAIVED happens only when a paid-out booking is voided (see canWaivePaidOutCommission).
   PAID: [],
   WAIVED: [],
 };
@@ -79,6 +80,23 @@ export function canTransitionCommissionStatus(
     return paymentStatus === "PAID" || paymentStatus === "PARTIALLY_REFUNDED";
   }
   return true;
+}
+
+/**
+ * The one exception to "PAID commission is final" (Phase 14, gap 39, ADR 0020): voiding a booking
+ * that was already paid out. The customer gets everything back and the provider's share is clawed
+ * back, so the commission MeroStay deducted is waived. Only for an online item paid out by a batch.
+ */
+export function canWaivePaidOutCommission(item: {
+  commissionStatus: CommissionStatus;
+  payoutStatus: string;
+  paymentStatus: PaymentStatus;
+}): boolean {
+  return (
+    item.commissionStatus === "PAID" &&
+    item.payoutStatus === "PAID" &&
+    !isPayAtProperty(item.paymentStatus)
+  );
 }
 
 export class InvalidTransitionError extends Error {

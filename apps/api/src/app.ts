@@ -17,6 +17,7 @@ import { createHealthRouter } from "./modules/health/health.routes.js";
 import { createListingsRouter } from "./modules/listings/listings.routes.js";
 import { createTripsRouter } from "./modules/trips/trips.routes.js";
 import { createTripsService } from "./modules/trips/trips.service.js";
+import { createCancellationsService } from "./modules/cancellations/cancellations.service.js";
 import { createAdminRouter } from "./modules/admin/admin.routes.js";
 import { createAuditLogService } from "./modules/audit/audit-log.service.js";
 import { createProviderBookingsService } from "./modules/bookings/provider-bookings.service.js";
@@ -34,6 +35,7 @@ import { createRefundsService } from "./modules/refunds/refunds.service.js";
 import { createAdminAccountsService } from "./modules/admin-accounts/admin-accounts.service.js";
 import { createAdminSetupRouter } from "./modules/admin-accounts/admin-setup.routes.js";
 import { createModerationService } from "./modules/moderation/moderation.service.js";
+import { createSettlementReconciliationService } from "./modules/finance/settlement-reconciliation.service.js";
 import { createPayoutsService } from "./modules/payouts/payouts.service.js";
 
 export interface AppDependencies {
@@ -125,6 +127,7 @@ export function createApp(deps: AppDependencies): Express {
     v1.use(
       createTripsRouter({
         service: createTripsService({ prisma: deps.prisma, now }),
+        cancellations: createCancellationsService({ prisma: deps.prisma, now }),
         auth: authMiddleware,
       }),
     );
@@ -171,10 +174,15 @@ export function createApp(deps: AppDependencies): Express {
         finance: financeService,
         auditLog: createAuditLogService({ prisma: deps.prisma }),
         policies: policiesService,
-        refunds: createRefundsService({ prisma: deps.prisma, gateways: paymentsConfig.gateways }),
+        refunds: createRefundsService({
+          prisma: deps.prisma,
+          gateways: paymentsConfig.gateways,
+          now,
+        }),
         payouts: payoutsService,
         adminAccounts: adminAccountsService,
         moderation: createModerationService({ prisma: deps.prisma, now }),
+        settlement: createSettlementReconciliationService({ prisma: deps.prisma, now }),
       }),
     );
     app.use("/api/v1", v1);

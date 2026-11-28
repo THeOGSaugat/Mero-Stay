@@ -1,3 +1,4 @@
+import { refundStatusText, type RefundRow } from "./refunds-display";
 import type { CurrencyInfo } from "./api-types";
 
 /**
@@ -17,6 +18,8 @@ export interface PayoutBatch extends CurrencyInfo {
   status: PayoutBatchStatus;
   grossMinor: string;
   commissionMinor: string;
+  /** Clawbacks recovered from this batch (Phase 14, gap 39). */
+  deductionsMinor: string;
   netMinor: string;
   itemCount: number;
   payoutAccountLabel: string | null;
@@ -35,7 +38,12 @@ export interface PayoutBatchItem extends CurrencyInfo {
   startDate: string;
   endDate: string | null;
   quantity: number;
+  status: string;
   totalMinor: string;
+  /** Refunded to the customer (a customer-cancelled item keeps the rest). */
+  refundedMinor: string;
+  /** The batch line: kept amount, its commission, the provider's share. */
+  grossMinor: string;
   commissionMinor: string;
   netMinor: string;
 }
@@ -173,26 +181,11 @@ export function reconciliationReasonLabel(reason: string): string {
   return RECONCILIATION_REASONS[reason] ?? reason;
 }
 
-export interface RefundRequestRow extends CurrencyInfo {
-  id: string;
-  paymentId: string;
-  bookingItemId: string | null;
-  paymentReconciliationId: string | null;
-  gateway: string;
-  gatewayRefundCapability: { api: "documented" | "none"; partial: boolean; note: string };
-  amountMinor: string;
-  reason: string;
-  status: string;
-  executed: boolean;
-  createdAt: string;
-}
+/** A refund in the admin queue (Phase 14 execution fields: lib/refunds-display.ts). */
+export type RefundRequestRow = RefundRow;
 
 export function refundStatusLabel(status: string): string {
-  return status === "REQUESTED"
-    ? "Requested (not executed)"
-    : status === "REJECTED"
-      ? "Rejected"
-      : status;
+  return refundStatusText({ status: status as RefundRow["status"], executionMode: null });
 }
 
 export function gatewayName(gateway: string): string {

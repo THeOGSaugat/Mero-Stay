@@ -61,11 +61,16 @@ Listing types in the MVP:
 | Table | Purpose | Key fields |
 |---|---|---|
 | `trips` | One customer order | `reference`, `customer_id`, `status`, `currency`, stored totals: subtotal, service charge, tax, total, `commission_total_minor` |
-| `booking_items` | One line of a trip | `listing_id`, `provider_id`, `listing_type_code`, `status`, dates, `quantity`, money snapshot (below), `payment_status`, `commission_status`, `payout_status`, `cancellation_policy_id` + snapshot, `attributes`, `external_booking_ref`, `payment_settled_at`/`payment_settled_by_id` (who recorded a pay-at-property payment; set exactly when `PAID_AT_PROPERTY`, CHECK) |
+| `booking_items` | One line of a trip | `listing_id`, `provider_id`, `listing_type_code`, `status`, dates, `quantity`, money snapshot (below), `payment_status`, `commission_status`, `payout_status`, `cancellation_policy_id` + snapshot, `attributes`, `external_booking_ref`, `payment_settled_at`/`payment_settled_by_id` (who recorded a pay-at-property payment; set exactly when `PAID_AT_PROPERTY`, CHECK); `service_starts_at` + `service_start_source` (when the service starts, the refund clock: start date at the listing's check-in/departure/start time in Nepal time, or `DEFAULT_MIDNIGHT`; Phase 14, ADR 0020); a customer cancellation's `cancelled_by_id`, `cancellation_refund_bps`, `cancellation_refund_minor`, `kept_commission_minor` (formulas below) |
 | `booking_item_slots` | Per-date lines of an item | `inventory_slot_id`, `service_date`, `units`, `unit_price_minor`, `amount_minor` |
 | `payments` | A gateway charge (intent → succeeded/failed/cancelled) or refund (ADR 0007) | `gateway` (text), `kind`, `status`, `amount_minor` (requested), `captured_minor`, `intent_fingerprint`, `gateway_transaction_id` (unique per gateway); at most one open charge per trip |
 | `payment_allocations` | How a succeeded payment splits across items (ADR 0007) | `payment_id`, `booking_item_id`, `amount_minor`; immutable; Σ ≤ captured and Σ per item ≤ item total (triggers) |
-| `payouts` | A payout batch: one manual bank transfer to a provider for its online-paid items of one service month (Phase 12, ADR 0018) | provider, currency, `period_start`/`period_end` (a calendar month), `gross_minor`, `commission_minor`, `amount_minor` (net = gross − commission, CHECK), `item_count`, status PENDING → SCHEDULED → PAID \| FAILED (trigger), masked account label, bank `reference` (returned masked), who/when; items link via `booking_items.payout_id` |
+| `payouts` | A payout batch: one manual bank transfer to a provider for its online-paid items of one service month (Phase 12, ADR 0018) | provider, currency, `period_start`/`period_end` (a calendar month), `gross_minor` (Σ kept = total − refunded), `commission_minor` (Σ kept commission or snapshot), `deductions_minor` (clawbacks recovered, Phase 14), `amount_minor` (net = gross − commission − deductions, CHECK), `item_count`, status PENDING → SCHEDULED → PAID \| FAILED (trigger), masked account label, bank `reference` (returned masked), who/when; items link via `booking_items.payout_id` |
+| `refund_requests` | What goes back to a customer, and how it was executed (ADR 0017, ADR 0020) | payment, booking item or late payment, gateway, amount (≤ what was paid, trigger), status REQUESTED → APPROVED → PROCESSING → COMPLETED \| FAILED, or REJECTED (trigger), `execution_mode` API \| MANUAL, attempts, who/when for each step, the gateway's reference (returned masked) and answer; one PROCESSING per payment |
+| `provider_clawbacks` | What a provider owes back after a PAID-out booking was voided (Phase 14, gap 39) | provider, booking item (unique), the paid batch, amount = the item's line in it (trigger), reason; append-only |
+| `provider_clawback_recoveries` | A deduction from one batch towards one clawback (Phase 14) | clawback, payout (created while it is scheduled), amount; counts while the batch is SCHEDULED or PAID; Σ ≤ clawback (trigger); append-only |
+| `settlement_reconciliation_resolutions` | How an admin handled a pay-at-property settlement mismatch (Phase 14, gap 36) | booking item, kind (`UNSETTLED_AFTER_SERVICE`, `SETTLED_NOT_INVOICED`, `SETTLED_BEFORE_SERVICE`), note, who/when; one per item and kind; append-only |
+| `activity_details` | An activity's start time (Phase 14, ADR 0020) | `listing_id`, `start_time` ("HH:MM", Nepal time); `guide_service_details` and `tour_details` gained `start_time` too |
 | `provider_invoice_adjustments` | Commission no longer owed on an ISSUED invoice because its item was voided (Phase 12) | invoice, booking item (unique), amount = the item's commission, reason; append-only; owed = invoice amount − adjustments |
 | `admin_setup_tokens` | One-time admin setup links (Phase 12) | user, SHA-256 of the token, `expires_at` (24 h), `used_at` |
 | `payment_gateway_checks` | When a closed eSewa/Khalti payment is asked again (Phase 12, gap 33) | payment, checks done, last result, `next_check_at` (NULL = done) |
@@ -87,6 +92,17 @@ provider_payout   = total − commission
 
 trip.total_minor            = Σ item.total_minor
 trip.commission_total_minor = Σ item.commission_minor
+```
+
+A customer cancellation (Phase 14, ADR 0020) freezes, re-checked by CHECK constraints:
+
+```
+refund           = round(total × cancellation_refund_bps / 10000)   online (confirmed = fully paid)
+                 = 0                                                 pay at property
+kept_commission  = min(round(subtotal × (10000 − bps) × commission_rate_bps / 10⁸), total − refund)
+                 = 0 when the commission is WAIVED (nothing kept)
+payout line      = (total − refunded) − coalesce(kept_commission, commission)
+refunded_minor   = Σ COMPLETED refund_requests of the item           (deferred trigger)
 ```
 
 Per-item statuses:

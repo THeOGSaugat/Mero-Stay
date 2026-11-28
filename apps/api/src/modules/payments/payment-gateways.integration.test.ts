@@ -492,7 +492,7 @@ describe("late success after the hold expired (gap 8)", () => {
     }
   });
 
-  it("refund requests are stored, never executed, and never above what was paid", async () => {
+  it("refund requests are stored, move only through their states, and never above what was paid", async () => {
     const create = (body: object, as: Client = admin) =>
       call("post", "/api/v1/admin/refund-requests", body, as);
     const base = { paymentId: payment.id, paymentReconciliationId: reconciliationId };
@@ -535,12 +535,13 @@ describe("late success after the hold expired (gap 8)", () => {
     });
     expect(audit?.action).toBe("refund_request.create");
 
-    // The database itself refuses executing a refund in this phase, and over-refunds.
+    // The database itself refuses skipping straight to COMPLETED (since Phase 14 a refund moves
+    // REQUESTED → APPROVED → PROCESSING → COMPLETED, ADR 0020), and over-refunds.
     const executed = await refusedBy(
       () =>
         prisma.$executeRaw`UPDATE refund_requests SET status = 'COMPLETED' WHERE id = ${refund.id as string}::uuid`,
     );
-    expect(executed).toEqual({ sqlState: "23514", constraint: "refund_requests_not_executed_chk" });
+    expect(executed).toEqual({ sqlState: "23514", constraint: "refund_requests_transition_chk" });
     const over = await refusedBy(() =>
       prisma.refundRequest.create({
         data: {

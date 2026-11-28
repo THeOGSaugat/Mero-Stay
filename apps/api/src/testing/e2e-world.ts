@@ -5,6 +5,7 @@ import { parseEnv } from "node:util";
 import { randomBytes } from "node:crypto";
 import { toDbDate, todayInKathmandu } from "../domain/dates.js";
 import { calculateItemCharges, resolveCommissionRateBps, summarizeTrip } from "../domain/money.js";
+import { serviceStartFields } from "../domain/refunds.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import type { ProviderDocumentType } from "../generated/prisma/enums.js";
 import { createPrismaClient } from "../lib/prisma.js";
@@ -454,6 +455,7 @@ async function createPhase12World(prisma: PrismaClient, world: World) {
         listingTypeCode: "guide_service",
         status: "COMPLETED",
         startDate: toDbDate(serviceDate),
+        ...serviceStartFields(serviceDate, null),
         quantity: charges.quantity,
         subtotalMinor: charges.subtotalMinor,
         serviceChargeRateBps: charges.serviceChargeRateBps,
@@ -549,6 +551,64 @@ async function createPhase12World(prisma: PrismaClient, world: World) {
   return { phase12Password: password, phase12: out };
 }
 
+/**
+ * Phase 14 journeys (ADR 0020), per Playwright project: a customer and an admin of their own (login
+ * limits are per email), and a room of its own (the fixture hotel's, with the 72 h / 24 h policy)
+ * with availability 40+ days ahead, so a cancellation today is in the 100% tier.
+ */
+async function createPhase14World(prisma: PrismaClient, world: World) {
+  const password = randomBytes(18).toString("base64url");
+  const passwordHash = await hashPassword(password);
+  const s = randomBytes(4).toString("hex");
+  const room = await prisma.listing.create({
+    data: {
+      providerId: world.providers.hotelProvider.id,
+      listingTypeCode: "hotel_room",
+      title: `Cancellable Lake Room ${s}`,
+      slug: `cancellable-lake-room-${s}`,
+      parentId: world.listings.hotel.id,
+      locationId: world.locations.village.id,
+      basePriceMinor: 350_000n,
+      serviceChargeRateBps: 1000,
+      taxRateBps: 1300,
+      status: "APPROVED",
+      defaultCancellationPolicyId: world.policy.id,
+    },
+  });
+  await prisma.hotelRoomDetail.create({ data: { listingId: room.id, maxAdults: 2 } });
+  for (const n of [10, 11, 12]) {
+    await prisma.inventorySlot.create({
+      data: { listingId: room.id, serviceDate: toDbDate(world.day(n)), capacityTotal: 5 },
+    });
+  }
+  const out: Record<string, { customerEmail: string; adminEmail: string }> = {};
+  for (const project of ["desktop", "mobile"]) {
+    const customer = await prisma.user.create({
+      data: {
+        email: `cancel-${project}-${s}@test.local`,
+        fullName: `Canceller ${project}`,
+        passwordHash,
+        role: "CUSTOMER",
+      },
+    });
+    const admin = await prisma.user.create({
+      data: {
+        email: `refund-admin-${project}-${s}@test.local`,
+        fullName: `Refund Admin ${project}`,
+        passwordHash,
+        role: "ADMIN",
+      },
+    });
+    out[project] = { customerEmail: customer.email!, adminEmail: admin.email! };
+  }
+  return {
+    phase14Password: password,
+    phase14: out,
+    phase14RoomId: room.id,
+    phase14Days: [world.day(10), world.day(11)],
+  };
+}
+
 async function main(): Promise<void> {
   const url = process.env.E2E_DATABASE_URL;
   if (!url) throw new Error("E2E_DATABASE_URL is not set.");
@@ -577,6 +637,7 @@ async function main(): Promise<void> {
     const phase10World = await createPhase10World(prisma, world);
     const paymentsWorld = await createPaymentsWorld(prisma);
     const phase12World = await createPhase12World(prisma, world);
+    const phase14World = await createPhase14World(prisma, world);
     console.log(
       JSON.stringify({
         ...partnerWorld,
@@ -584,6 +645,7 @@ async function main(): Promise<void> {
         ...phase10World,
         ...paymentsWorld,
         ...phase12World,
+        ...phase14World,
         provinceSlug: world.locations.province.slug,
         roomId: world.listings.room.id,
         roomTitle: world.listings.room.title,

@@ -306,12 +306,26 @@ describe("listing forms follow the listing type's detail fields", () => {
       sizeSqm: null,
     });
     expect(
-      buildDetails("guide_service", { languages: "en, ne,", maxGroupSize: "8" }, "create").value,
+      buildDetails(
+        "guide_service",
+        { languages: "en, ne,", maxGroupSize: "8", startTime: "07:00" },
+        "create",
+      ).value,
     ).toEqual({
       languages: ["en", "ne"],
       maxGroupSize: 8,
+      startTime: "07:00",
     });
-    expect(buildDetails("activity", {}, "create")).toEqual({ value: undefined, problems: [] });
+    // Since Phase 14 an activity has one detail field, its start time (ADR 0020).
+    expect(buildDetails("activity", { startTime: "06:00" }, "create")).toEqual({
+      value: { startTime: "06:00" },
+      problems: [],
+    });
+    // A type without detail fields still sends none.
+    expect(buildDetails("a_future_vertical", {}, "create")).toEqual({
+      value: undefined,
+      problems: [],
+    });
     expect(
       buildDetails(
         "hotel",

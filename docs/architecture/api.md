@@ -103,8 +103,8 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 | 400 | `SETUP_LINK_INVALID` | Admin setup link unknown, used or expired (one answer for all) |
 | 400 | `IDEMPOTENCY_KEY_REQUIRED`, `PROVIDER_ID_REQUIRED` | Settle without an Idempotency-Key / a partner with several providers did not send `X-Provider-Id` |
 | 403 | `CSRF_TOKEN_INVALID`, `ACCOUNT_DISABLED`, `FORBIDDEN`, `PROVIDER_SUSPENDED` | Missing/invalid CSRF token on a write / suspended account (only after a correct password) / wrong role / suspended provider writing |
-| 404 | `NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND`, `RECONCILIATION_NOT_FOUND`, `PAYOUT_NOT_FOUND`, `ADMIN_NOT_FOUND`, `PAYOUT_ACCOUNT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
-| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT`, `PAYMENT_IN_PROGRESS`, `RECONCILIATION_ALREADY_RESOLVED`, `RECONCILIATION_STATE_CONFLICT`, `PAYOUT_ACCOUNT_NOT_VERIFIED`, `PAYOUT_EMPTY`, `PAYOUT_NOT_SCHEDULABLE`, `PAYOUT_NOT_SCHEDULED`, `PAYOUT_ALREADY_PAID`, `PAYOUT_STATE_CONFLICT`, `LAST_ADMIN`, `ADMIN_SELF_LOCKOUT`, `ADMIN_ALREADY_SET_UP`, `LISTING_NOT_IN_REVIEW`, `ITEM_NOT_VOIDABLE_STATUS`, `ITEM_PAID_OUT`, `ITEM_IN_SCHEDULED_PAYOUT`, `ITEM_NOT_SETTLED`, `VOID_STATE_CONFLICT` | Conflicts with current state, availability or an existing account |
+| 404 | `NOT_FOUND`, `REFUND_NOT_FOUND`, `LISTING_NOT_FOUND`, `TRIP_NOT_FOUND`, `ITEM_NOT_FOUND`, `PAYMENT_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `BOOKING_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `DOCUMENT_FILE_NOT_FOUND`, `CANCELLATION_POLICY_NOT_FOUND`, `LOCATION_NOT_FOUND`, `RECONCILIATION_NOT_FOUND`, `PAYOUT_NOT_FOUND`, `ADMIN_NOT_FOUND`, `PAYOUT_ACCOUNT_NOT_FOUND` | The resource in the URL does not exist (or is not yours) |
+| 409 | `INSUFFICIENT_AVAILABILITY`, `NOT_AVAILABLE`, `TRIP_NOT_EDITABLE`, `TRIP_EXPIRED`, `TRIP_EMPTY`, `ITEM_NO_LONGER_BOOKABLE`, `EMAIL_TAKEN`, `PHONE_TAKEN`, `CONFLICT`, `TRIP_NOT_CONFIRMED`, `NOTHING_DUE`, `PAYMENT_NOT_OPEN`, `PAYMENT_INTENT_STALE`, `ITEM_NOT_CONFIRMED`, `PARTNER_NOT_ONBOARDED`, `PROVIDER_IDENTITY_LOCKED`, `PROVIDER_NOT_SUBMITTABLE`, `NO_PENDING_DOCUMENTS`, `REQUIRED_DOCUMENTS_MISSING`, `PROVIDER_NOT_PENDING`, `LISTING_STATUS_NOT_ALLOWED`, `LISTING_SUSPENDED`, `SLOT_EXISTS`, `CAPACITY_BELOW_BOOKED`, `CANCELLATION_POLICY_IN_USE`, `DOCUMENT_ALREADY_UPLOADED`, `DOCUMENT_FILE_MISSING`, `DOCUMENT_NOT_CONFIRMABLE`, `DOCUMENT_APPROVED`, `PROVIDER_UNDER_REVIEW`, `DOCUMENT_STATE_CONFLICT`, `PAYMENT_IN_PROGRESS`, `RECONCILIATION_ALREADY_RESOLVED`, `RECONCILIATION_STATE_CONFLICT`, `PAYOUT_ACCOUNT_NOT_VERIFIED`, `PAYOUT_EMPTY`, `PAYOUT_NOT_SCHEDULABLE`, `PAYOUT_NOT_SCHEDULED`, `PAYOUT_ALREADY_PAID`, `PAYOUT_STATE_CONFLICT`, `LAST_ADMIN`, `ADMIN_SELF_LOCKOUT`, `ADMIN_ALREADY_SET_UP`, `LISTING_NOT_IN_REVIEW`, `ITEM_NOT_VOIDABLE_STATUS`, `ITEM_IN_SCHEDULED_PAYOUT`, `ITEM_NOT_SETTLED`, `VOID_STATE_CONFLICT`, `CANCELLATION_TERMS_CHANGED`, `ITEM_NOT_CANCELLABLE_STATUS`, `ITEM_ALREADY_STARTED`, `ITEM_SETTLED_AT_PROPERTY`, `ITEM_NOT_FULLY_PAID`, `REFUND_NOT_ALLOWED`, `REFUND_IN_PROGRESS`, `REFUND_ALREADY_COMPLETED`, `REFUND_ITEM_IN_SCHEDULED_PAYOUT`, `REFUND_ITEM_PAID_OUT`, `REFUND_STATE_CONFLICT`, `CLAWBACK_STATE_CONFLICT`, `SETTLEMENT_MISMATCH_NOT_FOUND` | Conflicts with current state, availability or an existing account |
 | 413 | `PAYLOAD_TOO_LARGE` | Body over the limit (100 KB JSON; 10 MB for a document file) |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Login/register sent as something other than `application/json`; a document file that is not PDF/JPEG/PNG |
 | 422 | `CURRENCY_MISMATCH`, `LISTING_NOT_BOOKABLE`, `UNKNOWN_LISTING`, `UNKNOWN_LOCATION`, `UNKNOWN_LISTING_TYPE`, `INVALID_DATE_RANGE`, `DATE_IN_PAST`, `PRICING_INVARIANT_VIOLATED`, `INVALID_CAPTURED_AMOUNT`, `ITEM_NOT_PAY_AT_PROPERTY`, `PAYMENT_INVARIANT_VIOLATED`, `IDEMPOTENCY_KEY_REUSED`, `UNKNOWN_PROVIDER_TYPE`, `PROVIDER_TYPE_NOT_OFFERED`, `LISTING_TYPE_NOT_OFFERED`, `DETAILS_REQUIRED`, `DETAILS_NOT_SUPPORTED`, `UNKNOWN_PARENT_LISTING`, `UNKNOWN_CANCELLATION_POLICY`, `LISTING_NOT_BOOKABLE`, `LISTING_TYPE_NOT_ALLOWED`, `CANCELLATION_POLICY_INACTIVE`, `CANCELLATION_POLICY_NOT_USABLE`, `INVALID_CANCELLATION_RULES`, `DOCUMENT_TYPE_MISMATCH`, `DOCUMENT_SIZE_MISMATCH`, `DOCUMENT_CONTENT_INVALID`, `PAYMENT_GATEWAY_NOT_AVAILABLE`, `PAYMENT_CURRENCY_NOT_SUPPORTED`, `PAYMENT_GATEWAY_REJECTED`, `PAYMENT_CALLBACK_INVALID`, `REFUND_EXCEEDS_PAID` | Well-formed, but breaks a business rule |
@@ -115,7 +115,10 @@ departure) send only `startDate`. "Today" is Nepal time (UTC+05:45); past start 
 
 Database constraint violations are mapped (overbooking → 409, money checks → 422, payment/invoice
 guards → 422 `PAYMENT_INVARIANT_VIOLATED`, refund guard → 422 `REFUND_EXCEEDS_PAID`, reconciliation
-records → 409 `RECONCILIATION_STATE_CONFLICT`). Raw PostgreSQL text is never returned.
+records → 409 `RECONCILIATION_STATE_CONFLICT`; since Phase 14: refund states → 409
+`REFUND_STATE_CONFLICT`, a second in-flight refund of one payment → 409 `REFUND_IN_PROGRESS`,
+refunded amounts → 422 `PAYMENT_INVARIANT_VIOLATED`, clawbacks and settlement resolutions → 409
+`CLAWBACK_STATE_CONFLICT`). Raw PostgreSQL text is never returned.
 
 ## Endpoints
 
@@ -352,7 +355,9 @@ and providers (admin/partner views come in later phases).
   "items": [{
     "id": "…", "status": "PENDING",
     "listing": { "id": "…", "title": "…", "listingType": "hotel_room", "provider": { "id": "…", "name": "…" } },
-    "startDate": "2027-01-10", "endDate": "2027-01-12", "travellerCount": 1, "quantity": 2,
+    "startDate": "2027-01-10", "endDate": "2027-01-12",
+    "serviceStartsAt": "2027-01-10T07:15:00.000Z", "serviceStartsAtNepal": "2027-01-10T13:00",
+    "serviceStartSource": "LISTING_TIME", "travellerCount": 1, "quantity": 2,
     "paymentMethod": "pay_at_property", "paymentStatus": "PAY_AT_PROPERTY",
     "currency": "NPR", "currencyExponent": 2,
     "lines": [
@@ -364,6 +369,7 @@ and providers (admin/partner views come in later phases).
                "paidMinor": "0", "refundedMinor": "0" },
     "cancellationPolicy": { "policyId": "…", "name": "Moderate", "description": "…", "nonRefundable": false,
                             "rules": [ … ], "source": "provider", "capturedAt": "…" },
+    "cancellation": null,
     "attributes": {}
   }],
   "onlinePayment": { "paidMinor": "0", "dueMinor": "1260000" },
@@ -376,6 +382,41 @@ payment method is derived from the items: `payOnlineMinor + payAtPropertyMinor =
 `onlinePayment` (Phase 5): money received online so far (`paidMinor`, sum of allocations from
 succeeded payments) and still to pay online (`dueMinor = payOnlineMinor − paidMinor`). Per item,
 `money.paidMinor` is what has been allocated to that item.
+
+`serviceStartsAt` (Phase 14, ADR 0020) is when the service starts, frozen when the item was added:
+the start date at the listing's check-in / departure / start time, Nepal time, in UTC.
+`serviceStartSource` is `LISTING_TIME`, or `DEFAULT_MIDNIGHT` when the listing had no start time
+(00:00 Nepal time). The refund clock counts from it. `cancellation` is set once the customer
+cancelled: `{ cancelledAt, refundBps, refundMinor }` (never the commission).
+
+### Customer cancellation (Phase 14, ADR 0020)
+
+- `GET /api/v1/trips/:id/items/:itemId/cancellation` → what cancelling **now** gives back:
+
+```json
+{ "data": { "itemId": "…", "status": "CONFIRMED", "cancellable": true, "refusal": null,
+  "serviceStartsAt": "2026-12-20T08:15:00.000Z", "serviceStartsAtNepal": "2026-12-20T14:00",
+  "serviceStartSource": "LISTING_TIME", "evaluatedAt": "…", "noticeMinutes": 1800,
+  "policy": { "name": "Moderate", "attached": true, "nonRefundable": false },
+  "tier": { "minHoursBeforeStart": 24, "refundBps": 5000 }, "refundBps": 5000,
+  "currency": "NPR", "currencyExponent": 2, "paymentMethod": "ONLINE",
+  "paidMinor": "435050", "refundMinor": "217525" } }
+```
+
+- `POST /api/v1/trips/:id/items/:itemId/cancel {"expectedRefundMinor":"217525","reason"?}` → the
+  trip. Cancels only if the refund is still the one shown; otherwise `409 CANCELLATION_TERMS_CHANGED`
+  with the new `refundMinor` (a tier boundary passed). Repeating returns the same trip.
+- **Rules:**
+  - only CONFIRMED items, before `serviceStartsAt`;
+  - notice = start − now, exactly; the first tier whose hours fit applies (exactly 72 h meets
+    "72 h");
+  - no policy or non-refundable: may cancel, refund 0;
+  - pay at property: refund 0, commission waived (an issued invoice gets an adjustment).
+- **Refusals (409):** `ITEM_NOT_CANCELLABLE_STATUS`, `ITEM_ALREADY_STARTED`,
+  `ITEM_SETTLED_AT_PROPERTY`, `ITEM_NOT_FULLY_PAID`. Another customer's trip is `404`.
+- **Online refunds** become refund requests for the admin queue (below). The item stores the tier,
+  the refund and the commission on the part kept (database-checked). Audited
+  (`booking_item.cancel`, actor = the customer).
 
 ### POST /api/v1/trips/:id/quote → 200 (dry run, nothing is written)
 
@@ -697,7 +738,9 @@ same check runs again when an admin approves.
 locationId?, currency, basePriceMinor ("350000"), serviceChargeRateBps?, taxRateBps?,
 defaultCancellationPolicyId?, addressLine?, attributes?, details? }`. `details` holds the type's
 fields (e.g. `hotel_room`: `maxAdults`, `bedType`, …; `bus_ticket`: route, departure, seats);
-types without a detail table (e.g. `activity`) use `attributes` only. `providerId` and
+types without a detail table use `attributes` only. Since Phase 14 (ADR 0020) `guide_service`,
+`tour` and `activity` details require `startTime` (`"HH:MM"`, Nepal time): the refund clock counts
+from it (an activity's other fields stay in `attributes`). `providerId` and
 `commissionRateBps` are rejected (400). New listings are `DRAFT`; PATCH may set `status` to
 `PENDING_REVIEW`, `ARCHIVED` or (from archived) `DRAFT`. Approval is an admin action. List:
 `?status=&listingType=&page=&pageSize=`.
@@ -848,7 +891,7 @@ code; refused by a database CHECK). Actions recorded: `provider.create`,
 `provider.verification.approve|reject`, `booking_item.settle_at_property`, `trip.settle_at_property`,
 `payment_reconciliation.resolve`, `refund_request.create` (Phase 11).
 
-## Admin: late payments and refund requests (Phase 11, ADR 0017)
+## Admin: late payments and refund requests (Phase 11, ADR 0017; executed since Phase 14)
 
 - `GET /admin/payment-reconciliations?status=OPEN|RESOLVED&page=&pageSize=`, newest first: money a
   gateway confirmed that could not be applied (gap 8). `reason`: `PAYMENT_NOT_OPEN` (the payment was
@@ -868,13 +911,68 @@ code; refused by a database CHECK). Actions recorded: `provider.create`,
   handled, once (`409 RECONCILIATION_ALREADY_RESOLVED`); audited. What the gateway reported can never
   change; the database refuses edits and deletes (`payment_reconciliations_immutable_chk`).
 - `POST /admin/refund-requests` `{ "paymentId", "bookingItemId" | "paymentReconciliationId",
-  "amountMinor": "<digits>", "reason" }` → `201`: records what should go back to the customer.
-  **Nothing is executed**: no gateway call, no money moves; the database keeps every request
-  `REQUESTED` or `REJECTED` (`refund_requests_not_executed_chk`) and never above what the payment
-  paid for that item, or what the late payment recorded, across open requests
-  (`422 REFUND_EXCEEDS_PAID`, with `availableMinor`). The response includes the gateway's refund
-  capability (`gatewayRefundCapability: { api: "documented" | "none", partial, note }`) and
-  `executed: false`. Audited. `GET /admin/refund-requests?paymentId=&page=` lists them.
+  "amountMinor": "<digits>", "reason" }` → `201`: records what should go back to the customer
+  (`REQUESTED`), never above what the payment paid for that item, or what the late payment
+  recorded, across unrejected requests (`422 REFUND_EXCEEDS_PAID`, with `availableMinor`; also a
+  database guard). Customer cancellations create the same requests. Audited.
+  `GET /admin/refund-requests?status=&paymentId=&page=` lists them, `GET …/:id` shows one.
+
+### Refund execution (Phase 14, gap 31, ADR 0020)
+
+`REQUESTED → APPROVED → PROCESSING → COMPLETED | FAILED`; `REQUESTED | APPROVED | FAILED →
+REJECTED`; `FAILED → PROCESSING` (retry). Every step locks the refund, is audited, and repeating it
+returns `changed: false`. Responses: `{ data: <refund>, changed }`.
+
+- `POST /admin/refund-requests/:id/approve`.
+- `POST …/:id/execute`. PROCESSING is committed before the gateway is called; a refund already
+  PROCESSING or COMPLETED is never sent again.
+  - **Khalti** (`executionMode: "API"`) calls its refund API: success → COMPLETED; refused →
+    FAILED (`failureReason`); unknown outcome → stays PROCESSING.
+  - **eSewa** (`"MANUAL"`, no refund API) → PROCESSING with a note: refund in the eSewa merchant
+    portal, then `complete`.
+  - Refused while another refund of the same payment is PROCESSING (`409 REFUND_IN_PROGRESS`),
+    while the item is in a scheduled payout (`409 REFUND_ITEM_IN_SCHEDULED_PAYOUT`), or when it was
+    paid out and not voided (`409 REFUND_ITEM_PAID_OUT`).
+- `POST …/:id/complete {"reference":"…","note"?}`: a manual refund (or an API refund confirmed in
+  the portal) → COMPLETED. The same reference again: no change; another: `409
+  REFUND_ALREADY_COMPLETED`.
+- `POST …/:id/check`: a PROCESSING API refund is settled from the gateway's lookup (Refunded →
+  COMPLETED; still fully paid → FAILED; ambiguous → unchanged).
+- `POST …/:id/reject {"note"}`.
+
+```json
+{ "data": { "id": "…", "paymentId": "…", "bookingItemId": "…", "paymentReconciliationId": null,
+  "trip": { "id": "…", "reference": "MS-…" },
+  "item": { "id": "…", "title": "…", "status": "CANCELLED", "paymentStatus": "PARTIALLY_REFUNDED", "payoutStatus": "PENDING" },
+  "gateway": "khalti", "gatewayRefundCapability": { "api": "documented", "partial": true, "note": "…" },
+  "currency": "NPR", "currencyExponent": 2, "amountMinor": "217525",
+  "reason": "Customer cancellation (50% refund)", "status": "COMPLETED", "executed": true,
+  "executionMode": "API", "attempts": 1, "gatewayRefundReferenceMasked": "••••a1b2",
+  "note": null, "failureReason": null, "requestedById": "…", "approvedById": "…",
+  "executedById": "…", "completedById": null, "rejectedById": null, "createdAt": "…",
+  "approvedAt": "…", "processingAt": "…", "completedAt": "…", "failedAt": null, "rejectedAt": null },
+  "changed": true }
+```
+
+Completing a refund adds it to the item (`refunded_minor`; PAID → PARTIALLY_REFUNDED → REFUNDED).
+The database keeps refunded = completed refunds, fixes a refund's money fields and finished
+states, and allows one PROCESSING refund per payment. The gateway reference is only returned
+masked; the gateway's raw answer is stored but not returned.
+
+### Pay-at-property settlement reconciliation (Phase 14, gap 36)
+
+- `GET /admin/settlement-reconciliation?state=open|resolved|all&kind=&page=` → live
+  pay-at-property items whose settlement and invoice disagree:
+  - `UNSETTLED_AFTER_SERVICE`: invoiced, service over in Nepal time, never recorded paid;
+  - `SETTLED_NOT_INVOICED`: recorded paid without an invoiced commission;
+  - `SETTLED_BEFORE_SERVICE`: recorded paid before the service started.
+
+  Each entry carries the item, trip, provider, invoice, `totalMinor`, `commissionMinor` and
+  `mismatches: [{ kind, resolution: { note, resolvedAt, resolvedById } | null }]`.
+- `POST /admin/settlement-reconciliation/:itemId/resolve {"kind","note"}` → records how it was
+  handled (once per item and kind; again: `changed: false`; a kind the item does not have:
+  `409 SETTLEMENT_MISMATCH_NOT_FOUND`). Audited (`settlement_reconciliation.resolve`); append-only.
+  No money moves.
 
 ## Payouts, admin accounts and moderation (Phase 12, ADR 0018)
 
@@ -882,33 +980,51 @@ All `/admin…` endpoints need role ADMIN (403 otherwise, before any data is rea
 `X-CSRF-Token`, are audited, and repeating one changes nothing (`changed: false`).
 
 **Payout batches** (gap 16). MeroStay pays providers by MANUAL bank transfer and records it; no
-bank is called. An item is eligible once its service is over in Nepal time, paid online in full,
-not cancelled, not already in a batch and without an open refund request. One batch per provider,
-currency and calendar month of the service date. Net = gross − commission.
+bank is called. One batch per provider, currency and calendar month of the service date.
+
+An item is eligible once its service is over in Nepal time, it is not already in a batch, it has
+no unfinished refund (REQUESTED, APPROVED, PROCESSING, FAILED), and either:
+- it is paid online in full and live; or
+- since Phase 14, it was cancelled **by the customer** with money kept, and its refund is
+  completed.
+
+Lines and the net:
+- per item: gross = what MeroStay kept (`total − refunded`); commission = the kept commission of a
+  customer-cancelled item, else the snapshot;
+- per batch: net = gross − commission − `deductionsMinor` (clawbacks recovered from this batch,
+  fixed when it is scheduled).
 
 - `POST /admin/payout-batches/generate {"period":"2026-10"}` → `{ data: [{ changed, payout }] }`
   (new or topped-up batches; empty when nothing new).
 - `GET /admin/payout-batches?status=&providerId=&period=&page=` and `GET /admin/payout-batches/:id`
   (with `items`).
 - `POST …/:id/schedule` → PENDING → SCHEDULED; `409 PAYOUT_ACCOUNT_NOT_VERIFIED` without a verified
-  default bank account, `409 PAYOUT_EMPTY` if no item is left. Amounts and items are then fixed.
+  default bank account, `409 PAYOUT_EMPTY` if no item is left. Outstanding clawbacks of the
+  provider and currency are deducted, oldest first, never below zero. Amounts and items are then
+  fixed.
 - `POST …/:id/mark-paid {"bankReference":"NABIL-TRF-0007788"}` → PAID (items paid out, commission
   collected). Same reference again: `changed: false`; another: `409 PAYOUT_ALREADY_PAID`.
 - `POST …/:id/mark-failed {"reason":"…"}` → FAILED; its items are released for the next batch.
 - `POST /admin/providers/:id/payout-account/verify` → `{ changed, payoutAccountLabel, verifiedAt }`.
 - Partners: `GET /partner/payout-batches[/:id]`, own provider only (another's is `404 PAYOUT_NOT_FOUND`).
+- Clawbacks (Phase 14, gap 39): `GET /admin/clawbacks?providerId=` and `GET /partner/clawbacks`
+  (own only) → `[{ id, provider, bookingItem: { id, title, tripReference }, paidOutInPayoutId,
+  currency, currencyExponent, amountMinor, recoveredMinor, outstandingMinor, recoveries: [{ payoutId,
+  payoutStatus, amountMinor, counts }], reason, createdAt }]`. A recovery counts while its batch is
+  SCHEDULED or PAID (a failed transfer gives it back).
 
 ```json
 { "data": { "id": "…", "provider": { "id": "…", "name": "…" }, "period": "2026-10",
   "periodStart": "2026-10-01", "periodEnd": "2026-10-31", "status": "PAID",
   "currency": "NPR", "currencyExponent": 2,
-  "grossMinor": "360000", "commissionMinor": "54000", "netMinor": "306000", "itemCount": 1,
+  "grossMinor": "360000", "commissionMinor": "54000", "deductionsMinor": "0", "netMinor": "306000", "itemCount": 1,
   "payoutAccountLabel": "Nabil Bank · ••••4321", "bankReferenceMasked": "••••7788",
   "scheduledAt": "…", "paidAt": "…", "failedAt": null, "failureReason": null, "createdAt": "…",
   "items": [ { "id": "…", "trip": { "id": "…", "reference": "MS-…" },
     "listing": { "id": "…", "title": "…", "listingType": "bus_ticket" },
     "startDate": "2026-10-10", "endDate": null, "quantity": 2, "currency": "NPR",
-    "currencyExponent": 2, "totalMinor": "360000", "commissionMinor": "54000", "netMinor": "306000" } ] } }
+    "currencyExponent": 2, "status": "CONFIRMED", "totalMinor": "360000", "refundedMinor": "0",
+    "grossMinor": "360000", "commissionMinor": "54000", "netMinor": "306000" } ] } }
 ```
 
 The bank reference is stored but only ever returned (and audited) masked; the account only as its
@@ -941,12 +1057,18 @@ masked label. The database keeps batches, their transitions and their sums (`pay
 **Voids and corrections** (gap 13).
 
 - `POST /admin/booking-items/:id/void {"reason"}` and `POST /admin/trips/:id/void {"reason"}` →
-  `{ data: { tripId, items: [{ itemId, changed, refundRequests, invoiceAdjusted }] } }`. The item
-  becomes CANCELLED (held inventory released, commission WAIVED, out of an open payout batch);
-  online money becomes refund REQUESTS (not executed); invoiced commission gets an invoice
-  adjustment (the issued invoice never changes; fully adjusted → VOID). Refusals (409):
-  `ITEM_NOT_VOIDABLE_STATUS` (in progress, completed, no-show), `ITEM_PAID_OUT`,
-  `ITEM_IN_SCHEDULED_PAYOUT`.
+  `{ data: { tripId, items: [{ itemId, changed, refundRequests, invoiceAdjusted }] } }`.
+  - The item becomes CANCELLED: held inventory released, commission WAIVED, out of an open payout
+    batch.
+  - Online money becomes refund REQUESTS (executed through the refund queue).
+  - Invoiced commission gets an invoice adjustment (the issued invoice never changes; fully
+    adjusted → VOID).
+  - **A paid-out item** (since Phase 14, gap 39) can be voided too: the customer is refunded in
+    full, the commission MeroStay deducted is waived, and a **clawback** of what its batch paid the
+    provider is recorded. Its item entry adds `clawbackMinor` with `currency`/`currencyExponent`.
+    The paid batch never changes; the clawback is deducted from the provider's next batches.
+  - Refusals (409): `ITEM_NOT_VOIDABLE_STATUS` (in progress, completed, no-show),
+    `ITEM_IN_SCHEDULED_PAYOUT`.
 - `POST /admin/booking-items/:id/settlement/reverse {"reason"}` → undoes a pay-at-property
   settlement (`PAID_AT_PROPERTY → PAY_AT_PROPERTY`); `409 ITEM_NOT_SETTLED` for other items.
   Amounts are never edited: a wrong amount is voided and rebooked.
@@ -954,7 +1076,9 @@ masked label. The database keeps batches, their transitions and their sums (`pay
 Audit actions added: `payout.generate.create|add`, `payout.schedule`, `payout.mark_paid`,
 `payout.mark_failed`, `provider.payout_account.verify`, `admin.create`, `admin.setup_link.reissue`,
 `admin.setup.complete`, `admin.suspend`, `admin.reactivate`, `listing.approve`, `listing.reject`,
-`booking_item.void`, `booking_item.settlement.reverse`.
+`booking_item.void`, `booking_item.settlement.reverse`; Phase 14: `booking_item.cancel`,
+`refund_request.approve|reject|execute|execute.unknown|complete.api|complete.manual|complete.check|fail`,
+`settlement_reconciliation.resolve`.
 
 ## Why the API is vertical-agnostic
 

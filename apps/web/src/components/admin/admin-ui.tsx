@@ -22,6 +22,7 @@ const SECTIONS = [
   { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/late-payments", label: "Late payments" },
   { href: "/admin/refund-requests", label: "Refund requests" },
+  { href: "/admin/settlements", label: "Settlements" },
   { href: "/admin/admins", label: "Admins" },
   { href: "/admin/audit-log", label: "Audit log" },
 ] as const;
